@@ -175,6 +175,18 @@ class EqualizerEngine {
   public attachMediaElement(element: HTMLMediaElement | null): void {
     if (!element || typeof window === 'undefined') return;
 
+    // On iOS (iPhone/iPad), Apple forcefully suspends AudioContext when the browser is backgrounded,
+    // which immediately silences audio playback when switching apps or locking the screen!
+    // Since createMediaElementSource permanently detaches native audio output in WebKit,
+    // we never attach media elements to Web Audio on iOS devices so native background playback works uninterrupted.
+    if (typeof navigator !== 'undefined') {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        return;
+      }
+    }
+
     try {
       const ctx = this.initAudioContext();
       if (!ctx) return;

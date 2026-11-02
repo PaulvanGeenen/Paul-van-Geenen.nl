@@ -1694,10 +1694,15 @@ export function Music() {
     }
 
     // Ensure audio element is routed through the Equalizer and master gain is active
-    try {
-      equalizerEngine.attachMediaElement(el);
-      equalizerEngine.onResumeMediaElement(el, 150);
-    } catch (e) {}
+    // On iOS, Web Audio AudioContext is forcefully suspended by Apple when the app is backgrounded,
+    // which immediately silences playback when switching apps or locking the screen!
+    // Therefore on iOS, we bypass Web Audio so native HTML5 audio plays uninterrupted in the background!
+    if (!isIOS) {
+      try {
+        equalizerEngine.attachMediaElement(el);
+        equalizerEngine.onResumeMediaElement(el, 150);
+      } catch (e) {}
+    }
 
     const targetVol = isMuted ? 0 : volume;
     if (targetVol <= 0) {
@@ -1750,9 +1755,11 @@ export function Music() {
             autoplayGestureCleanupRef.current();
             autoplayGestureCleanupRef.current = null;
           }
-          try {
-            equalizerEngine.onResumeMediaElement(el, 150);
-          } catch (err) {}
+          if (!isIOS) {
+            try {
+              equalizerEngine.onResumeMediaElement(el, 150);
+            } catch (err) {}
+          }
           if (el) {
             el.muted = isMuted;
             setIsAutoplayMuted(false);
@@ -1789,9 +1796,11 @@ export function Music() {
       return;
     }
 
-    // Directe veilige Web Audio demping en pauzering voor iOS/iPhone om buffer-stotteren te elimineren
+    // Directe veilige pauzering voor iOS/iPhone om buffer-stotteren te elimineren
     if (isIOS || el.paused || el.volume === 0) {
-      equalizerEngine.onPauseMediaElement(el);
+      if (!isIOS) {
+        equalizerEngine.onPauseMediaElement(el);
+      }
       try {
         el.pause();
       } catch (e) {}
@@ -1830,9 +1839,13 @@ export function Music() {
       setIsPlaying(true);
 
       if (isAutoplayMuted && el) {
-        try {
-          equalizerEngine.onResumeMediaElement(el, 150);
-        } catch (err) {}
+        if (!isIOS) {
+          if (!isIOS) {
+            try {
+              equalizerEngine.onResumeMediaElement(el, 150);
+            } catch (err) {}
+          }
+        }
         el.muted = false;
         setIsAutoplayMuted(false);
       }
@@ -2159,9 +2172,11 @@ export function Music() {
 
     const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
     if (isAutoplayMuted && activeEl) {
-      try {
-        equalizerEngine.onResumeMediaElement(activeEl, 200);
-      } catch (err) {}
+      if (!isIOS) {
+        try {
+          equalizerEngine.onResumeMediaElement(activeEl, 200);
+        } catch (err) {}
+      }
       activeEl.muted = false;
       setIsAutoplayMuted(false);
       fadeToVolume(activeEl, volume, 400);
@@ -2212,9 +2227,11 @@ export function Music() {
 
       const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
       if (isAutoplayMuted && activeEl) {
-        try {
-          equalizerEngine.onResumeMediaElement(activeEl, 200);
-        } catch (err) {}
+        if (!isIOS) {
+          try {
+            equalizerEngine.onResumeMediaElement(activeEl, 200);
+          } catch (err) {}
+        }
         activeEl.muted = false;
         setIsAutoplayMuted(false);
         fadeToVolume(activeEl, volume, 400);
