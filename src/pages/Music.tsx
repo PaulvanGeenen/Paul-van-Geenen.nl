@@ -2368,13 +2368,6 @@ export function Music() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {/* Language Switcher (2 flags showing selected language) */}
-                <LanguageSelector
-                  lang={musicLang}
-                  onSelect={setMusicLang}
-                  size="sm"
-                />
-
                 {areSubtitlesAvailableInCurrentView && (
                   <button
                     type="button"
@@ -2688,13 +2681,6 @@ export function Music() {
               </div>
 
               <div className="flex items-center gap-1.5">
-                {/* Language Switcher (2 flags showing selected language) */}
-                <LanguageSelector
-                  lang={musicLang}
-                  onSelect={setMusicLang}
-                  size="sm"
-                />
-
                 {areSubtitlesAvailableInCurrentView && (
                   <button
                     type="button"
@@ -3414,14 +3400,6 @@ export function Music() {
                   )}
 
                   <div className="flex items-center gap-2">
-                    {/* Language Switcher (2 flags showing selected language) */}
-                    <LanguageSelector
-                      lang={musicLang}
-                      onSelect={setMusicLang}
-                      size="sm"
-                      onAction={resetNavBarTimer}
-                    />
-
                     {/* Subtitles CC Button in Top Bar (Only visible in landscape mode when subtitles are available) */}
                     {areSubtitlesAvailableInCurrentView && (
                       <button
@@ -4252,13 +4230,6 @@ export function Music() {
           {/* Top floating control bar for fullpage mode (desktop only) */}
           {!isMobileDevice && (
             <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-              {/* Language Selector (2 flags showing selected language) */}
-              <LanguageSelector
-                lang={musicLang}
-                onSelect={setMusicLang}
-                size="sm"
-              />
-
               <button
                 type="button"
                 onClick={toggleBrowserFullscreen}
