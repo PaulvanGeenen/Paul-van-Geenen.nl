@@ -2392,6 +2392,19 @@ export function Music() {
                     {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                   </button>
                 )}
+                {!isMobileDevice && desktopViewMode === 'fullscreen' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDesktopViewMode('iphone');
+                      if (isBrowserFullscreen) toggleBrowserFullscreen();
+                    }}
+                    className="p-2 rounded-full border transition-all bg-white/10 hover:bg-white/20 border-white/10 text-white cursor-pointer shadow-sm"
+                    title={t.desktop.backToSimulator}
+                  >
+                    <Minimize2 className="w-4 h-4 text-earth-gold" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setOrientation(prev => prev === 'portrait' ? 'landscape' : 'portrait')}
@@ -2711,6 +2724,19 @@ export function Music() {
                     title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
                   >
                     {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  </button>
+                )}
+                {!isMobileDevice && desktopViewMode === 'fullscreen' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDesktopViewMode('iphone');
+                      if (isBrowserFullscreen) toggleBrowserFullscreen();
+                    }}
+                    className="p-2 rounded-full border transition-all bg-white/10 hover:bg-white/20 border-white/10 text-white cursor-pointer shadow-sm"
+                    title={t.desktop.backToSimulator}
+                  >
+                    <Minimize2 className="w-4 h-4 text-earth-gold" />
                   </button>
                 )}
                 <button
@@ -3367,15 +3393,15 @@ export function Music() {
                   className="relative z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent"
                   onClick={(e) => { e.stopPropagation(); resetNavBarTimer(); }}
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setPhase('albums')}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white backdrop-blur-md text-[11px] font-medium transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-sm"
                       title={t.topNav.albumsTitle}
                     >
                       <Disc3 className="w-3.5 h-3.5 text-earth-gold" />
-                      <span className="hidden sm:inline">{t.topNav.toAlbums}</span>
+                      <span>{t.topNav.toAlbums}</span>
                     </button>
                     <button
                       type="button"
@@ -3455,6 +3481,19 @@ export function Music() {
                         title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
                       >
                         {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                      </button>
+                    )}
+                    {!isMobileDevice && desktopViewMode === 'fullscreen' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDesktopViewMode('iphone');
+                          if (isBrowserFullscreen) toggleBrowserFullscreen();
+                        }}
+                        className="p-2 rounded-full backdrop-blur-md transition-all bg-white/10 hover:bg-white/20 border border-white/15 text-white cursor-pointer shadow-sm"
+                        title={t.desktop.backToSimulator}
+                      >
+                        <Minimize2 className="w-4 h-4 text-earth-gold" />
                       </button>
                     )}
                     <button
@@ -4227,60 +4266,6 @@ export function Music() {
       </div>
       ) : (
         <div className="fixed inset-0 z-50 bg-black w-full h-full h-[100dvh] overflow-hidden">
-          {/* Top floating control bar for fullpage mode (desktop only) */}
-          {!isMobileDevice && (
-            <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={toggleBrowserFullscreen}
-                className="p-2.5 rounded-full bg-black/60 hover:bg-black text-white border border-white/20 backdrop-blur-md transition-all cursor-pointer shadow-lg"
-                title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
-              >
-                {isBrowserFullscreen ? <Minimize2 className="w-4 h-4 text-earth-gold" /> : <Maximize2 className="w-4 h-4 text-earth-gold" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDesktopViewMode('iphone')}
-                className="p-2.5 rounded-full bg-black/60 hover:bg-black text-white border border-white/20 backdrop-blur-md transition-all cursor-pointer shadow-lg"
-                title={t.desktop.backToSimulator}
-              >
-                <Minimize2 className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {/* Top-left floating navigation bar for fullpage mode */}
-          <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPhase('albums')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-full backdrop-blur-md text-xs font-semibold transition-all cursor-pointer shadow-lg border active:scale-95 ${
-                phase === 'albums'
-                  ? 'bg-earth-gold/25 text-earth-gold border-earth-gold/50'
-                  : 'bg-black/60 hover:bg-black/90 text-white/90 hover:text-white border-white/20'
-              }`}
-              title={t.topNav.albumsTitle}
-            >
-              <Disc3 className="w-3.5 h-3.5 text-earth-gold" />
-              <span>{t.topNav.toAlbums}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setPhase('list')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-full backdrop-blur-md text-xs font-bold transition-all cursor-pointer shadow-lg border active:scale-95 ${
-                phase === 'list'
-                  ? 'bg-earth-gold/25 text-earth-gold border-earth-gold/50'
-                  : 'bg-earth-gold/20 hover:bg-earth-gold/30 text-earth-gold border-earth-gold/40'
-              }`}
-              title={t.topNav.tracksTitle}
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>{t.topNav.toTracks}</span>
-            </button>
-          </div>
-
           {renderScreenContent()}
         </div>
       )}
