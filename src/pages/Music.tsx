@@ -774,6 +774,19 @@ export function Music() {
     savedTimeRef.current = t;
     setDuration(el.duration || 0);
 
+    // Synchronize lock screen progress bar via MediaSession
+    if (typeof navigator !== 'undefined' && 'mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+      try {
+        if (el.duration && !isNaN(el.duration) && isFinite(el.duration) && el.duration > 0) {
+          navigator.mediaSession.setPositionState({
+            duration: Math.max(0, el.duration),
+            playbackRate: el.playbackRate || 1,
+            position: Math.min(Math.max(0, t), el.duration)
+          });
+        }
+      } catch (err) {}
+    }
+
     // Registreer als de bezoeker minimaal 10 seconden heeft geluisterd
     // (Als iemand korter dan 10 seconden luistert, wordt er niets opgeslagen; >10s = completed: false)
     if (!hasRegisteredListenRef.current && currentTrack && t >= 10) {
@@ -2318,6 +2331,89 @@ export function Music() {
       introAudioRef.current.volume = isMuted ? 0 : volume;
     }
   }, [volume, isMuted]);
+
+  // iOS / Android Lock Screen & Control Center MediaSession Integration
+  // Ensures album cover, song title, artist, and playback controls appear on iPhone Lock Screen / Dynamic Island / Apple Watch
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+
+    if (!currentTrack) {
+      navigator.mediaSession.metadata = null;
+      return;
+    }
+
+    const rawArtworkUrl = getTrackBgImage(currentTrack, 'portrait') || '/apple-touch-icon.png';
+    const absoluteArtworkUrl = typeof window !== 'undefined'
+      ? (rawArtworkUrl?.startsWith('http') ? rawArtworkUrl : `${window.location.origin}${rawArtworkUrl || '/apple-touch-icon.png'}`)
+      : rawArtworkUrl;
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentTrack.title || 'Paul van Geenen',
+        artist: 'Paul van Geenen',
+        album: currentTrack.album || 'Paul van Geenen',
+        artwork: [
+          { src: absoluteArtworkUrl, sizes: '512x512', type: 'image/jpeg' },
+          { src: absoluteArtworkUrl, sizes: '384x384', type: 'image/jpeg' },
+          { src: absoluteArtworkUrl, sizes: '256x256', type: 'image/jpeg' },
+          { src: absoluteArtworkUrl, sizes: '128x128', type: 'image/jpeg' },
+          { src: absoluteArtworkUrl, sizes: '96x96', type: 'image/jpeg' }
+        ]
+      });
+    } catch (e) {
+      console.log('[MediaSession] metadata setup error:', e);
+    }
+  }, [currentTrack]);
+
+  // Update MediaSession playback state & action handlers (enables lockscreen skip, pause, play, seek)
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+
+    try {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    } catch (e) {}
+
+    const actionHandlers: [MediaSessionAction, MediaSessionActionHandler | null][] = [
+      ['play', () => { if (!isPlaying) togglePlayPause(); }],
+      ['pause', () => { if (isPlaying) togglePlayPause(); }],
+      ['previoustrack', () => { handlePrev(); }],
+      ['nexttrack', () => { handleNext(); }],
+      ['seekto', (details) => {
+        if (details.seekTime != null) {
+          const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
+          const el = effectiveFmt === 'video' ? videoRef.current : audioRef.current;
+          if (el) el.currentTime = details.seekTime;
+          setCurrentTime(details.seekTime);
+        }
+      }],
+      ['seekbackward', (details) => {
+        const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
+        const el = effectiveFmt === 'video' ? videoRef.current : audioRef.current;
+        const skip = details.seekOffset || 10;
+        if (el) el.currentTime = Math.max(0, el.currentTime - skip);
+      }],
+      ['seekforward', (details) => {
+        const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
+        const el = effectiveFmt === 'video' ? videoRef.current : audioRef.current;
+        const skip = details.seekOffset || 10;
+        if (el) el.currentTime = Math.min(duration || 0, el.currentTime + skip);
+      }]
+    ];
+
+    actionHandlers.forEach(([action, handler]) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch (err) {}
+    });
+
+    return () => {
+      actionHandlers.forEach(([action]) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch (err) {}
+      });
+    };
+  }, [isPlaying, currentTrack, selectedFormat, duration]);
 
   // Main Mobile / Screen Content Component
   const renderScreenContent = () => {
