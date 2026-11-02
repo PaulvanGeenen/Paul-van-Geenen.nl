@@ -534,6 +534,7 @@ export function Music() {
     return false;
   });
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+  const [showIosFullscreenGuide, setShowIosFullscreenGuide] = useState(false);
 
   // Music Section Localization (Dutch vs English)
   // Automatically detects user country: inside NL -> Dutch, outside NL -> English.
@@ -637,6 +638,23 @@ export function Music() {
   }, []);
 
   const toggleBrowserFullscreen = () => {
+    // 1. If currently playing a video, use native iOS WebKit video fullscreen if supported
+    if (phase === 'player' && effectiveFormat === 'video' && videoRef.current) {
+      const vid = videoRef.current as any;
+      if (vid.webkitEnterFullscreen) {
+        try {
+          vid.webkitEnterFullscreen();
+          return;
+        } catch (e) {
+          console.log('[Fullscreen] webkitEnterFullscreen note:', e);
+        }
+      } else if (vid.requestFullscreen) {
+        vid.requestFullscreen().catch(() => {});
+        return;
+      }
+    }
+
+    // 2. Standard HTML5 Fullscreen API
     const doc = document as any;
     const docEl = document.documentElement as any;
 
@@ -647,27 +665,10 @@ export function Music() {
       doc.msFullscreenElement
     );
 
-    if (!isFs) {
-      if (docEl.requestFullscreen) {
-        docEl.requestFullscreen().catch((err: any) => {
-          console.warn('requestFullscreen error:', err);
-          if (docEl.webkitRequestFullscreen) {
-            docEl.webkitRequestFullscreen();
-          }
-        });
-      } else if (docEl.webkitRequestFullscreen) {
-        docEl.webkitRequestFullscreen();
-      } else if (docEl.mozRequestFullScreen) {
-        docEl.mozRequestFullScreen();
-      } else if (docEl.msRequestFullscreen) {
-        docEl.msRequestFullscreen();
-      }
-    } else {
+    if (isFs) {
       if (doc.exitFullscreen) {
         doc.exitFullscreen().catch((err: any) => {
-          if (doc.webkitExitFullscreen) {
-            doc.webkitExitFullscreen();
-          }
+          if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
         });
       } else if (doc.webkitExitFullscreen) {
         doc.webkitExitFullscreen();
@@ -676,6 +677,29 @@ export function Music() {
       } else if (doc.msExitFullscreen) {
         doc.msExitFullscreen();
       }
+      return;
+    }
+
+    let reqPromise: any = null;
+    if (docEl.requestFullscreen) {
+      reqPromise = docEl.requestFullscreen();
+    } else if (docEl.webkitRequestFullscreen) {
+      reqPromise = docEl.webkitRequestFullscreen();
+    } else if (docEl.mozRequestFullScreen) {
+      reqPromise = docEl.mozRequestFullScreen();
+    } else if (docEl.msRequestFullscreen) {
+      reqPromise = docEl.msRequestFullscreen();
+    }
+
+    if (reqPromise && typeof reqPromise.catch === 'function') {
+      reqPromise.catch((err: any) => {
+        console.warn('requestFullscreen error/blocked:', err);
+        if (isIOS || isMobileDevice) {
+          setShowIosFullscreenGuide(true);
+        }
+      });
+    } else if (!reqPromise && (isIOS || isMobileDevice)) {
+      setShowIosFullscreenGuide(true);
     }
   };
 
@@ -767,9 +791,13 @@ export function Music() {
       setIsSwipingRelease(false);
       setDragX(0);
 
-      // Only treat actual phone-width screens (<768px) as mobile fullscreen devices.
+      // Only treat actual phones (<600px min-dimension or phone UA) as mobile fullscreen devices.
       // iPad, iPad Pro, tablets and laptops will display the desktop view with text on the left and the iPhone simulator on the right.
-      const isSmallPhone = window.innerWidth < 768;
+      const isMobilePhoneUA = typeof navigator !== 'undefined' &&
+        /iPhone|Android.*Mobile|webOS|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isSmallPhone = isMobilePhoneUA ||
+        Math.min(window.innerWidth, window.innerHeight) < 600 ||
+        (typeof screen !== 'undefined' && Math.min(screen.width, screen.height) < 600);
       setIsMobileDevice(isSmallPhone);
 
       // On actual small mobile phones, match physical orientation.
@@ -2382,16 +2410,14 @@ export function Music() {
                     <Subtitles className="w-4 h-4" />
                   </button>
                 )}
-                {!isMobileDevice && (
-                  <button
-                    type="button"
-                    onClick={toggleBrowserFullscreen}
-                    className="p-2 rounded-full border transition-all bg-white/10 hover:bg-white/20 border-white/10 text-white cursor-pointer"
-                    title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
-                  >
-                    {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={toggleBrowserFullscreen}
+                  className="p-2 rounded-full border transition-all bg-white/10 hover:bg-white/20 border-white/10 text-white cursor-pointer"
+                  title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
+                >
+                  {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
                 {!isMobileDevice && desktopViewMode === 'fullscreen' && (
                   <button
                     type="button"
@@ -2716,16 +2742,14 @@ export function Music() {
                 >
                   <Share2 className="w-4 h-4" />
                 </button>
-                {!isMobileDevice && (
-                  <button
-                    type="button"
-                    onClick={toggleBrowserFullscreen}
-                    className="p-2 rounded-full border transition-all bg-white/10 hover:bg-white/20 border-white/10 text-white cursor-pointer"
-                    title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
-                  >
-                    {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={toggleBrowserFullscreen}
+                  className="p-2 rounded-full border transition-all bg-white/10 hover:bg-white/20 border-white/10 text-white cursor-pointer"
+                  title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
+                >
+                  {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
                 {!isMobileDevice && desktopViewMode === 'fullscreen' && (
                   <button
                     type="button"
@@ -3473,16 +3497,14 @@ export function Music() {
                     >
                       <SlidersHorizontal className="w-4 h-4 text-earth-gold" />
                     </button>
-                    {!isMobileDevice && (
-                      <button
-                        type="button"
-                        onClick={toggleBrowserFullscreen}
-                        className="p-2 rounded-full backdrop-blur-md transition-all bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                        title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
-                      >
-                        {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={toggleBrowserFullscreen}
+                      className="p-2 rounded-full backdrop-blur-md transition-all bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                      title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
+                    >
+                      {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                    </button>
                     {!isMobileDevice && desktopViewMode === 'fullscreen' && (
                       <button
                         type="button"
@@ -4269,6 +4291,82 @@ export function Music() {
           {renderScreenContent()}
         </div>
       )}
+
+      {/* iOS Fullscreen & Browser Bar Guide Modal */}
+      <AnimatePresence>
+        {showIosFullscreenGuide && (
+          <div
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+            onClick={() => setShowIosFullscreenGuide(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 15 }}
+              transition={{ duration: 0.22 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#181512] border border-earth-gold/40 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl text-earth-light space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-earth-gold/15 text-earth-gold border border-earth-gold/30">
+                    <Maximize2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-serif font-bold text-white">Volledig Scherm op iPhone</h3>
+                    <p className="text-[11px] text-earth-light/60">Chrome & Safari adresbalk verbergen</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowIosFullscreenGuide(false)}
+                  className="p-1.5 rounded-full hover:bg-white/10 text-earth-light/60 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs text-earth-light/80 leading-relaxed">
+                <p className="text-[11.5px] text-earth-light/75">
+                  Apple staat webbrowsers op de iPhone niet toe om de adresbalk automatisch via code te verbergen. U krijgt het scherm zo 100% schermvullend:
+                </p>
+
+                <div className="p-3.5 rounded-2xl bg-white/5 border border-earth-gold/25 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-earth-gold text-xs">
+                    <Share2 className="w-4 h-4 shrink-0 text-earth-gold" />
+                    <span>Optie 1: Zet op beginscherm (Aanbevolen)</span>
+                  </div>
+                  <ol className="list-decimal pl-4 space-y-1 text-[11px] text-earth-light/90">
+                    <li>Tik op het <strong>Deel-icoon</strong> (of Chrome menu <strong className="text-white">•••</strong>)</li>
+                    <li>Kies <strong className="text-earth-gold">"Zet op beginscherm"</strong> (Add to Home Screen)</li>
+                    <li>Open de app vanaf uw beginscherm: <strong>100% fullscreen zonder enige browserbalk!</strong></li>
+                  </ol>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-white text-xs">
+                    <RotateCw className="w-4 h-4 shrink-0 text-earth-gold" />
+                    <span>Optie 2: Draai telefoon horizontaal (Landscape)</span>
+                  </div>
+                  <p className="text-[11px] text-earth-light/70">
+                    Draai uw iPhone op zijn kant voor breedbeeld. Chrome verbergt de adresbalk dan grotendeels automatisch.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-1 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowIosFullscreenGuide(false)}
+                  className="w-full py-2.5 px-4 rounded-xl bg-earth-gold text-black font-semibold text-xs hover:bg-earth-gold/90 transition-all shadow-md active:scale-98 cursor-pointer"
+                >
+                  Begrepen
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Format Buttons Visibility Test Modal */}
       <AnimatePresence>

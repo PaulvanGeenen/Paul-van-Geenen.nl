@@ -1,0 +1,26 @@
+{
+  "name": "Paul van Geenen - Muziek & Verhalen",
+  "short_name": "PvG Muziek",
+  "description": "Ervaar de muziek, audioboeken en video's van Paul van Geenen in volledig scherm.",
+  "start_url": "/muziek",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0a0908",
+  "theme_color": "#0a0908",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
