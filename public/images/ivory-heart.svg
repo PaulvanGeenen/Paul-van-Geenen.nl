@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <!-- Pure Black Cord -->
+    <linearGradient id="cordGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#181818" />
+      <stop offset="50%" stop-color="#2c2c2c" />
+      <stop offset="100%" stop-color="#111111" />
+    </linearGradient>
+
+    <!-- Clean, Soft Cream Ivory Gradient (Matching Mother's Pendant) -->
+    <radialGradient id="ivoryBody" cx="45%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="25%" stop-color="#FAF6ED" />
+      <stop offset="65%" stop-color="#F2EAD8" />
+      <stop offset="90%" stop-color="#E8DFC8" />
+      <stop offset="100%" stop-color="#DDD2B8" />
+    </radialGradient>
+
+    <!-- Soft Specular Glow -->
+    <radialGradient id="ivoryGlow" cx="42%" cy="32%" r="35%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9" />
+      <stop offset="60%" stop-color="#FAF6ED" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#F2EAD8" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Very Soft Ivory Edge Shading (No Brown) -->
+    <radialGradient id="ivorySoftEdge" cx="60%" cy="65%" r="55%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0" />
+      <stop offset="80%" stop-color="#D3C6A9" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#C4B596" stop-opacity="0.3" />
+    </radialGradient>
+
+    <!-- Realistic Soft Shadow -->
+    <filter id="pendantShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000000" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <g filter="url(#pendantShadow)">
+    <!-- Left Cord Branch -->
+    <path d="M 100,-10 C 130,50 195,85 228,105" 
+          stroke="url(#cordGrad)" stroke-width="30" stroke-linecap="round" fill="none" />
+    <path d="M 100,-10 C 130,50 195,85 228,105" 
+          stroke="#2a2a2a" stroke-width="30" stroke-dasharray="6 8" stroke-linecap="round" fill="none" opacity="0.4" />
+
+    <!-- Right Cord Branch -->
+    <path d="M 400,-10 C 370,50 305,85 272,105" 
+          stroke="url(#cordGrad)" stroke-width="30" stroke-linecap="round" fill="none" />
+    <path d="M 400,-10 C 370,50 305,85 272,105" 
+          stroke="#2a2a2a" stroke-width="30" stroke-dasharray="6 8" stroke-linecap="round" fill="none" opacity="0.4" />
+
+    <!-- Ivory Loop / Bail -->
+    <path d="M 234,120 C 234,78 266,78 266,120 L 268,142 C 268,148 232,148 232,142 Z" 
+          fill="url(#ivoryBody)" stroke="#E0D5BD" stroke-width="1" />
+
+    <!-- Ivory Heart Body -->
+    <path d="M 250,158
+             C 215,110 100,110 75,200
+             C 50,290 150,380 235,438
+             C 245,445 255,445 265,438
+             C 350,380 450,290 425,200
+             C 400,110 285,110 250,158 Z" 
+          fill="url(#ivoryBody)" 
+          stroke="#DDD2B8" 
+          stroke-width="1" />
+
+    <!-- Soft Edge Contour -->
+    <path d="M 250,158
+             C 215,110 100,110 75,200
+             C 50,290 150,380 235,438
+             C 245,445 255,445 265,438
+             C 350,380 450,290 425,200
+             C 400,110 285,110 250,158 Z" 
+          fill="url(#ivorySoftEdge)" />
+
+    <!-- Specular Glow -->
+    <path d="M 250,158
+             C 215,110 100,110 75,200
+             C 50,290 150,380 235,438
+             C 245,445 255,445 265,438
+             C 350,380 450,290 425,200
+             C 400,110 285,110 250,158 Z" 
+          fill="url(#ivoryGlow)" />
+
+    <!-- Gentle Highlight Streak -->
+    <path d="M 140,190 C 120,220 125,255 150,290" 
+          stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" fill="none" opacity="0.5" filter="blur(3px)" />
+  </g>
+</svg>

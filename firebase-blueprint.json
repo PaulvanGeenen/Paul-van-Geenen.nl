@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "QRCode": {
+      "title": "QRCode Redirection",
+      "description": "Mapping from QR code to Spotify link and song metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The QR code string (e.g., ECHOH04S1)" },
+        "boekId": { "type": "string", "description": "Reference to the Boek ID" },
+        "boekTitel": { "type": "string", "description": "De titel van het geselecteerde boek" },
+        "hoofdstukId": { "type": "string", "description": "Reference to the Hoofdstuk ID" },
+        "hoofdstuk": { "type": "string", "description": "Chapter reference string" },
+        "song": { "type": "string", "description": "Song title" },
+        "artist": { "type": "string", "description": "Artist name" },
+        "spotifyLink": { "type": "string", "description": "Full Spotify URL" }
+      },
+      "required": ["id", "boekId", "boekTitel", "hoofdstukId", "hoofdstuk", "song", "artist", "spotifyLink"]
+    },
+    "Boek": {
+      "title": "Boek",
+      "description": "Boek entiteit met volgnummer en titel",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Firestore document ID" },
+        "volgnummer": { "type": "integer", "description": "Volgnummer van het boek" },
+        "boektitel": { "type": "string", "description": "De titel van het boek" }
+      },
+      "required": ["volgnummer", "boektitel"]
+    },
+    "Hoofdstuk": {
+      "title": "Hoofdstuk",
+      "description": "Hoofdstuk entiteit gekoppeld aan een boek",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Firestore document ID" },
+        "boekId": { "type": "string", "description": "Referentie naar het boek" },
+        "volgnummer": { "type": "integer", "description": "Volgnummer van het hoofdstuk" },
+        "omschrijving": { "type": "string", "description": "Omschrijving of titel van het hoofdstuk" }
+      },
+      "required": ["boekId", "volgnummer", "omschrijving"]
+    },
+    "VisitorSession": {
+      "title": "VisitorSession",
+      "description": "Detailed log of a single visitor browsing session on the site",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique session ID generated in the client" },
+        "startedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp of session start" },
+        "endedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp of session last heartbeat" },
+        "durationSeconds": { "type": "integer", "description": "Total session duration in seconds" },
+        "userAgent": { "type": "string", "description": "Visitor device user agent string" },
+        "deviceType": { "type": "string", "description": "Tablet, Phone, Desktop or Robot" },
+        "referrer": { "type": "string", "description": "Referrer page or Direct" },
+        "city": { "type": "string", "description": "Resolved city of the scan/visit" },
+        "country": { "type": "string", "description": "Resolved country of the scan/visit" },
+        "pages": { "type": "array", "description": "Array of page pathways traversed with timestamps/stays" },
+        "clicks": { "type": "array", "description": "List of clicks tracked during the session" }
+      },
+      "required": ["id", "startedAt", "endedAt", "durationSeconds", "userAgent", "deviceType", "referrer", "city", "country"]
+    },
+    "HistoricalStats": {
+      "title": "HistoricalStats",
+      "description": "Aggregated long-term stats stored daily to allow safe purging of old session tables",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Daily identifier formatted as YYYY-MM-DD" },
+        "date": { "type": "string", "description": "Formatted date YYYY-MM-DD" },
+        "totalSessions": { "type": "integer", "description": "Total unique sessions on this day" },
+        "totalPageViews": { "type": "integer", "description": "Total page navigation views recorded this day" },
+        "pageviewCounts": { "type": "object", "description": "KeyValue representation of page to visit counts" },
+        "referrerCounts": { "type": "object", "description": "KeyValue representation of referrer sources to counts" },
+        "deviceTypeCounts": { "type": "object", "description": "KeyValue representation of device type distribution" },
+        "cityCounts": { "type": "object", "description": "KeyValue representation of cities distribution" },
+        "avgSessionDuration": { "type": "integer", "description": "Average duration in seconds for sessions starting on this day" },
+        "clicksCount": { "type": "object", "description": "KeyValue representation of button text/label counts clicked" }
+      },
+      "required": ["id", "date", "totalSessions", "totalPageViews"]
+    }
+  },
+  "firestore": {
+    "qrcodes": {
+      "schema": "QRCode",
+      "description": "Collection of QR code mappings"
+    },
+    "boeken": {
+      "schema": "Boek",
+      "description": "Collectie van boeken"
+    },
+    "hoofdstukken": {
+      "schema": "Hoofdstuk",
+      "description": "Collectie van hoofdstukken behorende bij boeken"
+    },
+    "visitor_sessions": {
+      "schema": "VisitorSession",
+      "description": "Collection of visitor sessions"
+    },
+    "historical_stats": {
+      "schema": "HistoricalStats",
+      "description": "Collection of daily aggregated historical analytics summaries"
+    }
+  }
+}

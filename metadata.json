@@ -1,0 +1,6 @@
+{
+  "name": "Paul van Geenen - Auteur",
+  "description": "De officiële website van auteur Paul van Geenen. Ontdek de boekenserie 'Koester het Leven' en 'De Echo'.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

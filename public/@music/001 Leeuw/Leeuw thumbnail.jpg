@@ -1,0 +1,13 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1920' viewBox='0 0 1080 1920'>
+    <defs>
+      <linearGradient id='bg' x1='0%' y1='0%' x2='100%' y2='100%'>
+        <stop offset='0%' stop-color='#281a12' />
+        <stop offset='50%' stop-color='#402a1d' />
+        <stop offset='100%' stop-color='#140c08' />
+      </linearGradient>
+    </defs>
+    <rect width='100%' height='100%' fill='url(#bg)' />
+    <g font-family='serif, Georgia' text-anchor='middle' fill='#f4efe6'>
+      <text x='540' y='960' font-size='48' font-weight='300'>Leeuw</text>
+    </g>
+  </svg>

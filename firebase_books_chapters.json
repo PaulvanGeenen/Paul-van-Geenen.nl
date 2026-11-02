@@ -1,0 +1,288 @@
+{
+  "books": [
+    {
+      "id": "zyfaiBHIAM28iy2x9CLQ",
+      "volgnummer": 1,
+      "boektitel": "KHL De weg ernaartoe",
+      "password": "GONDA1984"
+    },
+    {
+      "id": "fiZgN1eoWxrxfLILsuzn",
+      "volgnummer": 2,
+      "boektitel": "KHL Mijn eerste 21 jaar",
+      "password": "GONDA1984"
+    },
+    {
+      "id": "qVlvBKbZXyIEUoEs4DMD",
+      "boektitel": "De geboorte van de Leeuw",
+      "volgnummer": 3,
+      "password": "GONDA1984"
+    },
+    {
+      "id": "ntqAouxpzSGRWKvTwisr",
+      "volgnummer": 4,
+      "boektitel": "de Echo",
+      "password": "GONDA1984"
+    },
+    {
+      "id": "WVfqfAFj18Odh9WNc0EC",
+      "password": "GONDA1984",
+      "boektitel": "De Bestemming",
+      "volgnummer": 5
+    }
+  ],
+  "chapters": [
+    {
+      "id": "eCd6dgt64mY409phoWEy",
+      "omschrijving": "INTRO",
+      "volgnummer": 1,
+      "password": "GONDA1984",
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "TQZI0Tz4dawQfdNKW0PC",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "volgnummer": 2,
+      "password": "GONDA1984",
+      "omschrijving": "PROLOOG"
+    },
+    {
+      "id": "mXLq0cqk7FUcoDAhuVcv",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984",
+      "volgnummer": 3,
+      "omschrijving": "01 De Zwijgende Code"
+    },
+    {
+      "id": "kS59YaK95roKUrPDfZq7",
+      "volgnummer": 4,
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984",
+      "omschrijving": "02 Een Zilveren Twinkeling"
+    },
+    {
+      "id": "AZqpKBVR9fdY0zedzAVr",
+      "volgnummer": 5,
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984",
+      "omschrijving": "03 De Belofte van de Nacht"
+    },
+    {
+      "id": "fAsc5Id38eaqz80pjsVD",
+      "volgnummer": 6,
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "omschrijving": "04 De Ontwaking van het Beest",
+      "password": "GONDA1984"
+    },
+    {
+      "id": "Z668ZOnoBi1Mr2n2t3cu",
+      "omschrijving": "05 Vlaai en Vreemden",
+      "password": "GONDA1984",
+      "volgnummer": 7,
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "76Yfe1e6S1nBohIZZ1IR",
+      "volgnummer": 8,
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984",
+      "omschrijving": "06 De Schreeuw in de Nacht"
+    },
+    {
+      "id": "ECVUYdLq7ViAIO73wNHq",
+      "omschrijving": "07 De Terugkeer van het Licht",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984",
+      "volgnummer": 9
+    },
+    {
+      "id": "c3vVWUUUDW2HqIfIKS5X",
+      "password": "GONDA1984",
+      "volgnummer": 10,
+      "omschrijving": "08 Smeekbede aan de Hemel",
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "wvMGAqk01Ad6IMXVMl4q",
+      "omschrijving": "09 Kosmos in de Kathedraal",
+      "password": "GONDA1984",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "volgnummer": 11
+    },
+    {
+      "id": "OdxyqL2JZ7XWCQQVSBkk",
+      "password": "GONDA1984",
+      "volgnummer": 12,
+      "omschrijving": "10 Oorlog aan de Koffietafel",
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "jdtusVFEczBkyy5H2904",
+      "password": "GONDA1984",
+      "omschrijving": "11 Vuist tegen de Deur",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "volgnummer": 13
+    },
+    {
+      "id": "GceZgLxMSMeMLQVIXxOF",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984",
+      "omschrijving": "12 Het Vonnis van de Telefoon",
+      "volgnummer": 14
+    },
+    {
+      "id": "uO6FXkiLtTJZsfAsykUH",
+      "volgnummer": 15,
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "omschrijving": "13 Rozen en Bekentenissen",
+      "password": "GONDA1984"
+    },
+    {
+      "id": "TZZKXJjZkvLgKsXvckuy",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "omschrijving": "14 Dij aan Dij",
+      "password": "GONDA1984",
+      "volgnummer": 16
+    },
+    {
+      "id": "s0jvoSVnXWwXCSPlbdwp",
+      "password": "GONDA1984",
+      "omschrijving": "15 De Gladde Witte Steen",
+      "volgnummer": 17,
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "sJhL3EcRc3elLak0D9gd",
+      "omschrijving": "16 Echo over de Velden",
+      "volgnummer": 18,
+      "password": "GONDA1984",
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "mOGUr8KQZDDsSi0FkdXM",
+      "password": "GONDA1984",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "omschrijving": "17 De Tanden van de Leegte",
+      "volgnummer": 19
+    },
+    {
+      "id": "gxCg7wj9t9RNY8QO591H",
+      "omschrijving": "18 Het Witte Doosje",
+      "password": "GONDA1984",
+      "volgnummer": 20,
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "SwJNGYPFzCb3la6KrGf7",
+      "volgnummer": 21,
+      "omschrijving": "19 De Illusie van Vloeibaar Goud",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984"
+    },
+    {
+      "id": "5wDuVsl4O1swdYIQyUCp",
+      "password": "GONDA1984",
+      "volgnummer": 22,
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "omschrijving": "20 Het Naderende Asfalt"
+    },
+    {
+      "id": "4fW1QuBZo9shUv6kcTwJ",
+      "omschrijving": "21 Het Lied van de Leeuw",
+      "volgnummer": 23,
+      "password": "GONDA1984",
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "Qp8M1L1RsX0uSMRh5RAd",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984",
+      "omschrijving": "22 De Geknipte Vleugels",
+      "volgnummer": 24
+    },
+    {
+      "id": "7UcltnGaRZDBqT9IX84o",
+      "password": "GONDA1984",
+      "volgnummer": 25,
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "omschrijving": "23 De Strijd van de Moeders"
+    },
+    {
+      "id": "Wtb4K4HZgE9nEDTqo8ad",
+      "password": "GONDA1984",
+      "volgnummer": 26,
+      "omschrijving": "24 De Deur in het Slot",
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "NCskNDv7FD2o5gJSCHjw",
+      "password": "GONDA1984",
+      "volgnummer": 27,
+      "omschrijving": "25 De Stilte die Schreeuwt",
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "kpARVuecnVnpYYXiKOsr",
+      "password": "GONDA1984",
+      "volgnummer": 28,
+      "omschrijving": "26 Vloeibaar Vuur in het Donker",
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "d1xo3a7fSph3Oi0BrNVb",
+      "password": "GONDA1984",
+      "omschrijving": "27 Verdediging in de Woonkamer",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "volgnummer": 29
+    },
+    {
+      "id": "ivqAbfOZsZYFTckvbGOJ",
+      "omschrijving": "28 Het Lied van de Waarschuwing",
+      "volgnummer": 30,
+      "password": "GONDA1984",
+      "boekId": "ntqAouxpzSGRWKvTwisr"
+    },
+    {
+      "id": "LpSgPZKZgCAhSW3zKBgV",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "omschrijving": "29 Het Feest van de Duivel",
+      "volgnummer": 31,
+      "password": "GONDA1984"
+    },
+    {
+      "id": "68uypJZjwhLqrf71dfVx",
+      "password": "GONDA1984",
+      "omschrijving": "30 Bloed en Hout",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "volgnummer": 32
+    },
+    {
+      "id": "qvHaaTPmlEyZXcJaOIyI",
+      "password": "GONDA1984",
+      "omschrijving": "31 Kille Besluiten",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "volgnummer": 33
+    },
+    {
+      "id": "JVupoGRy4J8pyGAWTao9",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984",
+      "volgnummer": 34,
+      "omschrijving": "32 Verraad of Ruimte?"
+    },
+    {
+      "id": "X3IEj44fCgCVIqLxQp3u",
+      "volgnummer": 35,
+      "omschrijving": "33 De Geboorte van de Echo",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984"
+    },
+    {
+      "id": "ePHtVgoNopWlVhWhqFYf",
+      "boekId": "ntqAouxpzSGRWKvTwisr",
+      "password": "GONDA1984",
+      "volgnummer": 36,
+      "omschrijving": "SOUNDTRACK"
+    }
+  ]
+}

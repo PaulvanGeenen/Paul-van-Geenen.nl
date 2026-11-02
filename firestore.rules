@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function isSignedIn() { return request.auth != null; }
+    
+    // QRCode collection
+    match /qrcodes/{qrId} {
+      // Publicly readable for list and get operations
+      allow read: if true;
+      
+      // Allow create and update if the incoming data contains the secret password "GONDA1984"
+      allow create, update: if request.resource.data.password == "GONDA1984";
+      
+      // Allow delete if the existing record was saved with the secret password "GONDA1984"
+      allow delete: if resource.data.password == "GONDA1984";
+    }
+
+    // Boeken collection
+    match /boeken/{boekId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.password == "GONDA1984";
+      allow delete: if resource.data.password == "GONDA1984";
+    }
+
+    // Hoofdstukken collection
+    match /hoofdstukken/{hoofdstukId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.password == "GONDA1984";
+      allow delete: if resource.data.password == "GONDA1984";
+    }
+
+    // Subscribers collection
+    match /subscribers/{subscriberId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.password == "GONDA1984";
+      allow delete: if resource.data.password == "GONDA1984";
+    }
+
+    // qr_scans collection
+    match /qr_scans/{scanId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if true;
+    }
+
+    // visitor_sessions collection
+    match /visitor_sessions/{sessionId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
+    }
+
+    // historical_stats collection
+    match /historical_stats/{statId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
+    }
+
+    // music_listens collection
+    match /music_listens/{listenId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if true;
+    }
+  }
+}

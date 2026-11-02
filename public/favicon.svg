@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="100%" height="100%">
+  <defs>
+    <!-- Rich Cream / Ivory Gradient -->
+    <radialGradient id="ivoryBody" cx="38%" cy="30%" r="70%">
+      <stop offset="0%" stopColor="#FFFFFF" />
+      <stop offset="30%" stopColor="#FFFDF7" />
+      <stop offset="65%" stopColor="#F5EADB" />
+      <stop offset="90%" stopColor="#E2D0B3" />
+      <stop offset="100%" stopColor="#CCA876" />
+    </radialGradient>
+
+    <!-- Glossy Highlight / Specular Reflection -->
+    <radialGradient id="ivoryGlow" cx="34%" cy="26%" r="35%">
+      <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.9" />
+      <stop offset="50%" stopColor="#FFFFFF" stopOpacity="0.3" />
+      <stop offset="100%" stopColor="#F5E8D0" stopOpacity="0" />
+    </radialGradient>
+
+    <!-- Subtle Drop Shadow for contrast against light or dark browser bars -->
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#000000" floodOpacity="0.6" />
+    </filter>
+  </defs>
+
+  <g filter="url(#softGlow)">
+    <!-- Ivory Hanging Loop/Bail at top -->
+    <path d="M 60,6 C 60,-1 68,-1 68,6 L 68,18 C 68,20 60,20 60,18 Z" fill="url(#ivoryBody)" stroke="#9E7D47" stroke-width="1.5" stroke-linejoin="round" />
+
+    <!-- Sculpted Ivory Heart Body -->
+    <path d="M 64,22 C 54,6 20,6 10,34 C 0,62 32,92 60,118 C 62,120 66,120 68,118 C 96,92 128,62 118,34 C 108,6 74,6 64,22 Z" fill="url(#ivoryBody)" stroke="#9E7D47" stroke-width="2" stroke-linejoin="round" />
+
+    <!-- Specular Gloss Overlay -->
+    <path d="M 64,22 C 54,6 20,6 10,34 C 0,62 32,92 60,118 C 62,120 66,120 68,118 C 96,92 128,62 118,34 C 108,6 74,6 64,22 Z" fill="url(#ivoryGlow)" />
+  </g>
+</svg>
