@@ -132,6 +132,107 @@ const formatDutchDateTime = (
   return d.toLocaleString('nl-NL', options);
 };
 
+// Strict helpers for book & album matching to prevent cross-album contamination
+const normAlbumOrSongName = (str?: string | null): string => {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .trim();
+};
+
+const areAlbumsOrBooksEqual = (nameA?: string | null, nameB?: string | null): boolean => {
+  const a = normAlbumOrSongName(nameA);
+  const b = normAlbumOrSongName(nameB);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const stripArticles = (s: string) => s.replace(/^(de|the|het|een)\s+/, '').trim();
+  return stripArticles(a) === stripArticles(b);
+};
+
+const isTrackInAlbumOrBook = (track: any, album: any, qrcodes: QRCodeData[] = []): boolean => {
+  const albId = String(album.id || '').trim();
+  const albTitle = album.title || '';
+
+  const tAlbId = String(track.albumId || track.album_id || '').trim();
+  const tAlbTitle = track.album || track.album_title || '';
+
+  // 1. Direct album ID match (numeric database IDs: 1: Muzikale Krabbels, 2: De Echo, 3: De Geboorte van de Leeuw, 4: Echo's of the World)
+  if (tAlbId && albId && tAlbId === albId) return true;
+
+  // 2. Direct album title match
+  if (tAlbTitle && albTitle && areAlbumsOrBooksEqual(tAlbTitle, albTitle)) return true;
+
+  // 3. If album is a book (from boeken table), check if book title matches the track's album title
+  if (albTitle && tAlbTitle && areAlbumsOrBooksEqual(albTitle, tAlbTitle)) return true;
+  if (track.book_id && String(track.book_id) === albId) return true;
+
+  // 4. Strict exclusion: if track explicitly belongs to a known album, it CANNOT belong to another album!
+  if (tAlbId || tAlbTitle) return false;
+
+  // 5. Fallback for uncatalogued tracks without album tag: QR code lookup
+  const cleanTrackTitle = normAlbumOrSongName(track.title).replace(/^\d+[\s_.:-]+/, '');
+  const qrMatch = qrcodes.find(q => {
+    const qSong = normAlbumOrSongName(q.song).replace(/^\d+[\s_.:-]+/, '');
+    return qSong && cleanTrackTitle && (qSong === cleanTrackTitle || cleanTrackTitle.includes(qSong));
+  });
+  if (qrMatch) {
+    if (qrMatch.boekId && String(qrMatch.boekId) === albId) return true;
+    if (qrMatch.boekTitel && areAlbumsOrBooksEqual(qrMatch.boekTitel, albTitle)) return true;
+    if (qrMatch.album && areAlbumsOrBooksEqual(qrMatch.album, albTitle)) return true;
+  }
+
+  return false;
+};
+
+const isListenInAlbumOrBook = (
+  listen: any,
+  album: any,
+  catalogTracks: any[] = [],
+  qrcodes: QRCodeData[] = []
+): boolean => {
+  const albTitle = album.title || '';
+  const albId = String(album.id || '').trim();
+
+  const lAlbum = listen.album || '';
+  const lTrackTitle = (listen.trackTitle || listen.song || listen.track_title || '').trim();
+  const lTrackId = String(listen.trackId || listen.track_id || '').trim();
+
+  // 1. Direct album tag check
+  if (lAlbum) {
+    if (areAlbumsOrBooksEqual(lAlbum, albTitle)) return true;
+    const allKnownAlbums = ['Muzikale Krabbels', 'De Echo', 'De Geboorte van de Leeuw', "Echo's of the World"];
+    if (allKnownAlbums.some(k => areAlbumsOrBooksEqual(lAlbum, k))) return false;
+  }
+
+  // 2. Track catalog lookup by ID or Title
+  const cleanLTitle = normAlbumOrSongName(lTrackTitle).replace(/^\d+[\s_.:-]+/, '');
+  const matchedTrack = catalogTracks.find(t => {
+    if (lTrackId && String(t.id) === lTrackId) return true;
+    const cleanT = normAlbumOrSongName(t.title).replace(/^\d+[\s_.:-]+/, '');
+    return cleanT && cleanLTitle && cleanT === cleanLTitle;
+  });
+
+  if (matchedTrack) {
+    return isTrackInAlbumOrBook(matchedTrack, album, qrcodes);
+  }
+
+  // 3. QR code fallback
+  if (cleanLTitle) {
+    const qrMatch = qrcodes.find(q => {
+      const qSong = normAlbumOrSongName(q.song).replace(/^\d+[\s_.:-]+/, '');
+      return qSong && (qSong === cleanLTitle || cleanLTitle.includes(qSong));
+    });
+    if (qrMatch) {
+      if (qrMatch.boekId && String(qrMatch.boekId) === albId) return true;
+      if (qrMatch.boekTitel && areAlbumsOrBooksEqual(qrMatch.boekTitel, albTitle)) return true;
+      if (qrMatch.album && areAlbumsOrBooksEqual(qrMatch.album, albTitle)) return true;
+    }
+  }
+
+  return false;
+};
+
 export function Admin() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -2927,7 +3028,7 @@ export function Admin() {
 
                 {/* Filter op Boek / Album Bar */}
                 {(() => {
-                  // Compute available albums and their total stats for the filter bar
+                  const catalogTracks: any[] = (allCatalogTracks && allCatalogTracks.length > 0) ? allCatalogTracks : DEFAULT_TRACK_SEEDS_FALLBACK;
                   const rawAlbums = (allCatalogAlbums && allCatalogAlbums.length > 0) ? allCatalogAlbums : DEFAULT_ALBUMS_FALLBACK;
                   const mergedAlbums: any[] = [...rawAlbums];
                   DEFAULT_ALBUMS_FALLBACK.forEach(defAlb => {
@@ -2946,43 +3047,8 @@ export function Admin() {
                     }
                   });
 
-                  // Function to test if a listen belongs to an album
-                  const checkBelongs = (albObj: any, itemAlbum?: string, itemTitle?: string, itemId?: string) => {
-                    const albTitle = (albObj.title || '').toLowerCase().trim();
-                    const albId = String(albObj.id || '').toLowerCase().trim();
-                    const itemA = (itemAlbum || '').toLowerCase().trim();
-                    const itemT = (itemTitle || itemId || '').toLowerCase().trim();
-                    const cleanT = itemT.replace(/^\d+[\s_]*/, '').trim();
-
-                    if (itemA) {
-                      if (itemA === albTitle || itemA === albId || albTitle.includes(itemA) || itemA.includes(albTitle)) return true;
-                    }
-
-                    if (albTitle.includes('echo') || albId === '2') {
-                      const krabbelSongs = ['leeuw', 'de passant', 'passant', 'in de leegte', 'niet meer mijn wereld', 'de tumor', 'tumor'];
-                      if (krabbelSongs.some(s => cleanT === s || cleanT.startsWith(s))) return false;
-                      if (cleanT.includes('milonga')) return false;
-
-                      const deEchoKeywords = [
-                        'echo', 'de echo', 'the echo', 'screams', 'the silent code', 'silent code', 'de sleutel', 'sleutel', 'rumbameisje',
-                        'slain lion', 'silent gallery', 'gallery', 'shattered cocoon', 'cocoon', 'rage in the pipes', 'pipes',
-                        'heat in the dark', 'silent lips', 'funeral and the terror', 'funeral', 'cosmos in the cathedral', 'cosmos',
-                        'war at the bordeaux door', 'bordeaux', 'broken shield', 'sentence of the telephone', 'telephone', 'under a million stars', 'million stars',
-                        'sister', 'sister\'s voice', 'awakening', 'chime', 'silver chime', 'aisle'
-                      ];
-                      if (deEchoKeywords.some(k => cleanT.includes(k) || k.includes(cleanT))) return true;
-                      return true;
-                    } else if (albTitle.includes('krabbel') || albId === '1') {
-                      const krabbelKeywords = ['leeuw', 'de passant', 'passant', 'in de leegte', 'leegte', 'niet meer mijn wereld', 'de tumor', 'tumor', 'krabbels'];
-                      if (krabbelKeywords.some(k => cleanT === k || cleanT.includes(k))) return true;
-                    } else if (albTitle.includes('geboorte') || albTitle.includes('leeuw') || albId === '3') {
-                      if (cleanT.includes('milonga') || cleanT.includes('geboorte')) return true;
-                    }
-                    return false;
-                  };
-
                   const albumsWithMetrics = mergedAlbums.map(alb => {
-                    const plays = musicListens.filter(l => checkBelongs(alb, l.album, l.trackTitle || l.song, l.trackId)).length;
+                    const plays = musicListens.filter(l => isListenInAlbumOrBook(l, alb, catalogTracks, qrcodes)).length;
                     return {
                       ...alb,
                       plays
@@ -3026,7 +3092,9 @@ export function Admin() {
                             Alles ({musicListens.length})
                           </button>
                           {albumsWithMetrics.map(a => {
-                            const isSelected = selectedBookFilter === String(a.id) || selectedBookFilter === a.title;
+                            const isSelected = selectedBookFilter === String(a.id) ||
+                                               selectedBookFilter === a.title ||
+                                               areAlbumsOrBooksEqual(selectedBookFilter, a.title);
                             return (
                               <button
                                 key={`pill-album-${a.id || a.title}`}
@@ -3122,87 +3190,20 @@ export function Admin() {
                           if (selectedBookFilter !== 'all' && selectedBookFilter !== 'unassigned') {
                             const isMatch = selectedBookFilter === albumIdLower ||
                                             selectedBookFilter.toLowerCase() === albumTitleLower ||
-                                            selectedBookFilter === String(album.id);
+                                            selectedBookFilter === String(album.id) ||
+                                            areAlbumsOrBooksEqual(selectedBookFilter, album.title);
                             if (!isMatch) return;
                           }
                           if (selectedBookFilter === 'unassigned') {
                             return; // Only show unassigned section
                           }
 
-                          // Helper: Check if a track or listen belongs to this specific album
-                          const belongsToThisAlbum = (itemAlbum?: string, itemTitle?: string, itemId?: string) => {
-                            const alb = (itemAlbum || '').toLowerCase().trim();
-                            const tit = (itemTitle || itemId || '').toLowerCase().trim();
-                            const cleanTit = tit.replace(/^\d+[\s_]*/, '').trim();
-
-                            // 1. Explicit album tag check
-                            if (alb) {
-                              if (alb === albumTitleLower || alb === albumIdLower) return true;
-                              if (albumTitleLower.includes(alb) || alb.includes(albumTitleLower)) return true;
-                              if (albumIdLower.includes(alb) || alb.includes(albumIdLower)) return true;
-                            }
-
-                            // 2. Check catalogTracks metadata
-                            const catalogMatch = catalogTracks.find(t => {
-                              const cTit = (t.title || t.id || '').toLowerCase().trim();
-                              const cCleanTit = cTit.replace(/^\d+[\s_]*/, '').trim();
-                              return cTit === tit || cCleanTit === cleanTit || (cCleanTit.length > 3 && cleanTit.includes(cCleanTit)) || (cleanTit.length > 3 && cCleanTit.includes(cleanTit));
-                            });
-                            if (catalogMatch) {
-                              if (catalogMatch.album_id && String(catalogMatch.album_id) === String(album.id)) return true;
-                              if (catalogMatch.album) {
-                                const catAlb = catalogMatch.album.toLowerCase().trim();
-                                if (catAlb === albumTitleLower || catAlb === albumIdLower || albumTitleLower.includes(catAlb) || catAlb.includes(albumTitleLower)) {
-                                  return true;
-                                }
-                              }
-                            }
-
-                            // 3. QR-code lookup
-                            const qrMatch = qrcodes.find(q => {
-                              const qSong = (q.song || '').toLowerCase().trim();
-                              return qSong === tit || qSong === cleanTit || cleanTit.includes(qSong);
-                            });
-                            if (qrMatch && (qrMatch.boekTitel?.toLowerCase().trim() === albumTitleLower || qrMatch.boekId === album.id)) {
-                              return true;
-                            }
-
-                            // 4. Implicit album detection based on title/catalogue heuristics
-                            if (albumTitleLower.includes('echo') || albumIdLower === '2') {
-                              const krabbelSongs = ['leeuw', 'de passant', 'passant', 'in de leegte', 'niet meer mijn wereld', 'de tumor', 'tumor'];
-                              if (krabbelSongs.some(s => cleanTit === s || cleanTit.startsWith(s))) return false;
-                              if (cleanTit.includes('milonga')) return false;
-
-                              const deEchoSongs = [
-                                'de echo', 'echo', 'the echo screams', 'the silent code', 'de sleutel', 'rumbameisje',
-                                'the slain lion', 'the silent gallery', 'the shattered cocoon', 'rage in the pipes',
-                                'the heat in the dark', 'silent lips', 'the funeral and the terror', 'cosmos in the cathedral',
-                                'war at the bordeaux door', 'the broken shield', 'the sentence of the telephone', 'under a million stars',
-                                'the sister\'s voice', 'the sister voice', 'the awakening', 'a silver chime', 'silver chime', 'the awakening in the aisle',
-                                'sister', 'awakening'
-                              ];
-                              if (deEchoSongs.some(s => cleanTit === s || cleanTit.includes(s) || s.includes(cleanTit))) {
-                                return true;
-                              }
-                              return true;
-                            } else if (albumTitleLower.includes('krabbel') || albumIdLower === '1') {
-                              const krabbelSongs = ['leeuw', 'de passant', 'passant', 'in de leegte', 'leegte', 'niet meer mijn wereld', 'de tumor', 'tumor', 'krabbels'];
-                              if (krabbelSongs.some(s => cleanTit === s || cleanTit.includes(s))) {
-                                return true;
-                              }
-                            } else if (albumTitleLower.includes('geboorte') || albumTitleLower.includes('leeuw') || albumIdLower === '3') {
-                              if (cleanTit.includes('milonga') || cleanTit.includes('geboorte')) return true;
-                            }
-
-                            return false;
-                          };
-
-                          // Collect all tracks belonging to this album
+                          // Collect all tracks belonging to this album strictly
                           const albumTrackMap = new Map<string, any>();
 
-                          // 1. Add tracks from catalog
+                          // 1. Add tracks from catalog that belong strictly to this album
                           catalogTracks.forEach(t => {
-                            if (belongsToThisAlbum(t.album, t.title, t.id)) {
+                            if (isTrackInAlbumOrBook(t, album, qrcodes)) {
                               const cleanTitle = (t.title || t.id || '').replace(/^\d+[\s_]*/, '').toLowerCase().trim();
                               if (!albumTrackMap.has(cleanTitle) || t.album) {
                                 albumTrackMap.set(cleanTitle, t);
@@ -3212,15 +3213,15 @@ export function Admin() {
 
                           // 2. Also incorporate any uncatalogued songs that have listen activity for this album
                           musicListens.forEach(l => {
-                            if (belongsToThisAlbum(l.album, l.trackTitle || l.song, l.trackId)) {
-                              const rawTitle = (l.trackTitle || l.song || l.trackId || '').trim();
+                            if (isListenInAlbumOrBook(l, album, catalogTracks, qrcodes)) {
+                              const rawTitle = (l.trackTitle || l.song || l.track_title || l.trackId || l.track_id || '').trim();
                               const cleanTitle = rawTitle.replace(/^\d+[\s_]*/, '').toLowerCase().trim();
                               if (cleanTitle && !albumTrackMap.has(cleanTitle)) {
                                 albumTrackMap.set(cleanTitle, {
-                                  id: l.trackId || rawTitle,
+                                  id: l.trackId || l.track_id || rawTitle,
                                   title: rawTitle,
                                   album: albumTitle,
-                                  order: l.trackId && l.trackId.match(/^\d+/) ? l.trackId.match(/^\d+/)![0] : String(albumTrackMap.size + 1).padStart(3, '0')
+                                  order: l.trackId && String(l.trackId).match(/^\d+/) ? String(l.trackId).match(/^\d+/)![0] : String(albumTrackMap.size + 1).padStart(3, '0')
                                 });
                               }
                             }
@@ -3236,17 +3237,16 @@ export function Admin() {
 
                           // Helper function for strict and accurate track matching (no false substring collisions)
                           const isTrackMatch = (l: any, currentTrack: any, currIdx: number, allAlbumTracks: any[]) => {
-                            const lAlbum = (l.album || '').toLowerCase().trim();
-                            if (lAlbum && !belongsToThisAlbum(lAlbum)) return false;
+                            if (!isListenInAlbumOrBook(l, album, catalogTracks, qrcodes)) return false;
 
                             const trackTitle = (currentTrack.title || '').trim();
-                            const cleanTrackTitle = trackTitle.toLowerCase().replace(/^\d+[\s_.:-]+/, '').trim();
-                            const lTitle = (l.trackTitle || l.song || '').trim();
-                            const cleanLTitle = lTitle.toLowerCase().replace(/^\d+[\s_.:-]+/, '').trim();
+                            const cleanTrackTitle = normAlbumOrSongName(trackTitle).replace(/^\d+[\s_.:-]+/, '');
+                            const lTitle = (l.trackTitle || l.song || l.track_title || '').trim();
+                            const cleanLTitle = normAlbumOrSongName(lTitle).replace(/^\d+[\s_.:-]+/, '');
 
                             const trackOrder = currentTrack.order || currentTrack.track_order || (currentTrack.id && String(currentTrack.id).match(/^(\d+)/) ? String(currentTrack.id).match(/^(\d+)/)![1] : String(currIdx + 1));
                             const trackNumOnly = String(trackOrder).replace(/^0+/, '');
-                            const lId = String(l.trackId || '').toLowerCase().trim().replace(/^0+/, '');
+                            const lId = String(l.trackId || l.track_id || '').toLowerCase().trim().replace(/^0+/, '');
 
                             // 1. Exact clean title match
                             if (cleanTrackTitle && cleanLTitle && cleanTrackTitle === cleanLTitle) {
@@ -3270,7 +3270,7 @@ export function Admin() {
                                 const otOrder = ot.order || ot.track_order || ot.id || '';
                                 const otNum = String(otOrder).replace(/^0+/, '');
                                 if (otNum === trackNumOnly) return false;
-                                const otClean = (ot.title || '').toLowerCase().replace(/^\d+[\s_.:-]+/, '').trim();
+                                const otClean = normAlbumOrSongName(ot.title).replace(/^\d+[\s_.:-]+/, '');
                                 return otClean && otClean === cleanLTitle;
                               });
                               if (!matchesOtherTrack) {
@@ -3303,6 +3303,17 @@ export function Admin() {
                               </td>
                             </tr>
                           );
+
+                          // If album has no tracks
+                          if (sortedTracks.length === 0) {
+                            elements.push(
+                              <tr key={`empty-${album.id || albumTitle}-${aIdx}`} className="bg-white/[0.01]">
+                                <td colSpan={7} className="py-6 px-4 text-center text-earth-light/40 italic font-serif">
+                                  Er zijn momenteel geen muzieknummers gekoppeld aan {albumTitle}.
+                                </td>
+                              </tr>
+                            );
+                          }
 
                           sortedTracks.forEach((track, tIdx) => {
                             const trackTitle = track.title || `Track ${tIdx + 1}`;
