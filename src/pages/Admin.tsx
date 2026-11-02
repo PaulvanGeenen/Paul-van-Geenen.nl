@@ -4,10 +4,20 @@ import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, Cli
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { cn } from '../lib/utils';
 import { isOwnAnalyticsIgnored, setAdminCookie } from '../lib/analytics';
-import { transipGet, transipPost } from '../lib/transip';
+import { 
+  transipGet, 
+  transipPost, 
+  getTransipBoeken, 
+  getTransipHoofdstukken, 
+  getTransipQrCodes, 
+  saveTransipBoek, 
+  deleteTransipBoek, 
+  saveTransipHoofdstuk, 
+  deleteTransipHoofdstuk, 
+  saveTransipQrCode, 
+  deleteTransipQrCode 
+} from '../lib/transip';
 import jsQR from 'jsqr';
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { MapModal } from '../components/MapModal';
 import { MusicDbManager } from '../components/MusicDbManager';
 
@@ -258,9 +268,9 @@ export function Admin() {
 
   const getAuthHeader = () => password || localStorage.getItem('krabbels_admin_token') || 'GONDA1984';
 
-  // Helper to fetch data from TransIP MySQL bridge (sole authority for analytics) or Express API
+  // Helper to fetch data from Express API or direct TransIP MySQL
   const fetchDataOrFirestore = async (apiEndpoint: string, collectionName: string) => {
-    // 1. Direct TransIP MySQL check for analytics collections (music_listens, qr_scans, subscribers, visitor_sessions)
+    // 1. Direct TransIP MySQL check for analytics collections
     if (collectionName === 'music_listens' || collectionName === 'qr_scans' || collectionName === 'subscribers' || collectionName === 'visitor_sessions') {
       try {
         const transipAction = collectionName === 'music_listens' 
@@ -307,45 +317,28 @@ export function Admin() {
       console.warn(`[Admin Fetch] API fetch failed for ${collectionName}:`, e);
     }
 
-    // 3. Fallback for content collections (boeken, hoofdstukken, qrcodes) or if TransIP bridge is unreachable
-    console.log(`[Admin Fetch] Querying ${collectionName} from database fallback...`);
-    const snap = await getDocs(collection(db, collectionName));
-    let list = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-
-    // If fetching boeken, guarantee that all 4 standard books exist
+    // 3. Fallback directly to TransIP MySQL
+    console.log(`[Admin Fetch] Querying ${collectionName} directly from TransIP MySQL...`);
     if (collectionName === 'boeken') {
-      const defaultBooks = [
-        { id: '1', volgnummer: 1, boektitel: 'Koester het Leven: de weg ernaartoe' },
-        { id: '2', volgnummer: 2, boektitel: 'Koester het Leven: mijn eerste 21 jaar' },
-        { id: '3', volgnummer: 3, boektitel: 'De Echo' },
-        { id: '4', volgnummer: 4, boektitel: 'De Bestemming' }
-      ];
-
-      for (const defBook of defaultBooks) {
-        const found = list.find((b: any) => 
-          String(b.id) === String(defBook.id) || 
-          (b.boektitel && b.boektitel.toLowerCase().trim() === defBook.boektitel.toLowerCase().trim()) ||
-          (parseInt(b.volgnummer) === defBook.volgnummer)
-        );
-        if (!found) {
-          try {
-            const docRef = doc(db, 'boeken', defBook.id);
-            setDoc(docRef, {
-              volgnummer: defBook.volgnummer,
-              boektitel: defBook.boektitel,
-              password: getAuthHeader()
-            }).catch(() => {});
-            list.push(defBook);
-          } catch (e) {}
-        }
-      }
+      const list = await getTransipBoeken();
+      console.log(`[Admin Fetch] Loaded boeken directly from TransIP MySQL (${list.length} items)`);
+      return list;
+    }
+    if (collectionName === 'hoofdstukken') {
+      const list = await getTransipHoofdstukken();
+      console.log(`[Admin Fetch] Loaded hoofdstukken directly from TransIP MySQL (${list.length} items)`);
+      return list;
+    }
+    if (collectionName === 'qrcodes') {
+      const list = await getTransipQrCodes();
+      console.log(`[Admin Fetch] Loaded qrcodes directly from TransIP MySQL (${list.length} items)`);
+      return list;
     }
 
-    console.log(`[Admin Fetch] Loaded ${collectionName} directly from Firestore (${list.length} docs)`);
-    return list;
+    return [];
   };
 
-  // Helper to save document to Express API, with a direct client-side Firestore fallback
+  // Helper to save document to Express API or direct TransIP MySQL
   const saveDocOrFirestore = async (apiEndpoint: string, collectionName: string, id: string | undefined, payload: any) => {
     let apiSuccess = false;
     try {
@@ -368,30 +361,25 @@ export function Admin() {
         }
       }
     } catch (e) {
-      console.warn(`[Admin Save] API save failed for ${collectionName}, falling back to Firestore:`, e);
+      console.warn(`[Admin Save] API save failed for ${collectionName}, falling back to TransIP MySQL:`, e);
     }
 
     if (!apiSuccess) {
-      console.log(`[Admin Save] Saving ${collectionName} directly to Firestore...`);
-      let docRef;
-      if (id) {
-        const cleanId = collectionName === 'qrcodes' ? id.toUpperCase().trim() : id;
-        docRef = doc(db, collectionName, cleanId);
-      } else {
-        docRef = doc(collection(db, collectionName));
+      console.log(`[Admin Save] Saving ${collectionName} directly to TransIP MySQL...`);
+      if (collectionName === 'boeken') {
+        await saveTransipBoek({ id, ...payload });
+      } else if (collectionName === 'hoofdstukken') {
+        await saveTransipHoofdstuk({ id, ...payload });
+      } else if (collectionName === 'qrcodes') {
+        await saveTransipQrCode({ id, ...payload });
       }
-
-      await setDoc(docRef, {
-        ...payload,
-        password: getAuthHeader() // required by firestore.rules
-      });
-      console.log(`[Admin Save] Saved ${collectionName} direct-to-Firestore`);
+      console.log(`[Admin Save] Saved ${collectionName} to TransIP MySQL`);
     }
   };
 
-  // Helper to delete document from Express API, with a direct client-side Firestore fallback
+  // Helper to delete document from Express API or direct TransIP MySQL
   const deleteDocOrFirestore = async (apiEndpoint: string, collectionName: string, id: string) => {
-    // 1. Direct TransIP MySQL deletion for analytics
+    // 1. Direct TransIP MySQL deletion
     if (collectionName === 'music_listens') {
       await transipPost('delete_music_listen', { id }).catch(() => {});
     } else if (collectionName === 'qr_scans') {
@@ -400,34 +388,24 @@ export function Admin() {
       await transipPost('delete_subscriber', { id }).catch(() => {});
     } else if (collectionName === 'visitor_sessions') {
       await transipPost('delete_visitor_session', { sessionId: id }).catch(() => {});
+    } else if (collectionName === 'boeken') {
+      await deleteTransipBoek(id).catch(() => {});
+    } else if (collectionName === 'hoofdstukken') {
+      await deleteTransipHoofdstuk(id).catch(() => {});
+    } else if (collectionName === 'qrcodes') {
+      await deleteTransipQrCode(id).catch(() => {});
     }
 
-    let apiSuccess = false;
     try {
-      const res = await fetch(apiEndpoint, {
+      await fetch(apiEndpoint, {
         method: 'DELETE',
         headers: {
           'Authorization': getAuthHeader()
         }
       });
-      if (res.ok) {
-        const ct = res.headers.get('content-type') || '';
-        if (ct.includes('application/json') || res.status === 200) {
-          apiSuccess = true;
-          console.log(`[Admin Delete] Deleted ${collectionName} via API`);
-        }
-      }
+      console.log(`[Admin Delete] Deleted ${collectionName} via API`);
     } catch (e) {
-      console.warn(`[Admin Delete] API delete failed for ${collectionName}, falling back to Firestore:`, e);
-    }
-
-    if (!apiSuccess) {
-      try {
-        console.log(`[Admin Delete] Deleting ${collectionName} ${id} from Firestore...`);
-        const cleanId = collectionName === 'qrcodes' ? id.toUpperCase().trim() : id;
-        await deleteDoc(doc(db, collectionName, cleanId));
-        console.log(`[Admin Delete] Deleted ${collectionName} direct-from-Firestore`);
-      } catch {}
+      console.warn(`[Admin Delete] API delete call warning for ${collectionName}:`, e);
     }
   };
 
@@ -435,37 +413,15 @@ export function Admin() {
     // 1. Clear directly in TransIP MySQL database
     await transipPost('purge_qr_scans', { bookId }).catch(() => {});
 
-    let apiSuccess = false;
     try {
       const endpoint = bookId ? `/api/scans?bookId=${encodeURIComponent(bookId)}` : '/api/scans';
-      const res = await fetch(endpoint, {
+      await fetch(endpoint, {
         method: 'DELETE',
         headers: { 'Authorization': getAuthHeader() }
       });
-      if (res.ok) {
-        apiSuccess = true;
-        console.log('[Admin Clear] Cleared scans via API (filtered)');
-      }
+      console.log('[Admin Clear] Cleared scans via API (filtered)');
     } catch (e) {
-      console.warn('[Admin Clear] API clear scans failed, falling back to Firestore:', e);
-    }
-
-    if (!apiSuccess) {
-      try {
-        console.log('[Admin Clear] Clearing scans directly from Firestore (filtered)...');
-        const snap = await getDocs(collection(db, 'qr_scans'));
-        let deleteDocsList = snap.docs;
-        if (bookId) {
-          const targetBookIdStr = String(bookId).trim();
-          deleteDocsList = snap.docs.filter(docSnap => {
-            const val = docSnap.data().bookId;
-            return val !== undefined && val !== null && String(val).trim() === targetBookIdStr;
-          });
-        }
-        const deletePromises = deleteDocsList.map(docSnap => deleteDoc(doc(db, 'qr_scans', docSnap.id)));
-        await Promise.all(deletePromises);
-        console.log('[Admin Clear] Cleared scans directly from Firestore (filtered)');
-      } catch {}
+      console.warn('[Admin Clear] API clear scans failed:', e);
     }
   };
 
@@ -531,29 +487,10 @@ export function Admin() {
             const data = await res.json();
             activeSessionsList = data.activeSessions || [];
             historicalStatsList = data.historicalStats || [];
-          } else {
-            const vsSnap = await getDocs(collection(db, 'visitor_sessions'));
-            activeSessionsList = vsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-            activeSessionsList.sort((a: any, b: any) => (b.startedAt || '').localeCompare(a.startedAt || ''));
-
-            const hsSnap = await getDocs(collection(db, 'historical_stats'));
-            historicalStatsList = hsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-            historicalStatsList.sort((a: any, b: any) => b.id.localeCompare(a.id));
           }
         }
       } catch (analyticsErr) {
-        console.warn('TransIP/API analytics overview fetch missed, fallback to Firestore...', analyticsErr);
-        try {
-          const vsSnap = await getDocs(collection(db, 'visitor_sessions'));
-          activeSessionsList = vsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-          activeSessionsList.sort((a: any, b: any) => (b.startedAt || '').localeCompare(a.startedAt || ''));
-
-          const hsSnap = await getDocs(collection(db, 'historical_stats'));
-          historicalStatsList = hsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-          historicalStatsList.sort((a: any, b: any) => b.id.localeCompare(a.id));
-        } catch (fbErr) {
-          console.error('Direct Firestore analytics fetch failed:', fbErr);
-        }
+        console.warn('TransIP/API analytics overview fetch warning:', analyticsErr);
       }
 
       setQrcodes(qlist);
@@ -684,15 +621,6 @@ export function Admin() {
       } catch (e) {
         console.warn('API purge call warning:', e);
       }
-
-      // 3. Clear Firestore collection just in case
-      try {
-        const snap = await getDocs(collection(db, 'music_listens'));
-        if (snap.docs.length > 0) {
-          const deletePromises = snap.docs.map(docSnap => deleteDoc(doc(db, 'music_listens', docSnap.id)));
-          await Promise.all(deletePromises);
-        }
-      } catch {}
 
       setMusicListens([]);
       alert('Alle luisterdata is succesvol gewist uit de TransIP MySQL database.');
@@ -1358,7 +1286,7 @@ export function Admin() {
               <div>
                 <h4 className="text-white font-serif font-bold text-base">Nieuwe, lege database gedetecteerd!</h4>
                 <p className="text-earth-light/60 text-xs mt-1 leading-relaxed">
-                  Uw Firestore database is met succes verbonden, maar bevat momenteel nog geen boeken of hoofdstukken. Klik op de knop hieronder om direct de 4 standaard boeken en de 3 hoofdstukken voor "De Echo" te initialiseren. Daarna kunt u direct beginnen met het beheren en bekijken van QR-codes en scans!
+                  Uw TransIP MySQL database is met succes verbonden, maar bevat momenteel nog geen boeken of hoofdstukken. Klik op de knop hieronder om direct de 4 standaard boeken en de 3 hoofdstukken voor "De Echo" te initialiseren. Daarna kunt u direct beginnen met het beheren en bekijken van QR-codes en scans!
                 </p>
               </div>
             </div>
@@ -4185,7 +4113,7 @@ export function Admin() {
 
               <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
                 <div className="text-xs font-bold uppercase tracking-wider text-earth-light/40 mb-3">
-                  Klaargezette Data uit Firestore
+                  Data in TransIP MySQL Database
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div className="bg-black/30 p-3 rounded-lg border border-white/5">

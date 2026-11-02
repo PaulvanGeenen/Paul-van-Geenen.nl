@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { BOOKS } from '../data/books';
 import type { Book as BookType } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Music, AlertCircle, Loader2, Sparkles, Volume2, BookOpen } from 'lucide-react';
-import { transipPost } from '../lib/transip';
+import { transipPost, getQrCodeByCode } from '../lib/transip';
 
 // Visual branding and theme overrides matching the physical hardcovers
 function getBookTheme(bookId: string) {
@@ -224,12 +222,19 @@ export function QRRedirect() {
       }
 
       try {
-        const docRef = doc(db, 'qrcodes', cleanCode);
-        const docSnap = await getDoc(docRef);
+        let data = await getQrCodeByCode(cleanCode);
+        if (!data) {
+          try {
+            const res = await fetch(`/api/qrcodes/${encodeURIComponent(cleanCode)}`);
+            if (res.ok) {
+              const json = await res.json();
+              if (json?.qrcode) data = json.qrcode;
+            }
+          } catch {}
+        }
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data && data.spotifyLink) {
+        if (data) {
+          if (data.spotifyLink) {
             // Locate target book details to extract physical cover and style theme
             let foundBook: BookType | null = null;
             if (data.boekId) {

@@ -55,3 +55,104 @@ export async function transipGet<T = any>(action: string): Promise<T | null> {
   }
   return null;
 }
+
+
+export async function transipQuerySql<T = any>(sql: string): Promise<T[] | null> {
+  const res = await transipPost<{ success: boolean; data: T[] }>('execute_sql', { sql });
+  if (res && res.success && Array.isArray(res.data)) {
+    return res.data;
+  }
+  return null;
+}
+
+export async function getQrCodeByCode(code: string): Promise<any | null> {
+  const clean = code.trim().toUpperCase().replace(/'/g, "''");
+  const sql = `SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage FROM qrcodes WHERE UPPER(id) = '${clean}' LIMIT 1;`;
+  const rows = await transipQuerySql(sql);
+  return rows && rows.length > 0 ? rows[0] : null;
+}
+
+export async function getTransipQrCodes(): Promise<any[]> {
+  const sql = `SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage FROM qrcodes ORDER BY id ASC;`;
+  const rows = await transipQuerySql(sql);
+  return rows || [];
+}
+
+export async function getTransipBoeken(): Promise<any[]> {
+  const sql = `SELECT id, volgnummer, boektitel FROM boeken ORDER BY volgnummer ASC;`;
+  const rows = await transipQuerySql(sql);
+  return rows || [];
+}
+
+export async function getTransipHoofdstukken(boekId?: string): Promise<any[]> {
+  const where = boekId ? `WHERE boek_id = '${boekId.replace(/'/g, "''")}'` : '';
+  const sql = `SELECT id, boek_id AS boekId, volgnummer, omschrijving FROM hoofdstukken ${where} ORDER BY volgnummer ASC;`;
+  const rows = await transipQuerySql(sql);
+  return rows || [];
+}
+
+export async function saveTransipBoek(boek: { id?: string; volgnummer: number; boektitel: string }): Promise<boolean> {
+  const cleanId = (boek.id || `bk_${Date.now()}`).replace(/'/g, "''");
+  const cleanTitel = (boek.boektitel || '').trim().replace(/'/g, "''");
+  const num = parseInt(String(boek.volgnummer), 10) || 1;
+  const sql = `INSERT INTO boeken (id, volgnummer, boektitel) VALUES ('${cleanId}', ${num}, '${cleanTitel}') ON DUPLICATE KEY UPDATE volgnummer = VALUES(volgnummer), boektitel = VALUES(boektitel);`;
+  const res = await transipQuerySql(sql);
+  return res !== null;
+}
+
+export async function deleteTransipBoek(id: string): Promise<boolean> {
+  const cleanId = id.replace(/'/g, "''");
+  const sql = `DELETE FROM boeken WHERE id = '${cleanId}';`;
+  const res = await transipQuerySql(sql);
+  return res !== null;
+}
+
+export async function saveTransipHoofdstuk(hoofdstuk: { id?: string; boekId: string; volgnummer: number; omschrijving: string }): Promise<boolean> {
+  const cleanId = (hoofdstuk.id || `ch_${Date.now()}`).replace(/'/g, "''");
+  const cleanBoekId = (hoofdstuk.boekId || '').replace(/'/g, "''");
+  const cleanOms = (hoofdstuk.omschrijving || '').trim().replace(/'/g, "''");
+  const num = parseInt(String(hoofdstuk.volgnummer), 10) || 1;
+  const sql = `INSERT INTO hoofdstukken (id, boek_id, volgnummer, omschrijving) VALUES ('${cleanId}', '${cleanBoekId}', ${num}, '${cleanOms}') ON DUPLICATE KEY UPDATE boek_id = VALUES(boek_id), volgnummer = VALUES(volgnummer), omschrijving = VALUES(omschrijving);`;
+  const res = await transipQuerySql(sql);
+  return res !== null;
+}
+
+export async function deleteTransipHoofdstuk(id: string): Promise<boolean> {
+  const cleanId = id.replace(/'/g, "''");
+  const sql = `DELETE FROM hoofdstukken WHERE id = '${cleanId}';`;
+  const res = await transipQuerySql(sql);
+  return res !== null;
+}
+
+export async function saveTransipQrCode(item: any): Promise<boolean> {
+  const cleanId = (item.id || '').toUpperCase().trim().replace(/'/g, "''");
+  const cleanBoekId = (item.boekId || '').replace(/'/g, "''");
+  const cleanBoekTitel = (item.boekTitel || '').replace(/'/g, "''");
+  const cleanHoofdstukId = (item.hoofdstukId || '').replace(/'/g, "''");
+  const cleanHoofdstuk = (item.hoofdstuk || '').replace(/'/g, "''");
+  const cleanSong = (item.song || '').replace(/'/g, "''");
+  const cleanArtist = (item.artist || '').replace(/'/g, "''");
+  const cleanSpotifyLink = (item.spotifyLink || '').replace(/'/g, "''");
+  const cleanQrImage = (item.qrImage || '').replace(/'/g, "''");
+
+  const sql = `INSERT INTO qrcodes (id, boek_id, boek_titel, hoofdstuk_id, hoofdstuk, song, artist, spotify_link, qr_image)
+    VALUES ('${cleanId}', '${cleanBoekId}', '${cleanBoekTitel}', '${cleanHoofdstukId}', '${cleanHoofdstuk}', '${cleanSong}', '${cleanArtist}', '${cleanSpotifyLink}', '${cleanQrImage}')
+    ON DUPLICATE KEY UPDATE 
+      boek_id = VALUES(boek_id),
+      boek_titel = VALUES(boek_titel),
+      hoofdstuk_id = VALUES(hoofdstuk_id),
+      hoofdstuk = VALUES(hoofdstuk),
+      song = VALUES(song),
+      artist = VALUES(artist),
+      spotify_link = VALUES(spotify_link),
+      qr_image = VALUES(qr_image);`;
+  const res = await transipQuerySql(sql);
+  return res !== null;
+}
+
+export async function deleteTransipQrCode(id: string): Promise<boolean> {
+  const cleanId = id.toUpperCase().trim().replace(/'/g, "''");
+  const sql = `DELETE FROM qrcodes WHERE UPPER(id) = '${cleanId}';`;
+  const res = await transipQuerySql(sql);
+  return res !== null;
+}

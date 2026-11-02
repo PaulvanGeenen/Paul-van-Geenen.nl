@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { transipPost } from './transip';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -7,11 +8,18 @@ export function cn(...inputs: ClassValue[]) {
 
 export const NewsletterService = {
   async subscribe(email: string, firstName?: string) {
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      throw new Error('Vul a.u.b. een geldig e-mailadres in.');
+    }
+
+    // 1. Probeer de lokale Express backend als die draait
     try {
       const response = await fetch('/api/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, firstName })
+        body: JSON.stringify({ email: cleanEmail, firstName })
       });
       
       const contentType = response.headers.get('content-type') || '';
@@ -24,49 +32,30 @@ export const NewsletterService = {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Er is een fout opgetreden bij het aanmelden.');
       }
-      
-      // If response is not JSON or server endpoint does not exist (e.g. static hosting returning index.html)
-      throw new Error('FALLBACK_TO_CLIENT_FIRESTORE');
     } catch (e: any) {
-      // If it is a clean validation error thrown by our endpoint, propagate it immediately
-      if (e.message && e.message !== 'FALLBACK_TO_CLIENT_FIRESTORE' && !e.message.includes('Unexpected token')) {
+      if (e.message && !e.message.includes('Unexpected token') && !e.message.includes('Failed to fetch')) {
         throw e;
       }
-      
-      // Execute direct fallback to Firestore client-side SDK (completely bypassing the Node server)
-      try {
-        const { db } = await import('./firebase');
-        const { collection, doc, setDoc, query, where, getDocs } = await import('firebase/firestore');
-        
-        const cleanEmail = email.trim().toLowerCase();
-        
-        // Simple front-end email format validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(cleanEmail)) {
-          throw new Error('Vul a.u.b. een geldig e-mailadres in.');
-        }
+    }
 
-        // Duplicate checks
-        const q = query(collection(db, 'subscribers'), where('email', '==', cleanEmail));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          throw new Error('Dit e-mailadres is al aangemeld voor de nieuwsbrief.');
-        }
-        
-        // Save direct with GONDA1984 security bypass password
-        const docRef = doc(collection(db, 'subscribers'));
-        await setDoc(docRef, {
-          email: cleanEmail,
-          firstName: firstName ? firstName.trim() : '',
-          subscribedAt: new Date().toISOString(),
-          password: 'GONDA1984'
-        });
-        
+    // 2. Directe opslag in de TransIP MySQL Database
+    try {
+      const transipRes = await transipPost<{ success: boolean; error?: string }>('subscribe', {
+        email: cleanEmail,
+        name: firstName ? firstName.trim() : '',
+        source: 'website'
+      });
+
+      if (transipRes && transipRes.success) {
         return { success: true };
-      } catch (err: any) {
-        console.warn('[Newsletter Fallback Error]:', err);
-        throw new Error(err.message || 'Er is een fout opgetreden bij het verwerken van uw aanmelding.');
       }
+      if (transipRes && transipRes.error) {
+        throw new Error(transipRes.error);
+      }
+      return { success: true };
+    } catch (err: any) {
+      console.warn('[Newsletter TransIP Save Error]:', err);
+      throw new Error(err.message || 'Er is een fout opgetreden bij het verwerken van uw aanmelding.');
     }
   }
 };

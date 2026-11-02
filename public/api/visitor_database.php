@@ -214,6 +214,36 @@ if ($action === 'init_tables') {
               INDEX `idx_email` (`email`),
               INDEX `idx_status` (`status`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `boeken` (
+              `id` VARCHAR(64) PRIMARY KEY,
+              `volgnummer` INT NOT NULL DEFAULT 1,
+              `boektitel` VARCHAR(255) NOT NULL,
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `hoofdstukken` (
+              `id` VARCHAR(64) PRIMARY KEY,
+              `boek_id` VARCHAR(64) NOT NULL,
+              `volgnummer` INT NOT NULL DEFAULT 1,
+              `omschrijving` VARCHAR(255) NOT NULL,
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX `idx_boek_id` (`boek_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `qrcodes` (
+              `id` VARCHAR(64) PRIMARY KEY,
+              `boek_id` VARCHAR(64) NULL,
+              `boek_titel` VARCHAR(255) NULL,
+              `hoofdstuk_id` VARCHAR(64) NULL,
+              `hoofdstuk` VARCHAR(255) NOT NULL,
+              `song` VARCHAR(255) NOT NULL,
+              `artist` VARCHAR(255) NOT NULL,
+              `spotify_link` TEXT NOT NULL,
+              `qr_image` LONGTEXT NULL,
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         ");
 
         // Automatische migratie: voeg 'completed' kolom toe indien de tabel al bestond
@@ -892,6 +922,235 @@ if ($action === 'get_overview') {
             "popular_tracks" => $popularTracks,
             "top_cities" => $topCities
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================
+// 9. ACTIES: BOEKEN BEHEER
+// ==========================================
+if ($action === 'get_boeken') {
+    try {
+        $stmt = $pdo->query("SELECT id, volgnummer, boektitel FROM boeken ORDER BY volgnummer ASC");
+        $boeken = $stmt->fetchAll();
+        echo json_encode(["success" => true, "boeken" => $boeken]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'save_boek') {
+    $id = $input['id'] ?? ($_POST['id'] ?? '');
+    $volgnummer = (int)($input['volgnummer'] ?? ($_POST['volgnummer'] ?? 1));
+    $boektitel = trim($input['boektitel'] ?? ($_POST['boektitel'] ?? ''));
+
+    if (empty($id) || empty($boektitel)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "ID en boektitel zijn verplicht."]);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO boeken (id, volgnummer, boektitel)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE volgnummer = VALUES(volgnummer), boektitel = VALUES(boektitel)
+        ");
+        $stmt->execute([$id, $volgnummer, $boektitel]);
+        echo json_encode(["success" => true, "id" => $id]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'delete_boek') {
+    $id = $input['id'] ?? ($_GET['id'] ?? '');
+    if (empty($id)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Geen boek ID opgegeven."]);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare("DELETE FROM boeken WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(["success" => true]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================
+// 10. ACTIES: HOOFDSTUKKEN BEHEER
+// ==========================================
+if ($action === 'get_hoofdstukken') {
+    $boekId = $_GET['boekId'] ?? ($input['boekId'] ?? '');
+    try {
+        if (!empty($boekId)) {
+            $stmt = $pdo->prepare("SELECT id, boek_id AS boekId, volgnummer, omschrijving FROM hoofdstukken WHERE boek_id = ? ORDER BY volgnummer ASC");
+            $stmt->execute([$boekId]);
+        } else {
+            $stmt = $pdo->query("SELECT id, boek_id AS boekId, volgnummer, omschrijving FROM hoofdstukken ORDER BY volgnummer ASC");
+        }
+        $hoofdstukken = $stmt->fetchAll();
+        echo json_encode(["success" => true, "hoofdstukken" => $hoofdstukken]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'save_hoofdstuk') {
+    $id = $input['id'] ?? ($_POST['id'] ?? uniqid('ch_', true));
+    $boekId = $input['boekId'] ?? ($input['boek_id'] ?? '');
+    $volgnummer = (int)($input['volgnummer'] ?? ($_POST['volgnummer'] ?? 1));
+    $omschrijving = trim($input['omschrijving'] ?? ($_POST['omschrijving'] ?? ''));
+
+    if (empty($boekId) || empty($omschrijving)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Boek ID en omschrijving zijn verplicht."]);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO hoofdstukken (id, boek_id, volgnummer, omschrijving)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE boek_id = VALUES(boek_id), volgnummer = VALUES(volgnummer), omschrijving = VALUES(omschrijving)
+        ");
+        $stmt->execute([$id, $boekId, $volgnummer, $omschrijving]);
+        echo json_encode(["success" => true, "id" => $id]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'delete_hoofdstuk') {
+    $id = $input['id'] ?? ($_GET['id'] ?? '');
+    if (empty($id)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Geen hoofdstuk ID opgegeven."]);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare("DELETE FROM hoofdstukken WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(["success" => true]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================
+// 11. ACTIES: QR CODES BEHEER
+// ==========================================
+if ($action === 'get_qrcodes') {
+    try {
+        $stmt = $pdo->query("
+            SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage 
+            FROM qrcodes 
+            ORDER BY id ASC
+        ");
+        $qrcodes = $stmt->fetchAll();
+        echo json_encode(["success" => true, "qrcodes" => $qrcodes]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'get_qrcode') {
+    $code = strtoupper(trim($_GET['code'] ?? ($_GET['id'] ?? ($input['code'] ?? ($input['id'] ?? '')))));
+    if (empty($code)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Geen QR code opgegeven."]);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage 
+            FROM qrcodes 
+            WHERE UPPER(id) = ? 
+            LIMIT 1
+        ");
+        $stmt->execute([$code]);
+        $row = $stmt->fetch();
+        if ($row) {
+            echo json_encode(["success" => true, "qrcode" => $row]);
+        } else {
+            http_response_code(404);
+            echo json_encode(["success" => false, "error" => "QR code niet gevonden."]);
+        }
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'save_qrcode') {
+    $id = strtoupper(trim($input['id'] ?? ($_POST['id'] ?? '')));
+    $boekId = $input['boekId'] ?? ($input['boek_id'] ?? '');
+    $boekTitel = $input['boekTitel'] ?? ($input['boek_titel'] ?? '');
+    $hoofdstukId = $input['hoofdstukId'] ?? ($input['hoofdstuk_id'] ?? '');
+    $hoofdstuk = trim($input['hoofdstuk'] ?? ($_POST['hoofdstuk'] ?? ''));
+    $song = trim($input['song'] ?? ($_POST['song'] ?? ''));
+    $artist = trim($input['artist'] ?? ($_POST['artist'] ?? ''));
+    $spotifyLink = trim($input['spotifyLink'] ?? ($input['spotify_link'] ?? ($_POST['spotifyLink'] ?? '')));
+    $qrImage = $input['qrImage'] ?? ($input['qr_image'] ?? ($_POST['qrImage'] ?? ''));
+
+    if (empty($id) || empty($hoofdstuk) || empty($song) || empty($artist) || empty($spotifyLink)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "QR code, hoofdstuk, song, artiest en Spotify link zijn verplicht."]);
+        exit;
+    }
+
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO qrcodes (id, boek_id, boek_titel, hoofdstuk_id, hoofdstuk, song, artist, spotify_link, qr_image)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+                boek_id = VALUES(boek_id),
+                boek_titel = VALUES(boek_titel),
+                hoofdstuk_id = VALUES(hoofdstuk_id),
+                hoofdstuk = VALUES(hoofdstuk),
+                song = VALUES(song),
+                artist = VALUES(artist),
+                spotify_link = VALUES(spotify_link),
+                qr_image = VALUES(qr_image)
+        ");
+        $stmt->execute([$id, $boekId, $boekTitel, $hoofdstukId, $hoofdstuk, $song, $artist, $spotifyLink, $qrImage]);
+        echo json_encode(["success" => true, "id" => $id]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'delete_qrcode') {
+    $id = strtoupper(trim($input['id'] ?? ($_GET['id'] ?? '')));
+    if (empty($id)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Geen QR code ID opgegeven."]);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare("DELETE FROM qrcodes WHERE UPPER(id) = ?");
+        $stmt->execute([$id]);
+        echo json_encode(["success" => true]);
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["success" => false, "error" => $e->getMessage()]);

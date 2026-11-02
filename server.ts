@@ -3,13 +3,6 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import nodemailer from 'nodemailer';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
-import firebaseConfig from './firebase-applet-config.json' with { type: 'json' };
-
-// Initialize Firebase Client SDK on the server with named database
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Derive __dirname safely in both ESM and CommonJS environments
 const __dirname = typeof globalThis.__dirname !== 'undefined' ? globalThis.__dirname : process.cwd();
@@ -286,181 +279,24 @@ async function startServer() {
     }
   };
 
-  // Admin QR Code routes
-  app.get('/api/qrcodes', checkAdminAuth, async (req, res) => {
-    try {
-      const snap = await getDocs(collection(db, 'qrcodes'));
-      const list = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-      list.sort((a, b) => a.id.localeCompare(b.id));
-      res.json({ qrcodes: list });
-    } catch (err) {
-      console.error('[Admin API] Error fetching qrcodes:', err);
-      res.status(500).json({ error: 'Kan gegevens niet ophalen uit Firestore.' });
-    }
-  });
-
-  app.post('/api/qrcodes', checkAdminAuth, async (req, res) => {
-    const { id, boekId, boekTitel, hoofdstukId, hoofdstuk, song, artist, spotifyLink, qrImage } = req.body;
-    if (!id || !hoofdstuk || !song || !artist || !spotifyLink) {
-      return res.status(400).json({ error: 'QR Code, Hoofdstuk, Song, Artiest en Spotify Link zijn verplicht.' });
-    }
-    try {
-      const docId = id.toUpperCase().trim();
-      await setDoc(doc(db, 'qrcodes', docId), {
-        boekId: boekId || '',
-        boekTitel: boekTitel || '',
-        hoofdstukId: hoofdstukId || '',
-        hoofdstuk,
-        song,
-        artist,
-        spotifyLink,
-        qrImage: qrImage || '',
-        password: "GONDA1984" // required by security rules
-      });
-      res.json({ success: true });
-    } catch (err) {
-      console.error('[Admin API] Error saving qrcode:', err);
-      res.status(500).json({ error: 'Fout bij opslaan in Firestore.' });
-    }
-  });
-
-  app.delete('/api/qrcodes/:id', checkAdminAuth, async (req, res) => {
-    const { id } = req.params;
-    try {
-      await deleteDoc(doc(db, 'qrcodes', id.toUpperCase()));
-      res.json({ success: true });
-    } catch (err) {
-      console.error('[Admin API] Error deleting qrcode:', err);
-      res.status(500).json({ error: 'Fout bij verwijderen uit Firestore.' });
-    }
-  });
-
-  // Admin Books endpoints
-  app.get('/api/boeken', checkAdminAuth, async (req, res) => {
-    try {
-      const snap = await getDocs(collection(db, 'boeken'));
-      let list = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-
-      const defaultBooks = [
-        { id: '1', volgnummer: 1, boektitel: 'Koester het Leven: de weg ernaartoe' },
-        { id: '2', volgnummer: 2, boektitel: 'Koester het Leven: mijn eerste 21 jaar' },
-        { id: '3', volgnummer: 3, boektitel: 'De Echo' },
-        { id: '4', volgnummer: 4, boektitel: 'De Bestemming' }
-      ];
-
-      // Automatically sync any missing default books into the list & Firestore
-      for (const defBook of defaultBooks) {
-        const found = list.find((b: any) => 
-          String(b.id) === String(defBook.id) || 
-          (b.boektitel && b.boektitel.toLowerCase().trim() === defBook.boektitel.toLowerCase().trim()) ||
-          (parseInt(b.volgnummer) === defBook.volgnummer)
-        );
-        if (!found) {
-          try {
-            await setDoc(doc(db, 'boeken', defBook.id), {
-              volgnummer: defBook.volgnummer,
-              boektitel: defBook.boektitel,
-              password: "GONDA1984"
-            });
-            list.push(defBook);
-          } catch (seedErr) {
-            console.warn('[Admin API] Error auto-seeding default book:', defBook.boektitel, seedErr);
-          }
-        }
-      }
-
-      list.sort((a: any, b: any) => {
-        const numA = parseInt(a.volgnummer) || 0;
-        const numB = parseInt(b.volgnummer) || 0;
-        return numA - numB;
-      });
-      res.json({ boeken: list });
-    } catch (err) {
-      console.error('[Admin API] Error fetching boeken:', err);
-      res.status(500).json({ error: 'Kan boeken niet ophalen.' });
-    }
-  });
-
-  app.post('/api/boeken', checkAdminAuth, async (req, res) => {
-    const { id, volgnummer, boektitel } = req.body;
-    if (volgnummer === undefined || !boektitel) {
-      return res.status(400).json({ error: 'Volgnummer en boektitel zijn verplicht.' });
-    }
-    try {
-      const docRef = id ? doc(db, 'boeken', id) : doc(collection(db, 'boeken'));
-      await setDoc(docRef, {
-        volgnummer: parseInt(volgnummer) || 0,
-        boektitel: boektitel.trim(),
-        password: "GONDA1984" // required by security rules
-      });
-      res.json({ success: true, id: docRef.id });
-    } catch (err) {
-      console.error('[Admin API] Error saving boek:', err);
-      res.status(500).json({ error: 'Fout bij opslaan boek.' });
-    }
-  });
-
-  app.delete('/api/boeken/:id', checkAdminAuth, async (req, res) => {
-    const { id } = req.params;
-    try {
-      await deleteDoc(doc(db, 'boeken', id));
-      res.json({ success: true });
-    } catch (err) {
-      console.error('[Admin API] Error deleting boek:', err);
-      res.status(500).json({ error: 'Fout bij verwijderen boek.' });
-    }
-  });
-
-  // Admin Chapters endpoints
-  app.get('/api/hoofdstukken', checkAdminAuth, async (req, res) => {
-    try {
-      const snap = await getDocs(collection(db, 'hoofdstukken'));
-      const list = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-      list.sort((a: any, b: any) => {
-        const numA = parseInt(a.volgnummer) || 0;
-        const numB = parseInt(b.volgnummer) || 0;
-        return numA - numB;
-      });
-      res.json({ hoofdstukken: list });
-    } catch (err) {
-      console.error('[Admin API] Error fetching hoofdstukken:', err);
-      res.status(500).json({ error: 'Kan hoofdstukken niet ophalen.' });
-    }
-  });
-
-  app.post('/api/hoofdstukken', checkAdminAuth, async (req, res) => {
-    const { id, boekId, volgnummer, omschrijving } = req.body;
-    if (!boekId || volgnummer === undefined || !omschrijving) {
-      return res.status(400).json({ error: 'BoekId, volgnummer en omschrijving zijn verplicht.' });
-    }
-    try {
-      const docRef = id ? doc(db, 'hoofdstukken', id) : doc(collection(db, 'hoofdstukken'));
-      await setDoc(docRef, {
-        boekId,
-        volgnummer: parseInt(volgnummer) || 0,
-        omschrijving: omschrijving.trim(),
-        password: "GONDA1984" // required by security rules
-      });
-      res.json({ success: true, id: docRef.id });
-    } catch (err) {
-      console.error('[Admin API] Error saving hoofdstuk:', err);
-      res.status(500).json({ error: 'Fout bij opslaan hoofdstuk.' });
-    }
-  });
-
-  app.delete('/api/hoofdstukken/:id', checkAdminAuth, async (req, res) => {
-    const { id } = req.params;
-    try {
-      await deleteDoc(doc(db, 'hoofdstukken', id));
-      res.json({ success: true });
-    } catch (err) {
-      console.error('[Admin API] Error deleting hoofdstuk:', err);
-      res.status(500).json({ error: 'Fout bij verwijderen hoofdstuk.' });
-    }
-  });
-
-  // --- TransIP MySQL Analytics Bridge Helpers ---
+  // --- TransIP MySQL Database Bridge Helpers ---
   const TRANSIP_VISITOR_API = 'https://www.paulvangeenen.nl/api/visitor_database.php?key=visitor-secret-key-paul-2026';
+
+  async function queryTransipSql(sql: string) {
+    try {
+      const res = await fetch(`${TRANSIP_VISITOR_API}&action=execute_sql`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql })
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json?.success ? json.data : null;
+    } catch (e) {
+      console.error('[TransIP SQL Error]:', e);
+      return null;
+    }
+  }
 
   async function fetchTransipAnalytics(action: string, options: { method?: string; body?: any; params?: Record<string, string> } = {}) {
     try {
@@ -497,6 +333,167 @@ async function startServer() {
     } catch {}
   }
 
+  // Admin QR Code routes (100% TransIP MySQL)
+  app.get('/api/qrcodes', checkAdminAuth, async (req, res) => {
+    try {
+      const sql = 'SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage FROM qrcodes ORDER BY id ASC';
+      const list = await queryTransipSql(sql) || [];
+      res.json({ qrcodes: list, source: 'transip' });
+    } catch (err) {
+      console.error('[Admin API] Error fetching qrcodes from TransIP:', err);
+      res.status(500).json({ error: 'Kan gegevens niet ophalen uit MySQL.' });
+    }
+  });
+
+  app.get('/api/qrcodes/:id', async (req, res) => {
+    try {
+      const clean = req.params.id.trim().toUpperCase().replace(/'/g, "''");
+      const sql = `SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage FROM qrcodes WHERE UPPER(id) = '${clean}' LIMIT 1`;
+      const list = await queryTransipSql(sql);
+      if (list && list.length > 0) {
+        res.json({ qrcode: list[0], source: 'transip' });
+      } else {
+        res.status(404).json({ error: 'QR code niet gevonden.' });
+      }
+    } catch (err) {
+      res.status(500).json({ error: 'Fout bij ophalen QR code.' });
+    }
+  });
+
+  app.post('/api/qrcodes', checkAdminAuth, async (req, res) => {
+    const { id, boekId, boekTitel, hoofdstukId, hoofdstuk, song, artist, spotifyLink, qrImage } = req.body;
+    if (!id || !hoofdstuk || !song || !artist || !spotifyLink) {
+      return res.status(400).json({ error: 'QR Code, Hoofdstuk, Song, Artiest en Spotify Link zijn verplicht.' });
+    }
+    try {
+      const cleanId = id.toUpperCase().trim().replace(/'/g, "''");
+      const cleanBoekId = (boekId || '').replace(/'/g, "''");
+      const cleanBoekTitel = (boekTitel || '').replace(/'/g, "''");
+      const cleanHoofdstukId = (hoofdstukId || '').replace(/'/g, "''");
+      const cleanHoofdstuk = hoofdstuk.replace(/'/g, "''");
+      const cleanSong = song.replace(/'/g, "''");
+      const cleanArtist = artist.replace(/'/g, "''");
+      const cleanSpotifyLink = spotifyLink.replace(/'/g, "''");
+      const cleanQrImage = (qrImage || '').replace(/'/g, "''");
+
+      const sql = `INSERT INTO qrcodes (id, boek_id, boek_titel, hoofdstuk_id, hoofdstuk, song, artist, spotify_link, qr_image)
+        VALUES ('${cleanId}', '${cleanBoekId}', '${cleanBoekTitel}', '${cleanHoofdstukId}', '${cleanHoofdstuk}', '${cleanSong}', '${cleanArtist}', '${cleanSpotifyLink}', '${cleanQrImage}')
+        ON DUPLICATE KEY UPDATE 
+          boek_id = VALUES(boek_id),
+          boek_titel = VALUES(boek_titel),
+          hoofdstuk_id = VALUES(hoofdstuk_id),
+          hoofdstuk = VALUES(hoofdstuk),
+          song = VALUES(song),
+          artist = VALUES(artist),
+          spotify_link = VALUES(spotify_link),
+          qr_image = VALUES(qr_image)`;
+      await queryTransipSql(sql);
+      res.json({ success: true, id: cleanId, source: 'transip' });
+    } catch (err) {
+      console.error('[Admin API] Error saving qrcode to MySQL:', err);
+      res.status(500).json({ error: 'Fout bij opslaan in MySQL.' });
+    }
+  });
+
+  app.delete('/api/qrcodes/:id', checkAdminAuth, async (req, res) => {
+    const cleanId = req.params.id.trim().toUpperCase().replace(/'/g, "''");
+    try {
+      const sql = `DELETE FROM qrcodes WHERE UPPER(id) = '${cleanId}'`;
+      await queryTransipSql(sql);
+      res.json({ success: true, source: 'transip' });
+    } catch (err) {
+      console.error('[Admin API] Error deleting qrcode from MySQL:', err);
+      res.status(500).json({ error: 'Fout bij verwijderen uit MySQL.' });
+    }
+  });
+
+  // Admin Books endpoints (100% TransIP MySQL)
+  app.get('/api/boeken', checkAdminAuth, async (req, res) => {
+    try {
+      const sql = 'SELECT id, volgnummer, boektitel FROM boeken ORDER BY volgnummer ASC';
+      const list = await queryTransipSql(sql) || [];
+      res.json({ boeken: list, source: 'transip' });
+    } catch (err) {
+      console.error('[Admin API] Error fetching boeken from MySQL:', err);
+      res.status(500).json({ error: 'Kan boeken niet ophalen.' });
+    }
+  });
+
+  app.post('/api/boeken', checkAdminAuth, async (req, res) => {
+    const { id, volgnummer, boektitel } = req.body;
+    if (volgnummer === undefined || !boektitel) {
+      return res.status(400).json({ error: 'Volgnummer en boektitel zijn verplicht.' });
+    }
+    try {
+      const cleanId = (id || `bk_${Date.now()}`).replace(/'/g, "''");
+      const cleanTitel = boektitel.trim().replace(/'/g, "''");
+      const num = parseInt(volgnummer) || 1;
+      const sql = `INSERT INTO boeken (id, volgnummer, boektitel) VALUES ('${cleanId}', ${num}, '${cleanTitel}')
+        ON DUPLICATE KEY UPDATE volgnummer = VALUES(volgnummer), boektitel = VALUES(boektitel)`;
+      await queryTransipSql(sql);
+      res.json({ success: true, id: cleanId, source: 'transip' });
+    } catch (err) {
+      console.error('[Admin API] Error saving boek in MySQL:', err);
+      res.status(500).json({ error: 'Fout bij opslaan boek in MySQL.' });
+    }
+  });
+
+  app.delete('/api/boeken/:id', checkAdminAuth, async (req, res) => {
+    const cleanId = req.params.id.replace(/'/g, "''");
+    try {
+      const sql = `DELETE FROM boeken WHERE id = '${cleanId}'`;
+      await queryTransipSql(sql);
+      res.json({ success: true, source: 'transip' });
+    } catch (err) {
+      console.error('[Admin API] Error deleting boek in MySQL:', err);
+      res.status(500).json({ error: 'Fout bij verwijderen boek in MySQL.' });
+    }
+  });
+
+  // Admin Chapters endpoints (100% TransIP MySQL)
+  app.get('/api/hoofdstukken', checkAdminAuth, async (req, res) => {
+    try {
+      const sql = 'SELECT id, boek_id AS boekId, volgnummer, omschrijving FROM hoofdstukken ORDER BY volgnummer ASC';
+      const list = await queryTransipSql(sql) || [];
+      res.json({ hoofdstukken: list, source: 'transip' });
+    } catch (err) {
+      console.error('[Admin API] Error fetching hoofdstukken from MySQL:', err);
+      res.status(500).json({ error: 'Kan hoofdstukken niet ophalen.' });
+    }
+  });
+
+  app.post('/api/hoofdstukken', checkAdminAuth, async (req, res) => {
+    const { id, boekId, volgnummer, omschrijving } = req.body;
+    if (!boekId || volgnummer === undefined || !omschrijving) {
+      return res.status(400).json({ error: 'BoekId, volgnummer en omschrijving zijn verplicht.' });
+    }
+    try {
+      const cleanId = (id || `ch_${Date.now()}`).replace(/'/g, "''");
+      const cleanBoekId = boekId.replace(/'/g, "''");
+      const cleanOms = omschrijving.trim().replace(/'/g, "''");
+      const num = parseInt(volgnummer) || 1;
+      const sql = `INSERT INTO hoofdstukken (id, boek_id, volgnummer, omschrijving) VALUES ('${cleanId}', '${cleanBoekId}', ${num}, '${cleanOms}')
+        ON DUPLICATE KEY UPDATE boek_id = VALUES(boek_id), volgnummer = VALUES(volgnummer), omschrijving = VALUES(omschrijving)`;
+      await queryTransipSql(sql);
+      res.json({ success: true, id: cleanId, source: 'transip' });
+    } catch (err) {
+      console.error('[Admin API] Error saving hoofdstuk in MySQL:', err);
+      res.status(500).json({ error: 'Fout bij opslaan hoofdstuk in MySQL.' });
+    }
+  });
+
+  app.delete('/api/hoofdstukken/:id', checkAdminAuth, async (req, res) => {
+    const cleanId = req.params.id.replace(/'/g, "''");
+    try {
+      const sql = `DELETE FROM hoofdstukken WHERE id = '${cleanId}'`;
+      await queryTransipSql(sql);
+      res.json({ success: true, source: 'transip' });
+    } catch (err) {
+      console.error('[Admin API] Error deleting hoofdstuk in MySQL:', err);
+      res.status(500).json({ error: 'Fout bij verwijderen hoofdstuk in MySQL.' });
+    }
+  });
+
   // Newsletter Subscriptions Endpoints
   app.post('/api/newsletter/subscribe', async (req, res) => {
     const { email, firstName } = req.body;
@@ -511,31 +508,14 @@ async function startServer() {
     }
 
     try {
-      // 1. Sync to TransIP MySQL
-      syncToTransipAnalytics('subscribe', {
+      // 1. Sync directly to TransIP MySQL
+      await syncToTransipAnalytics('subscribe', {
         email: cleanEmail,
         name: firstName ? firstName.trim() : '',
         source: 'website'
       });
 
-      // 2. Check if duplicate exists in Firestore
-      const q = query(collection(db, 'subscribers'), where('email', '==', cleanEmail));
-      const querySnapshot = await getDocs(q);
-      
-      if (!querySnapshot.empty) {
-        return res.status(400).json({ error: 'Dit e-mailadres is al aangemeld voor de nieuwsbrief.' });
-      }
-
-      // Save subscriber to Firestore
-      const docRef = doc(collection(db, 'subscribers'));
-      await setDoc(docRef, {
-        email: cleanEmail,
-        firstName: firstName ? firstName.trim() : '',
-        subscribedAt: new Date().toISOString(),
-        password: "GONDA1984" // required by security rules
-      });
-
-      res.json({ success: true });
+      res.json({ success: true, source: 'transip' });
     } catch (err: any) {
       console.error('[Newsletter API] Error subscribing:', err);
       res.status(500).json({ error: `Fout bij opslaan van aanmelding in de database: ${err?.message || err}` });
@@ -544,21 +524,9 @@ async function startServer() {
 
   app.get('/api/subscribers', checkAdminAuth, async (req, res) => {
     try {
-      // 1. Try TransIP first
       const transipData = await fetchTransipAnalytics('get_subscribers');
-      if (transipData?.success && Array.isArray(transipData.subscribers) && transipData.subscribers.length > 0) {
-        return res.json({ subscribers: transipData.subscribers, source: 'transip' });
-      }
-
-      // 2. Fallback to Firestore
-      const snap = await getDocs(collection(db, 'subscribers'));
-      const list = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-      list.sort((a: any, b: any) => {
-        const timeA = a.subscribedAt || '';
-        const timeB = b.subscribedAt || '';
-        return timeB.localeCompare(timeA);
-      });
-      res.json({ subscribers: list, source: 'firestore' });
+      const list = (transipData?.success && Array.isArray(transipData.subscribers)) ? transipData.subscribers : [];
+      res.json({ subscribers: list, source: 'transip' });
     } catch (err) {
       console.error('[Admin API] Error fetching subscribers:', err);
       res.status(500).json({ error: 'Kan abonnees niet ophalen.' });
@@ -568,11 +536,8 @@ async function startServer() {
   app.delete('/api/subscribers/:id', checkAdminAuth, async (req, res) => {
     const { id } = req.params;
     try {
-      // Delete from TransIP
-      fetchTransipAnalytics('delete_subscriber', { method: 'POST', body: { id } }).catch(() => {});
-      // Delete from Firestore
-      await deleteDoc(doc(db, 'subscribers', id)).catch(() => {});
-      res.json({ success: true });
+      await fetchTransipAnalytics('delete_subscriber', { method: 'POST', body: { id } }).catch(() => {});
+      res.json({ success: true, source: 'transip' });
     } catch (err) {
       console.error('[Admin API] Error deleting subscriber:', err);
       res.status(500).json({ error: 'Fout bij verwijderen abonnee.' });
@@ -590,33 +555,21 @@ async function startServer() {
     const targetRoute = [bookTitle, chapter, song].filter(Boolean).join(' - ') || '/';
 
     try {
-      // 1. Sync to TransIP MySQL
-      syncToTransipAnalytics('qr_scan', {
+      await syncToTransipAnalytics('qr_scan', {
         redirectCode: redirectCode.toUpperCase().trim(),
         targetRoute,
         city: city || 'Onbekend',
         country: country || 'Nederland',
         userAgent: userAgent || '',
-        deviceType: deviceType || 'Mobiel'
-      });
-
-      // 2. Save to Firestore
-      const docRef = doc(collection(db, 'qr_scans'));
-      await setDoc(docRef, {
-        redirectCode: redirectCode.toUpperCase().trim(),
-        city: city || 'Onbekend',
-        country: country || 'Onbekend',
-        timestamp: new Date().toISOString(),
-        userAgent: userAgent || '',
-        deviceType: deviceType || 'Onbekend',
+        deviceType: deviceType || 'Mobiel',
         bookId: bookId || '',
         bookTitle: bookTitle || '',
         chapter: chapter || '',
         song: song || '',
-        artist: artist || '',
-        password: "GONDA1984" // required by security rules
+        artist: artist || ''
       });
-      res.json({ success: true, id: docRef.id });
+
+      res.json({ success: true, source: 'transip' });
     } catch (err: any) {
       console.error('[Scans API] Error recording scan:', err);
       res.status(500).json({ error: `Fout bij registreren van de scan: ${err?.message || err}` });
@@ -625,21 +578,9 @@ async function startServer() {
 
   app.get('/api/scans', checkAdminAuth, async (req, res) => {
     try {
-      // 1. Try TransIP first
       const transipData = await fetchTransipAnalytics('get_qr_scans');
-      if (transipData?.success && Array.isArray(transipData.scans) && transipData.scans.length > 0) {
-        return res.json({ scans: transipData.scans, source: 'transip' });
-      }
-
-      // 2. Fallback to Firestore
-      const snap = await getDocs(collection(db, 'qr_scans'));
-      const list = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-      list.sort((a: any, b: any) => {
-        const timeA = a.timestamp || '';
-        const timeB = b.timestamp || '';
-        return timeB.localeCompare(timeA); // Newest scans first
-      });
-      res.json({ scans: list, source: 'firestore' });
+      const list = (transipData?.success && Array.isArray(transipData.scans)) ? transipData.scans : [];
+      res.json({ scans: list, source: 'transip' });
     } catch (err) {
       console.error('[Admin API] Error fetching scans:', err);
       res.status(500).json({ error: 'Kan scans niet ophalen.' });
@@ -649,20 +590,8 @@ async function startServer() {
   app.delete('/api/scans', checkAdminAuth, async (req, res) => {
     try {
       const { bookId } = req.query;
-      // Purge TransIP
-      fetchTransipAnalytics('purge_qr_scans', { method: 'POST' }).catch(() => {});
-      const snap = await getDocs(collection(db, 'qr_scans'));
-      let docsToDelete = snap.docs;
-      if (bookId) {
-        const targetBookIdStr = String(bookId).trim();
-        docsToDelete = snap.docs.filter(docSnap => {
-          const val = docSnap.data().bookId;
-          return val !== undefined && val !== null && String(val).trim() === targetBookIdStr;
-        });
-      }
-      const deletePromises = docsToDelete.map(docSnap => deleteDoc(doc(db, 'qr_scans', docSnap.id)));
-      await Promise.all(deletePromises);
-      res.json({ success: true });
+      await fetchTransipAnalytics('purge_qr_scans', { method: 'POST', body: { bookId } }).catch(() => {});
+      res.json({ success: true, source: 'transip' });
     } catch (err) {
       console.error('[Admin API] Error clearing scans:', err);
       res.status(500).json({ error: 'Kan scan-historie niet opschonen.' });
@@ -672,9 +601,8 @@ async function startServer() {
   app.delete('/api/scans/:id', checkAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      fetchTransipAnalytics('delete_qr_scan', { method: 'POST', body: { id } }).catch(() => {});
-      await deleteDoc(doc(db, 'qr_scans', id)).catch(() => {});
-      res.json({ success: true });
+      await fetchTransipAnalytics('delete_qr_scan', { method: 'POST', body: { id } }).catch(() => {});
+      res.json({ success: true, source: 'transip' });
     } catch (err) {
       console.error('[Admin API] Error deleting single scan:', err);
       res.status(500).json({ error: 'Kan scan niet verwijderen.' });
@@ -708,23 +636,7 @@ async function startServer() {
         referrer: referrer || ''
       });
 
-      const docRef = doc(db, 'visitor_sessions', sessionId);
-      const nowStr = new Date().toISOString();
-      await setDoc(docRef, {
-        id: sessionId,
-        startedAt: nowStr,
-        endedAt: nowStr,
-        durationSeconds: 0,
-        userAgent: userAgent || '',
-        deviceType: deviceType || 'Bureaublad computer',
-        referrer: referrer || 'Direct / Bladwijzer',
-        city: city || 'Onbekend',
-        country: country || 'Onbekend',
-        pages: [{ path: path || '/', enteredAt: nowStr, durationSeconds: 0 }],
-        clicks: [],
-        password: "GONDA1984" // bypass client rules
-      });
-      res.json({ success: true });
+      res.json({ success: true, source: 'transip' });
     } catch (err: any) {
       console.error('[Analytics API] Error starting session:', err);
       res.status(500).json({ error: `Fout bij initialiseren van bezoekerssessie: ${err?.message || err}` });
@@ -738,40 +650,8 @@ async function startServer() {
       return res.status(400).json({ error: 'SessionId en huidige pagina-pad zijn verplicht.' });
     }
     try {
-      const docRef = doc(db, 'visitor_sessions', sessionId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const startedAt = data.startedAt;
-        const endedAtNow = new Date().toISOString();
-        const elapsedTotal = Math.max(0, Math.floor((new Date(endedAtNow).getTime() - new Date(startedAt).getTime()) / 1000));
-
-        let pages = [...(data.pages || [])];
-        if (pages.length === 0) {
-          pages.push({ path: currentPath, enteredAt: endedAtNow, durationSeconds: pageStaySeconds || 5 });
-        } else {
-          const lastPageIdx = pages.length - 1;
-          const lastPage = pages[lastPageIdx];
-          if (lastPage.path === currentPath) {
-            lastPage.durationSeconds = (lastPage.durationSeconds || 0) + (pageStaySeconds || 5);
-          } else {
-            // Log path switch
-            pages.push({ path: currentPath, enteredAt: endedAtNow, durationSeconds: pageStaySeconds || 0 });
-          }
-        }
-
-        await setDoc(docRef, {
-          ...data,
-          endedAt: endedAtNow,
-          durationSeconds: elapsedTotal,
-          pages,
-          password: "GONDA1984"
-        });
-        res.json({ success: true });
-      } else {
-        // Fallback: if browser session was purged but heartbeat fires, attempt recreating
-        res.status(404).json({ error: 'Sessie onbekend' });
-      }
+      syncToTransipAnalytics('session_heartbeat', { sessionId, currentPath, pageStaySeconds });
+      res.json({ success: true, source: 'transip' });
     } catch (err: any) {
       console.error('[Analytics API] Error saving heartbeat:', err);
       res.status(500).json({ error: 'Fout bij opslaan heartbeat.' });
@@ -785,31 +665,8 @@ async function startServer() {
       return res.status(400).json({ error: 'SessionId is verplicht.' });
     }
     try {
-      const docRef = doc(db, 'visitor_sessions', sessionId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const clicks = [...(data.clicks || [])];
-        
-        // Safety lock: truncate elements list to prevent bloat
-        if (clicks.length < 150) {
-          clicks.push({
-            elementText: (elementText || '').substring(0, 100).trim(),
-            elementId: elementId || '',
-            tagName: tagName || '',
-            path: currentPath || '',
-            timestamp: new Date().toISOString()
-          });
-          await setDoc(docRef, {
-            ...data,
-            clicks,
-            password: "GONDA1984"
-          });
-        }
-        res.json({ success: true });
-      } else {
-        res.status(404).json({ error: 'Sessie niet gevonden.' });
-      }
+      syncToTransipAnalytics('session_click', { sessionId, elementText, elementId, tagName, currentPath });
+      res.json({ success: true, source: 'transip' });
     } catch (err: any) {
       console.error('[Analytics API] Error saving click event:', err);
       res.status(500).json({ error: 'Fout bij opslaan van klik-gebeurtenis.' });
@@ -819,7 +676,6 @@ async function startServer() {
   // Route 4: Fetch detailed active logs + daily historical aggregated summaries
   app.get('/api/analytics/overview', checkAdminAuth, async (req, res) => {
     try {
-      // 1. Try TransIP MySQL first
       const transipOverview = await fetchTransipAnalytics('get_overview');
       if (transipOverview?.success) {
         const transipSessions = (transipOverview.recent_sessions || []).map((s: any) => ({
@@ -835,155 +691,30 @@ async function startServer() {
           durationSeconds: s.duration_seconds || 0
         }));
 
-        // If TransIP has overview data, also fetch historicalStats fallback
-        const statsSnap = await getDocs(collection(db, 'historical_stats')).catch(() => ({ docs: [] }));
-        const historicalStats = statsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() }));
-
         return res.json({
           activeSessions: transipSessions,
-          historicalStats,
+          historicalStats: [],
           metrics: transipOverview.metrics,
           popularTracks: transipOverview.popular_tracks,
           source: 'transip'
         });
       }
 
-      // 2. Fallback to Firestore
-      const sessionSnap = await getDocs(collection(db, 'visitor_sessions'));
-      const activeSessions = sessionSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-      activeSessions.sort((a: any, b: any) => {
-        const tA = a.startedAt || '';
-        const tB = b.startedAt || '';
-        return tB.localeCompare(tA); // newest visits first
-      });
-
-      // Fetch daily aggregates
-      const statsSnap = await getDocs(collection(db, 'historical_stats'));
-      const historicalStats = statsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-      historicalStats.sort((a: any, b: any) => b.id.localeCompare(a.id)); // newest day first
-
-      res.json({ activeSessions, historicalStats, source: 'firestore' });
+      res.json({ activeSessions: [], historicalStats: [], source: 'transip' });
     } catch (err: any) {
       console.error('[Admin API] Error compiling analytics dashboard datasets:', err);
       res.status(500).json({ error: 'Kan analytics overzicht niet genereren.' });
     }
   });
 
-  // Route 5: Purge active sessions older than X days and write averages to historical data
+  // Route 5: Purge active sessions
   app.delete('/api/analytics/purge', checkAdminAuth, async (req, res) => {
-    const { retentionDays } = req.body; // integer (e.g. 7, 14, 30, or 0 for everything)
-    const daysLimit = parseInt(retentionDays);
-    if (isNaN(daysLimit)) {
-      return res.status(400).json({ error: 'Ongeldige retentionDays parameters opgegeven.' });
-    }
-
+    const { retentionDays } = req.body;
     try {
-      const snap = await getDocs(collection(db, 'visitor_sessions'));
-      const allSessions = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() as any }));
-
-      const limitDate = new Date();
-      limitDate.setDate(limitDate.getDate() - daysLimit);
-
-      // Filter sessions that are older than limit (or all if daysLimit === 0)
-      const sessionsToPurge = allSessions.filter(s => {
-        const startedAtDate = new Date(s.startedAt);
-        if (daysLimit === 0) return true;
-        return startedAtDate < limitDate;
-      });
-
-      if (sessionsToPurge.length === 0) {
-        return res.json({
-          success: true,
-          message: 'Geen gedetailleerde sessiedata gevonden die aan deze bewaartermijn voldoet.',
-          purgedCount: 0
-        });
-      }
-
-      // Group sessions by date
-      const groupedByDate: Record<string, any[]> = {};
-      sessionsToPurge.forEach(s => {
-        const dateKey = (s.startedAt || '').split('T')[0];
-        if (dateKey) {
-          if (!groupedByDate[dateKey]) {
-            groupedByDate[dateKey] = [];
-          }
-          groupedByDate[dateKey].push(s);
-        }
-      });
-
-      // Synchronize historical summaries day by day
-      for (const dateKey of Object.keys(groupedByDate)) {
-        const sessions = groupedByDate[dateKey];
-        const statDocRef = doc(db, 'historical_stats', dateKey);
-        const statSnap = await getDoc(statDocRef);
-
-        let statData: any = {
-          id: dateKey,
-          date: dateKey,
-          totalSessions: 0,
-          totalPageViews: 0,
-          pageviewCounts: {},
-          referrerCounts: {},
-          deviceTypeCounts: {},
-          cityCounts: {},
-          avgSessionDuration: 0,
-          clicksCount: {}
-        };
-
-        if (statSnap.exists()) {
-          statData = { ...statData, ...statSnap.data() };
-        }
-
-        const oldSessions = statData.totalSessions || 0;
-        const oldAvgDur = statData.avgSessionDuration || 0;
-
-        const newSessionsCount = sessions.length;
-        const newTotalDuration = sessions.reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
-
-        statData.totalSessions = oldSessions + newSessionsCount;
-        statData.avgSessionDuration = Math.round(
-          ((oldAvgDur * oldSessions) + newTotalDuration) / (oldSessions + newSessionsCount)
-        );
-
-        const mergeKeyValueMap = (target: Record<string, number>, key: string, inc: number = 1) => {
-          if (!key) return;
-          const cleanK = key.replace(/\./g, '_'); // prevent firestore path errors
-          target[cleanK] = (target[cleanK] || 0) + inc;
-        };
-
-        sessions.forEach(s => {
-          mergeKeyValueMap(statData.deviceTypeCounts, s.deviceType || 'Onbekend');
-          mergeKeyValueMap(statData.referrerCounts, s.referrer || 'Direct / Bladwijzer');
-          mergeKeyValueMap(statData.cityCounts, s.city || 'Onbekend');
-
-          const pages = s.pages || [];
-          statData.totalPageViews += pages.length;
-          pages.forEach((p: any) => {
-            mergeKeyValueMap(statData.pageviewCounts, p.path || '/');
-          });
-
-          const clicks = s.clicks || [];
-          clicks.forEach((c: any) => {
-            const clickLabel = c.elementText || c.elementId || `Knop (${c.tagName || 'klik'})`;
-            mergeKeyValueMap(statData.clicksCount, clickLabel);
-          });
-        });
-
-        // Save daily cumulative stats
-        await setDoc(statDocRef, {
-          ...statData,
-          password: "GONDA1984"
-        });
-      }
-
-      // Batch delete matching visitor_sessions records
-      const deletePromises = sessionsToPurge.map(s => deleteDoc(doc(db, 'visitor_sessions', s.id)));
-      await Promise.all(deletePromises);
-
+      await fetchTransipAnalytics('purge_sessions', { method: 'POST', body: { retentionDays } }).catch(() => {});
       res.json({
         success: true,
-        purgedCount: sessionsToPurge.length,
-        message: `${sessionsToPurge.length} gedetailleerde bezoekerssessies opgeschoond en succesvol samengevoegd in uw historische trends!`
+        message: 'Bezoekerssessies opgeschoond in TransIP MySQL.'
       });
     } catch (err: any) {
       console.error('[Purge API] Error during consolidation and cleanup:', err);
@@ -995,12 +726,7 @@ async function startServer() {
   app.delete('/api/analytics/session/:id', checkAdminAuth, async (req, res) => {
     const { id } = req.params;
     try {
-      const docRef = doc(db, 'visitor_sessions', id);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) {
-        return res.status(404).json({ error: 'Bezoekerssessie niet gevonden.' });
-      }
-      await deleteDoc(docRef);
+      await fetchTransipAnalytics('delete_visitor_session', { method: 'POST', body: { sessionId: id } }).catch(() => {});
       res.json({ success: true, message: 'Bezoekerssessie succesvol verwijderd.' });
     } catch (err: any) {
       console.error('[Admin API] Error deleting single session:', err);
@@ -1020,56 +746,8 @@ async function startServer() {
     }
     const { trackId, trackTitle, album, format, rating, deviceType, userAgent, city, country, lat, lng, completed, durationSeconds, duration } = req.body;
     try {
-      const docRef = doc(collection(db, 'music_listens'));
       const isCompleted = completed === true || completed === 'true' || completed === 1 || completed === '1';
       const durationVal = Math.floor(Number(durationSeconds || duration || 0));
-
-      const nlCities = [
-        { city: 'Amsterdam', country: 'Nederland', lat: 52.3676, lng: 4.9041 },
-        { city: 'Rotterdam', country: 'Nederland', lat: 51.9244, lng: 4.4777 },
-        { city: 'Utrecht', country: 'Nederland', lat: 52.0907, lng: 5.1214 },
-        { city: 'Den Haag', country: 'Nederland', lat: 52.0705, lng: 4.3007 },
-        { city: 'Eindhoven', country: 'Nederland', lat: 51.4416, lng: 5.4697 },
-        { city: 'Tilburg', country: 'Nederland', lat: 51.5555, lng: 5.0913 },
-        { city: 'Groningen', country: 'Nederland', lat: 53.2194, lng: 6.5665 },
-        { city: 'Breda', country: 'Nederland', lat: 51.5719, lng: 4.7683 },
-        { city: 'Nijmegen', country: 'Nederland', lat: 51.8126, lng: 5.8372 },
-        { city: 'Haarlem', country: 'Nederland', lat: 52.3874, lng: 4.6462 },
-        { city: 'Arnhem', country: 'Nederland', lat: 51.9851, lng: 5.8987 },
-        { city: 'Zwolle', country: 'Nederland', lat: 52.5168, lng: 6.0830 },
-        { city: 'Amersfoort', country: 'Nederland', lat: 52.1562, lng: 5.3878 }
-      ];
-
-      let finalCity = city;
-      let finalCountry = country;
-      let finalLat = lat;
-      let finalLng = lng;
-
-      if (!finalCity || finalCity === 'Onbekend') {
-        const chosen = nlCities[Math.floor(Math.random() * nlCities.length)];
-        finalCity = chosen.city;
-        finalCountry = chosen.country;
-        finalLat = chosen.lat;
-        finalLng = chosen.lng;
-      }
-
-      await setDoc(docRef, {
-        trackId: trackId || 'Onbekend',
-        trackTitle: trackTitle || 'Muzieknummer',
-        album: album || 'De Echo',
-        format: format || 'mp3',
-        rating: rating || null,
-        completed: isCompleted,
-        durationSeconds: durationVal,
-        deviceType: deviceType || 'Mobiel',
-        userAgent: userAgent || '',
-        city: finalCity,
-        country: finalCountry || 'Nederland',
-        lat: finalLat ?? 52.3676,
-        lng: finalLng ?? 4.9041,
-        timestamp: new Date().toISOString(),
-        password: "GONDA1984"
-      });
 
       syncToTransipAnalytics('music_play', {
         trackId: trackId || 'Onbekend',
@@ -1079,15 +757,15 @@ async function startServer() {
         rating: rating || 'none',
         completed: isCompleted ? 1 : 0,
         duration: durationVal,
-        city: finalCity,
-        country: finalCountry || 'Nederland',
-        lat: finalLat ?? 52.3676,
-        lng: finalLng ?? 4.9041,
+        city: city || 'Onbekend',
+        country: country || 'Nederland',
+        lat: lat ?? 52.3676,
+        lng: lng ?? 4.9041,
         deviceType: deviceType || 'Mobiel',
         userAgent: userAgent || ''
       });
 
-      res.json({ success: true, id: docRef.id });
+      res.json({ success: true, source: 'transip' });
     } catch (err: any) {
       console.error('[Music Analytics API] Error recording listen event:', err);
       res.status(500).json({ error: 'Fout bij opslaan muziekmeting.' });
@@ -1101,17 +779,6 @@ async function startServer() {
       const durationVal = Math.floor(Number(durationSeconds || duration || 0));
 
       if (id) {
-        try {
-          const docRef = doc(db, 'music_listens', String(id));
-          await updateDoc(docRef, {
-            completed: isCompleted,
-            durationSeconds: durationVal,
-            updatedAt: new Date().toISOString()
-          });
-        } catch (e) {
-          console.error('[Music Analytics API] Firestore update error:', e);
-        }
-
         syncToTransipAnalytics('music_update', {
           id,
           completed: isCompleted ? 1 : 0,
@@ -1119,7 +786,7 @@ async function startServer() {
         });
       }
 
-      res.json({ success: true, id });
+      res.json({ success: true, id, source: 'transip' });
     } catch (err: any) {
       console.error('[Music Analytics API] Error updating music listen event:', err);
       res.status(500).json({ error: 'Fout bij updaten muziekmeting.' });
@@ -1137,68 +804,21 @@ async function startServer() {
     }
     const { trackId, trackTitle, album, format, rating, deviceType, userAgent, city, country, lat, lng } = req.body;
     try {
-      const docRef = doc(collection(db, 'music_listens'));
-
-      const nlCities = [
-        { city: 'Amsterdam', country: 'Nederland', lat: 52.3676, lng: 4.9041 },
-        { city: 'Rotterdam', country: 'Nederland', lat: 51.9244, lng: 4.4777 },
-        { city: 'Utrecht', country: 'Nederland', lat: 52.0907, lng: 5.1214 },
-        { city: 'Den Haag', country: 'Nederland', lat: 52.0705, lng: 4.3007 },
-        { city: 'Eindhoven', country: 'Nederland', lat: 51.4416, lng: 5.4697 },
-        { city: 'Tilburg', country: 'Nederland', lat: 51.5555, lng: 5.0913 },
-        { city: 'Groningen', country: 'Nederland', lat: 53.2194, lng: 6.5665 },
-        { city: 'Breda', country: 'Nederland', lat: 51.5719, lng: 4.7683 },
-        { city: 'Nijmegen', country: 'Nederland', lat: 51.8126, lng: 5.8372 },
-        { city: 'Haarlem', country: 'Nederland', lat: 52.3874, lng: 4.6462 },
-        { city: 'Arnhem', country: 'Nederland', lat: 51.9851, lng: 5.8987 },
-        { city: 'Zwolle', country: 'Nederland', lat: 52.5168, lng: 6.0830 },
-        { city: 'Amersfoort', country: 'Nederland', lat: 52.1562, lng: 5.3878 }
-      ];
-
-      let finalCity = city;
-      let finalCountry = country;
-      let finalLat = lat;
-      let finalLng = lng;
-
-      if (!finalCity || finalCity === 'Onbekend') {
-        const chosen = nlCities[Math.floor(Math.random() * nlCities.length)];
-        finalCity = chosen.city;
-        finalCountry = chosen.country;
-        finalLat = chosen.lat;
-        finalLng = chosen.lng;
-      }
-
-      await setDoc(docRef, {
-        trackId: trackId || 'Onbekend',
-        trackTitle: trackTitle || 'Muzieknummer',
-        album: album || 'De Echo',
-        format: format || 'mp3',
-        rating: rating || null,
-        deviceType: deviceType || 'Mobiel',
-        userAgent: userAgent || '',
-        city: finalCity,
-        country: finalCountry || 'Nederland',
-        lat: finalLat ?? 52.3676,
-        lng: finalLng ?? 4.9041,
-        timestamp: new Date().toISOString(),
-        password: "GONDA1984"
-      });
-
       syncToTransipAnalytics('music_play', {
         trackId: trackId || 'Onbekend',
         trackTitle: trackTitle || 'Muzieknummer',
         album: album || 'De Echo',
         format: format || 'mp3',
         rating: rating || 'none',
-        city: finalCity,
-        country: finalCountry || 'Nederland',
-        lat: finalLat ?? 52.3676,
-        lng: finalLng ?? 4.9041,
+        city: city || 'Onbekend',
+        country: country || 'Nederland',
+        lat: lat ?? 52.3676,
+        lng: lng ?? 4.9041,
         deviceType: deviceType || 'Mobiel',
         userAgent: userAgent || ''
       });
 
-      res.json({ success: true, id: docRef.id });
+      res.json({ success: true, source: 'transip' });
     } catch (err: any) {
       console.error('[Music Analytics API] Error recording rating:', err);
       res.status(500).json({ error: 'Fout bij opslaan beoordeling.' });
@@ -1207,21 +827,9 @@ async function startServer() {
 
   app.get('/api/analytics/music', checkAdminAuth, async (req, res) => {
     try {
-      // 1. Try TransIP first
       const transipData = await fetchTransipAnalytics('get_music_listens');
-      if (transipData?.success && Array.isArray(transipData.listens) && transipData.listens.length > 0) {
-        return res.json({ listens: transipData.listens, source: 'transip' });
-      }
-
-      // 2. Fallback to Firestore
-      const snap = await getDocs(collection(db, 'music_listens'));
-      const list = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-      list.sort((a: any, b: any) => {
-        const tA = a.timestamp || '';
-        const tB = b.timestamp || '';
-        return tB.localeCompare(tA);
-      });
-      res.json({ listens: list, source: 'firestore' });
+      const list = (transipData?.success && Array.isArray(transipData.listens)) ? transipData.listens : [];
+      res.json({ listens: list, source: 'transip' });
     } catch (err: any) {
       console.error('[Admin API] Error fetching music analytics:', err);
       res.status(500).json({ error: 'Kan muziekstatistieken niet ophalen.' });
@@ -1230,12 +838,8 @@ async function startServer() {
 
   app.delete('/api/analytics/music-purge-all', checkAdminAuth, async (req, res) => {
     try {
-      // Purge TransIP
       fetchTransipAnalytics('purge_music_listens', { method: 'POST' }).catch(() => {});
-      const snap = await getDocs(collection(db, 'music_listens'));
-      const deletePromises = snap.docs.map(docSnap => deleteDoc(doc(db, 'music_listens', docSnap.id)));
-      await Promise.all(deletePromises);
-      res.json({ success: true, count: snap.docs.length });
+      res.json({ success: true, source: 'transip' });
     } catch (err) {
       console.error('[Admin API] Error purging music listens:', err);
       res.status(500).json({ error: 'Fout bij opschonen luisterhistorie.' });
@@ -1246,8 +850,7 @@ async function startServer() {
     const { id } = req.params;
     try {
       fetchTransipAnalytics('delete_music_listen', { method: 'POST', body: { id } }).catch(() => {});
-      await deleteDoc(doc(db, 'music_listens', id)).catch(() => {});
-      res.json({ success: true });
+      res.json({ success: true, source: 'transip' });
     } catch (err) {
       console.error('[Admin API] Error deleting music listen log:', err);
       res.status(500).json({ error: 'Fout bij verwijderen muziekmeting.' });
@@ -1313,22 +916,35 @@ async function startServer() {
     { id: 19, album_id: 3, track_order: 1, title: "Milonga's Nacht", foldername: 'Milongas Nacht' }
   ];
 
+  const MUSIC_CUSTOM_FILE = path.join(process.cwd(), 'public', '@music', 'music_db_custom.json');
+
+  const readCustomMusicDb = (): { albums: any[]; tracks: any[] } => {
+    try {
+      if (fs.existsSync(MUSIC_CUSTOM_FILE)) {
+        return JSON.parse(fs.readFileSync(MUSIC_CUSTOM_FILE, 'utf-8'));
+      }
+    } catch {}
+    return { albums: [], tracks: [] };
+  };
+
+  const writeCustomMusicDb = (data: { albums: any[]; tracks: any[] }) => {
+    try {
+      fs.writeFileSync(MUSIC_CUSTOM_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    } catch {}
+  };
+
   // Helper to get local scanned music data
   const getLocalMusicDbData = async () => {
     let albums = [...DEFAULT_ALBUMS];
     let tracks = [...DEFAULT_TRACK_SEEDS];
 
-    // Try loading custom records from Firestore if available
     try {
-      const albSnap = await getDocs(collection(db, 'music_db_albums'));
-      if (!albSnap.empty) {
-        albums = albSnap.docs.map(d => ({ id: Number(d.id) || d.data().id, ...d.data() } as any));
-        albums.sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
+      const custom = readCustomMusicDb();
+      if (custom.albums && custom.albums.length > 0) {
+        albums = custom.albums;
       }
-      const trkSnap = await getDocs(collection(db, 'music_db_tracks'));
-      if (!trkSnap.empty) {
-        tracks = trkSnap.docs.map(d => ({ id: Number(d.id) || d.data().id, ...d.data() } as any));
-        tracks.sort((a, b) => (a.album_id - b.album_id) || (a.track_order - b.track_order));
+      if (custom.tracks && custom.tracks.length > 0) {
+        tracks = custom.tracks;
       }
     } catch (e) {
       // ignore, use defaults
@@ -1420,12 +1036,7 @@ async function startServer() {
       }
 
       if (action === 'init_tables' || action === 'reseed_tables') {
-        for (const alb of DEFAULT_ALBUMS) {
-          await setDoc(doc(db, 'music_db_albums', String(alb.id)), alb);
-        }
-        for (const trk of DEFAULT_TRACK_SEEDS) {
-          await setDoc(doc(db, 'music_db_tracks', String(trk.id)), trk);
-        }
+        writeCustomMusicDb({ albums: DEFAULT_ALBUMS, tracks: DEFAULT_TRACK_SEEDS });
         return res.json({
           success: true,
           message: 'Database tabellen en standaard tracks succesvol klaargezet!'
@@ -1443,17 +1054,23 @@ async function startServer() {
       if (action === 'save_album') {
         const albData = req.body;
         const albId = albData.id || Date.now();
-        await setDoc(doc(db, 'music_db_albums', String(albId)), {
-          ...albData,
-          id: albId
-        });
+        const custom = readCustomMusicDb();
+        const existingIdx = custom.albums.findIndex((a: any) => String(a.id) === String(albId));
+        if (existingIdx >= 0) {
+          custom.albums[existingIdx] = { ...custom.albums[existingIdx], ...albData, id: albId };
+        } else {
+          custom.albums.push({ ...albData, id: albId });
+        }
+        writeCustomMusicDb(custom);
         return res.json({ success: true, message: 'Album opgeslagen.' });
       }
 
       if (action === 'delete_album') {
         const { id } = req.body;
         if (id) {
-          await deleteDoc(doc(db, 'music_db_albums', String(id)));
+          const custom = readCustomMusicDb();
+          custom.albums = custom.albums.filter((a: any) => String(a.id) !== String(id));
+          writeCustomMusicDb(custom);
         }
         return res.json({ success: true, message: 'Album verwijderd.' });
       }
@@ -1461,17 +1078,23 @@ async function startServer() {
       if (action === 'save_track') {
         const trkData = req.body;
         const trkId = trkData.id || Date.now();
-        await setDoc(doc(db, 'music_db_tracks', String(trkId)), {
-          ...trkData,
-          id: trkId
-        });
+        const custom = readCustomMusicDb();
+        const existingIdx = custom.tracks.findIndex((t: any) => String(t.id) === String(trkId));
+        if (existingIdx >= 0) {
+          custom.tracks[existingIdx] = { ...custom.tracks[existingIdx], ...trkData, id: trkId };
+        } else {
+          custom.tracks.push({ ...trkData, id: trkId });
+        }
+        writeCustomMusicDb(custom);
         return res.json({ success: true, message: 'Nummer opgeslagen.' });
       }
 
       if (action === 'delete_track') {
         const { id } = req.body;
         if (id) {
-          await deleteDoc(doc(db, 'music_db_tracks', String(id)));
+          const custom = readCustomMusicDb();
+          custom.tracks = custom.tracks.filter((t: any) => String(t.id) !== String(id));
+          writeCustomMusicDb(custom);
         }
         return res.json({ success: true, message: 'Nummer verwijderd.' });
       }
