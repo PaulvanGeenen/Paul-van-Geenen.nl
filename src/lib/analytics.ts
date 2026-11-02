@@ -66,13 +66,43 @@ export function setSubtitlePreferences(enabled: boolean, lang: 'GB' | 'NL', size
   } catch {}
 }
 
+export function markDeviceAsAdmin(): void {
+  if (typeof document !== 'undefined') {
+    const maxAge = 5 * 365 * 24 * 60 * 60; // 5 jaar
+    document.cookie = `pv_admin_device=true; path=/; max-age=${maxAge}; SameSite=Lax`;
+    document.cookie = `pv_admin_ignore=true; path=/; max-age=${maxAge}; SameSite=Lax`;
+    document.cookie = `pv_admin_token=GONDA1984; path=/; max-age=${maxAge}; SameSite=Lax`;
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('is_admin_device', 'true');
+      localStorage.setItem('ignore_own_analytics', 'true');
+      localStorage.setItem('pv_ignore_admin_analytics', 'true');
+      localStorage.setItem('krabbels_admin_token', 'GONDA1984');
+    }
+  } catch {}
+
+  // Als er al een bezoekerssessie was gestart voordat beheer werd geopend, ruim deze direct op uit de database
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const sessionId = sessionStorage.getItem('boeken_analytics_session_id');
+      if (sessionId) {
+        transipPost('delete_visitor_session', { sessionId }).catch(() => {});
+        sessionStorage.removeItem('boeken_analytics_session_id');
+      }
+    }
+  } catch {}
+}
+
 export function setAdminCookie(ignore: boolean): void {
   if (typeof document === 'undefined') return;
-  const maxAge = 365 * 24 * 60 * 60; // 1 year in seconds
+  const maxAge = 5 * 365 * 24 * 60 * 60; // 5 jaar
   if (ignore) {
+    document.cookie = `pv_admin_device=true; path=/; max-age=${maxAge}; SameSite=Lax`;
     document.cookie = `pv_admin_token=GONDA1984; path=/; max-age=${maxAge}; SameSite=Lax`;
     document.cookie = `pv_admin_ignore=true; path=/; max-age=${maxAge}; SameSite=Lax`;
     try {
+      localStorage.setItem('is_admin_device', 'true');
       localStorage.setItem('ignore_own_analytics', 'true');
       localStorage.setItem('pv_ignore_admin_analytics', 'true');
     } catch {}
@@ -88,24 +118,29 @@ export function setAdminCookie(ignore: boolean): void {
 export function isOwnAnalyticsIgnored(): boolean {
   try {
     const cookieIgnore = getCookie('pv_admin_ignore');
+    const cookieDevice = getCookie('pv_admin_device');
     const cookieToken = getCookie('pv_admin_token');
 
     const ignoreExplicit = typeof localStorage !== 'undefined' ? localStorage.getItem('ignore_own_analytics') : null;
     const pvIgnore = typeof localStorage !== 'undefined' ? localStorage.getItem('pv_ignore_admin_analytics') : null;
-    const isAdmin = (typeof localStorage !== 'undefined' && localStorage.getItem('krabbels_admin_token') === 'GONDA1984') || cookieToken === 'GONDA1984';
+    const isAdminDevice = typeof localStorage !== 'undefined' ? localStorage.getItem('is_admin_device') === 'true' : false;
+    const isAdminToken = typeof localStorage !== 'undefined' ? localStorage.getItem('krabbels_admin_token') === 'GONDA1984' : false;
 
-    // If explicit cookie or localStorage ignore is false (admin explicitly enabled recording for testing)
+    // Als de beheerder expliciet op 'negeer uitschakelen' heeft geklikt voor testdoeleinden:
     if (cookieIgnore === 'false' || ignoreExplicit === 'false' || pvIgnore === 'false') {
       return false;
     }
 
-    // If explicit ignore is true
-    if (cookieIgnore === 'true' || pvIgnore === 'true' || ignoreExplicit === 'true') {
-      return true;
-    }
-
-    // Default: If user is logged in as admin, ignore own activity
-    if (isAdmin) {
+    // Als dit apparaat ooit als beheerder is gemarkeerd, ingelogd is of negeren actief staat:
+    if (
+      cookieDevice === 'true' ||
+      cookieIgnore === 'true' ||
+      cookieToken === 'GONDA1984' ||
+      isAdminDevice ||
+      isAdminToken ||
+      ignoreExplicit === 'true' ||
+      pvIgnore === 'true'
+    ) {
       return true;
     }
   } catch (e) {

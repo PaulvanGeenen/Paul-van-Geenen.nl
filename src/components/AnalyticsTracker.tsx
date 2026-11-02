@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { isOwnAnalyticsIgnored, getUserGeoLocation } from '../lib/analytics';
+import { isOwnAnalyticsIgnored, getUserGeoLocation, markDeviceAsAdmin } from '../lib/analytics';
 import { transipPost } from '../lib/transip';
 
 function generateSessionId() {
@@ -55,6 +55,16 @@ export function AnalyticsTracker() {
   }, [location.pathname]);
 
   useEffect(() => {
+    // Als de beheerpagina wordt geopend, markeer dit apparaat direct als beheerder
+    if (location.pathname.startsWith('/admin')) {
+      markDeviceAsAdmin();
+      return;
+    }
+
+    if (isOwnAnalyticsIgnored()) {
+      return;
+    }
+
     // 1. Resolve Session ID from storage or generate new
     let sessionId = sessionStorage.getItem('boeken_analytics_session_id');
     const isFirstVisitOfSession = !sessionId;
@@ -196,6 +206,10 @@ export function AnalyticsTracker() {
 
   // 5. Track page transition view directly to TransIP MySQL
   useEffect(() => {
+    if (location.pathname.startsWith('/admin')) {
+      markDeviceAsAdmin();
+      return;
+    }
     const sessionId = sessionStorage.getItem('boeken_analytics_session_id');
     if (!sessionId || isOwnAnalyticsIgnored()) return;
 

@@ -614,7 +614,7 @@ async function startServer() {
   // Route 1: Post initial session start log
   app.post('/api/analytics/session/start', async (req, res) => {
     const reqCookie = req.headers.cookie || '';
-    const isExplicitlyIgnored = reqCookie.includes('pv_admin_ignore=true');
+    const isExplicitlyIgnored = reqCookie.includes('pv_admin_ignore=true') || reqCookie.includes('pv_admin_device=true');
     const isExplicitlyEnabled = reqCookie.includes('pv_admin_ignore=false');
     const isAdmin = reqCookie.includes('pv_admin_token=GONDA1984');
 
@@ -737,7 +737,7 @@ async function startServer() {
   // --- Music Listening Analytics Tracking Endpoints ---
   app.post('/api/analytics/music/play', async (req, res) => {
     const reqCookie = req.headers.cookie || '';
-    const isExplicitlyIgnored = reqCookie.includes('pv_admin_ignore=true');
+    const isExplicitlyIgnored = reqCookie.includes('pv_admin_ignore=true') || reqCookie.includes('pv_admin_device=true');
     const isExplicitlyEnabled = reqCookie.includes('pv_admin_ignore=false');
     const isAdmin = reqCookie.includes('pv_admin_token=GONDA1984');
 
@@ -795,7 +795,7 @@ async function startServer() {
 
   app.post('/api/analytics/music/rate', async (req, res) => {
     const reqCookie = req.headers.cookie || '';
-    const isExplicitlyIgnored = reqCookie.includes('pv_admin_ignore=true');
+    const isExplicitlyIgnored = reqCookie.includes('pv_admin_ignore=true') || reqCookie.includes('pv_admin_device=true');
     const isExplicitlyEnabled = reqCookie.includes('pv_admin_ignore=false');
     const isAdmin = reqCookie.includes('pv_admin_token=GONDA1984');
 

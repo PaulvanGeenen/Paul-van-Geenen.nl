@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { cn } from '../lib/utils';
-import { isOwnAnalyticsIgnored, setAdminCookie } from '../lib/analytics';
+import { isOwnAnalyticsIgnored, setAdminCookie, markDeviceAsAdmin } from '../lib/analytics';
 import { 
   transipGet, 
   transipPost, 
@@ -181,8 +181,9 @@ export function Admin() {
     setAdminCookie(newValue);
   };
 
-  // Auto-restore admin session if token saved
+  // Mark device as admin and auto-restore admin session if token saved
   useEffect(() => {
+    markDeviceAsAdmin();
     const token = localStorage.getItem('krabbels_admin_token');
     if (token === 'GONDA1984') {
       setPassword('GONDA1984');
@@ -679,13 +680,8 @@ export function Admin() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password === 'GONDA1984') {
-      localStorage.setItem('krabbels_admin_token', 'GONDA1984');
-      if (localStorage.getItem('ignore_own_analytics') === null) {
-        localStorage.setItem('ignore_own_analytics', 'true');
-        localStorage.setItem('pv_ignore_admin_analytics', 'true');
-        setIgnoreOwnAnalytics(true);
-      }
-      setAdminCookie(true);
+      markDeviceAsAdmin();
+      setIgnoreOwnAnalytics(true);
       setIsAuthorized(true);
     } else {
       setError('Onjuist wachtwoord.');
