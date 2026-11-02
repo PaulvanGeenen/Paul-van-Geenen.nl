@@ -156,18 +156,32 @@ export const MapModal: React.FC<MapModalProps> = ({
   const [activeRegion, setActiveRegion] = useState<'NL' | 'EU' | 'WORLD'>('NL');
   const mapInstanceRef = useRef<any>(null);
   const markersGroupRef = useRef<any>(null);
+  const hasInitialAutoFitRef = useRef<boolean>(false);
+  const userInteractedRef = useRef<boolean>(false);
 
-  // Switch region view handler
+  // Switch region view handler (only called when user clicks a region button)
   const setRegionView = (region: 'NL' | 'EU' | 'WORLD') => {
     setActiveRegion(region);
+    userInteractedRef.current = false;
     if (!mapInstanceRef.current) return;
 
     if (region === 'NL') {
-      mapInstanceRef.current.flyTo([52.1326, 5.2913], 7, { duration: 1.2 });
+      const activeBounds: any[] = [];
+      Object.entries(groupedLocations).forEach(([key]) => {
+        const c = coords[key];
+        if (c) activeBounds.push(c);
+      });
+      if (activeBounds.length > 1) {
+        mapInstanceRef.current.flyToBounds(activeBounds, { padding: [40, 40], duration: 1.0 });
+      } else if (activeBounds.length === 1) {
+        mapInstanceRef.current.flyTo(activeBounds[0], 9, { duration: 1.0 });
+      } else {
+        mapInstanceRef.current.flyTo([52.1326, 5.2913], 7, { duration: 1.0 });
+      }
     } else if (region === 'EU') {
-      mapInstanceRef.current.flyTo([51.1657, 10.4515], 4, { duration: 1.2 });
+      mapInstanceRef.current.flyTo([51.1657, 10.4515], 4, { duration: 1.0 });
     } else if (region === 'WORLD') {
-      mapInstanceRef.current.flyTo([20.0, 10.0], 2, { duration: 1.2 });
+      mapInstanceRef.current.flyTo([20.0, 10.0], 2, { duration: 1.0 });
     }
   };
 
@@ -178,6 +192,8 @@ export const MapModal: React.FC<MapModalProps> = ({
       setRatingFilter('ALL');
       setFormatFilter('ALL');
       setActiveRegion('NL');
+      hasInitialAutoFitRef.current = false;
+      userInteractedRef.current = false;
     }
   }, [isOpen]);
 
@@ -394,6 +410,11 @@ export const MapModal: React.FC<MapModalProps> = ({
     });
 
     mapInstanceRef.current = map;
+
+    // Detect user zooming or panning the map so we never override their manual viewport
+    map.on('zoomstart dragstart movestart', () => {
+      userInteractedRef.current = true;
+    });
 
     // Trigger map size recalculation so it smoothly occupies full screen canvas
     setTimeout(() => {
@@ -659,21 +680,28 @@ export const MapModal: React.FC<MapModalProps> = ({
         .addTo(markersGroup);
     });
 
-    // Auto-fit bounds of the map or apply active region view
-    if (activeRegion === 'NL') {
-      if (activeBounds.length > 0) {
-        if (activeBounds.length === 1) {
-          mapInstanceRef.current.setView(activeBounds[0], 9);
+    // Auto-fit bounds of the map ONLY ONCE on initial load, and only if the user hasn't manually interacted.
+    // NEVER automatically reset zoom or viewport during user inspection or periodic background refreshes!
+    if (!hasInitialAutoFitRef.current && !userInteractedRef.current) {
+      if (activeRegion === 'NL') {
+        if (activeBounds.length > 0) {
+          if (activeBounds.length === 1) {
+            mapInstanceRef.current.setView(activeBounds[0], 9);
+          } else {
+            mapInstanceRef.current.fitBounds(activeBounds, { padding: [40, 40] });
+          }
+          hasInitialAutoFitRef.current = true;
         } else {
-          mapInstanceRef.current.fitBounds(activeBounds, { padding: [40, 40] });
+          mapInstanceRef.current.setView([52.1326, 5.2913], 7);
+          hasInitialAutoFitRef.current = true;
         }
-      } else {
-        mapInstanceRef.current.setView([52.1326, 5.2913], 7);
+      } else if (activeRegion === 'EU') {
+        mapInstanceRef.current.setView([51.1657, 10.4515], 4);
+        hasInitialAutoFitRef.current = true;
+      } else if (activeRegion === 'WORLD') {
+        mapInstanceRef.current.setView([20.0, 10.0], 2);
+        hasInitialAutoFitRef.current = true;
       }
-    } else if (activeRegion === 'EU') {
-      mapInstanceRef.current.setView([51.1657, 10.4515], 4);
-    } else if (activeRegion === 'WORLD') {
-      mapInstanceRef.current.setView([20.0, 10.0], 2);
     }
   }, [isOpen, leafletLoaded, coords, groupedLocations, type, activeRegion]);
 
@@ -947,6 +975,30 @@ export const MapModal: React.FC<MapModalProps> = ({
                 >
                   <span>🌍</span>
                   <span>Wereld</span>
+                </button>
+                <div className="w-[1px] h-4 bg-white/10 mx-0.5 hidden sm:block" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!mapInstanceRef.current) return;
+                    const activeBounds: any[] = [];
+                    Object.entries(groupedLocations).forEach(([key]) => {
+                      const c = coords[key];
+                      if (c) activeBounds.push(c);
+                    });
+                    if (activeBounds.length > 1) {
+                      mapInstanceRef.current.flyToBounds(activeBounds, { padding: [40, 40], duration: 1.0 });
+                    } else if (activeBounds.length === 1) {
+                      mapInstanceRef.current.flyTo(activeBounds[0], 9, { duration: 1.0 });
+                    } else {
+                      mapInstanceRef.current.flyTo([52.1326, 5.2913], 7, { duration: 1.0 });
+                    }
+                  }}
+                  className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold font-mono transition-all cursor-pointer flex items-center gap-1.5 bg-white/5 text-white/70 hover:text-white hover:bg-white/10 border border-white/10"
+                  title="Herstel weergave en centreer alle spelden"
+                >
+                  <Compass className="w-3.5 h-3.5 text-earth-gold" />
+                  <span className="hidden sm:inline">Centreren</span>
                 </button>
               </div>
 
