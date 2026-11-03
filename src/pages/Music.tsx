@@ -797,6 +797,18 @@ export function Music() {
     return () => clearTimeout(timer);
   }, [shareToast]);
 
+  // Song Credit Badge overlay state (shows at track start, rotation, or user tap)
+  const [songCreditVisible, setSongCreditVisible] = useState(false);
+  const songCreditTimeoutRef = useRef<any>(null);
+
+  const triggerSongCredit = (durationMs = 6000) => {
+    setSongCreditVisible(true);
+    if (songCreditTimeoutRef.current) clearTimeout(songCreditTimeoutRef.current);
+    songCreditTimeoutRef.current = setTimeout(() => {
+      setSongCreditVisible(false);
+    }, durationMs);
+  };
+
   // Audio & Video DOM refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const introAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -1663,6 +1675,7 @@ export function Music() {
   // Auto-hide navbar logic (4 seconds timeout when playing, 5 minutes when paused)
   const resetNavBarTimer = () => {
     setShowNavBar(true);
+    triggerSongCredit(5000);
     if (navBarTimeoutRef.current) clearTimeout(navBarTimeoutRef.current);
     if (phase === 'player') {
       const timeoutDuration = isPlaying ? 4000 : 5 * 60 * 1000; // 4s if playing, 5 minutes (300,000ms) if paused
@@ -1708,8 +1721,16 @@ export function Music() {
   useEffect(() => {
     if (phase === 'player') {
       resetRatingButtonsTimer();
+      triggerSongCredit(7000);
     }
   }, [phase, currentTrackIndex, resetRatingButtonsTimer]);
+
+  // Toon de titel en het hartje altijd bij het kantelen van het toestel
+  useEffect(() => {
+    if (phase === 'player' && currentTrack) {
+      triggerSongCredit(6000);
+    }
+  }, [orientation]);
 
   // Strikte scheiding van actieve bron bij formaatwisseling om dubbele audio te voorkomen:
   useEffect(() => {
@@ -3861,16 +3882,14 @@ export function Music() {
               </div>
             )}
 
-            {/* Song & Album Title Overlay (ONLY in landscape mode at start of song: fades in at 2s, stays for 7s until 9s, then smoothly fades out) */}
+            {/* Song & Album Title Overlay (Shows in both portrait & landscape on track start, rotation, or user tap) */}
             <AnimatePresence>
               {Boolean(
-                effectiveOrientation !== 'portrait' &&
                 phase === 'player' &&
                 currentTrack &&
                 !isSwiping &&
                 !isSwipingRelease &&
-                currentTime >= 2.0 &&
-                currentTime <= 9.0
+                (songCreditVisible || (currentTime >= 1.5 && currentTime <= 9.0) || showNavBar)
               ) && (() => {
                 const matchingAlbumObj = albums.find(a => a.id === selectedAlbum || a.title === currentTrack?.album);
                 const songTitle = currentTrack.title ? `"${currentTrack.title}"` : '';
@@ -3883,13 +3902,15 @@ export function Music() {
                     initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
                     animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                     exit={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
-                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                    className={`absolute left-3 sm:left-4 md:left-6 z-40 pointer-events-none select-none max-w-[70%] sm:max-w-[280px] md:max-w-[320px] transition-all duration-400 ${
-                      showNavBar
-                        ? (orientation === 'landscape' ? 'bottom-24 sm:bottom-28' : 'bottom-28 sm:bottom-32')
-                        : (desktopViewMode === 'fullscreen' || isBrowserFullscreen
-                            ? 'bottom-5 sm:bottom-7 md:bottom-8'
-                            : (orientation === 'landscape' ? 'bottom-2.5 sm:bottom-3.5' : 'bottom-3 sm:bottom-5'))
+                    transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                    className={`absolute left-3 sm:left-4 md:left-6 z-40 pointer-events-none select-none max-w-[78%] sm:max-w-[300px] md:max-w-[340px] transition-all duration-300 ${
+                      effectiveOrientation === 'portrait'
+                        ? (showNavBar ? 'bottom-32 sm:bottom-36' : 'bottom-10 sm:bottom-12')
+                        : (showNavBar
+                            ? 'bottom-20 sm:bottom-24'
+                            : (desktopViewMode === 'fullscreen' || isBrowserFullscreen
+                                ? 'bottom-5 sm:bottom-7 md:bottom-8'
+                                : 'bottom-4 sm:bottom-6 pb-[env(safe-area-inset-bottom,0px)]'))
                     }`}
                   >
                     <div className="flex items-center gap-2.5 sm:gap-3 bg-black/85 backdrop-blur-xl px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-earth-gold/35 shadow-[0_8px_24px_rgba(0,0,0,0.85)] ring-1 ring-black/50">
