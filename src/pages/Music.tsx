@@ -2412,29 +2412,27 @@ export function Music() {
       const containerWidth = typeof window !== 'undefined' ? window.innerWidth : 400;
       setIsSwipingRelease(true);
 
-      if (deltaX < 0) {
-        // Swiped LEFT -> Glide smoothly to Next Track
-        setDragX(-containerWidth);
-        const nextIndex = getNextTrackIndex();
-        playTrack(nextIndex, selectedFormat, true);
-        if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
-        releaseTimerRef.current = setTimeout(() => {
-          setDragX(0);
-          setIsSwiping(false);
-          setIsSwipingRelease(false);
-        }, 280);
-      } else {
-        // Swiped RIGHT -> Glide smoothly to Previous Track
-        setDragX(containerWidth);
-        const prevIndex = getPrevTrackIndex();
-        playTrack(prevIndex, selectedFormat, true);
-        if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
-        releaseTimerRef.current = setTimeout(() => {
-          setDragX(0);
-          setIsSwiping(false);
-          setIsSwipingRelease(false);
-        }, 280);
+      const targetIndex = deltaX < 0 ? getNextTrackIndex() : getPrevTrackIndex();
+      setDragX(deltaX < 0 ? -containerWidth : containerWidth);
+
+      // Smoothly fade OUT the currently playing track over the 240ms swipe glide
+      const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
+      if (activeEl && !activeEl.paused && isPlaying) {
+        fadeToVolume(activeEl, 0, 240, () => {
+          try {
+            activeEl.pause();
+            activeEl.currentTime = 0;
+          } catch (e) {}
+        });
       }
+
+      if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+      releaseTimerRef.current = setTimeout(() => {
+        playTrack(targetIndex, selectedFormat, true);
+        setDragX(0);
+        setIsSwiping(false);
+        setIsSwipingRelease(false);
+      }, 260);
     } else {
       // Snap back to center smoothly
       setIsSwipingRelease(true);
@@ -2458,12 +2456,19 @@ export function Music() {
     finishGesture(e.clientX, e.clientY);
   };
 
-  // Next / Previous track actions
+  // Next / Previous track actions with graceful fade-out before switching
   const handleNext = () => {
     resetNavBarTimer();
     setSlideDirection('next');
     const nextIndex = getNextTrackIndex();
-    playTrack(nextIndex, selectedFormat);
+    const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
+    if (activeEl && !activeEl.paused && isPlaying) {
+      fadeToVolume(activeEl, 0, 220, () => {
+        playTrack(nextIndex, selectedFormat);
+      });
+    } else {
+      playTrack(nextIndex, selectedFormat);
+    }
   };
 
   const handlePrev = () => {
@@ -2485,7 +2490,13 @@ export function Music() {
     // If already at or near the beginning (<= 2 seconds), go to the previous track
     setSlideDirection('prev');
     const prevIndex = getPrevTrackIndex();
-    playTrack(prevIndex, selectedFormat);
+    if (el && !el.paused && isPlaying) {
+      fadeToVolume(el, 0, 220, () => {
+        playTrack(prevIndex, selectedFormat);
+      });
+    } else {
+      playTrack(prevIndex, selectedFormat);
+    }
   };
 
   // Time format helper (e.g. 3:45)
