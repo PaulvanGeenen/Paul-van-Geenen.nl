@@ -2620,7 +2620,7 @@ export function Music() {
                         <div className="min-w-0 flex-1 pl-1">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="px-2 py-0.5 rounded-full bg-earth-gold/20 text-earth-gold border border-earth-gold/30 text-[10px] font-bold uppercase tracking-wider">
-                              {trackCount} {t.albums.tracksCount(trackCount)}
+                              {t.albums.tracksCount(trackCount)}
                             </span>
                           </div>
                           <h3 className="font-serif text-base sm:text-lg font-bold text-white group-hover:text-earth-gold transition-colors truncate">
@@ -2789,7 +2789,7 @@ export function Music() {
                           {/* Subtle title pill and open hint */}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4 text-center">
                             <div className="text-[11px] font-bold uppercase tracking-widest text-earth-gold">
-                              {currentAlb.title} ({trackCount} {t.albums.tracksCount(trackCount)})
+                              {currentAlb.title} ({t.albums.tracksCount(trackCount)})
                             </div>
                             <div className="text-xs font-serif font-bold text-white bg-black/70 backdrop-blur-sm px-3.5 py-1.5 rounded-full self-center border border-earth-gold/40 shadow-lg">
                               {t.albums.openAlbum}
