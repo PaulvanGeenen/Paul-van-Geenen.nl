@@ -537,7 +537,23 @@ export function Music() {
     }
     return 'iphone';
   });
-  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const checkIsMobile = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const isTouch = typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
+    const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) < 768;
+    return isMobileUA || (isTouch && isSmallScreen);
+  };
+
+  const [isMobileDevice, setIsMobileDevice] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const isTouch = typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
+    const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) < 768;
+    return isMobileUA || (isTouch && isSmallScreen);
+  });
   const [isIOS, setIsIOS] = useState(() => {
     if (typeof navigator !== 'undefined') {
       return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -706,11 +722,11 @@ export function Music() {
     if (reqPromise && typeof reqPromise.catch === 'function') {
       reqPromise.catch((err: any) => {
         console.warn('requestFullscreen error/blocked:', err);
-        if (isIOS || isMobileDevice) {
+        if (isIOS) {
           setShowIosFullscreenGuide(true);
         }
       });
-    } else if (!reqPromise && (isIOS || isMobileDevice)) {
+    } else if (!reqPromise && isIOS) {
       setShowIosFullscreenGuide(true);
     }
   };
@@ -816,22 +832,31 @@ export function Music() {
       setIsSwipingRelease(false);
       setDragX(0);
 
-      // Only treat actual phones (<600px min-dimension or phone UA) as mobile fullscreen devices.
-      // iPad, iPad Pro, tablets and laptops will display the desktop view with text on the left and the iPhone simulator on the right.
-      const isMobilePhoneUA = typeof navigator !== 'undefined' &&
-        /iPhone|Android.*Mobile|webOS|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const isSmallPhone = isMobilePhoneUA ||
-        Math.min(window.innerWidth, window.innerHeight) < 600 ||
-        (typeof screen !== 'undefined' && Math.min(screen.width, screen.height) < 600);
-      setIsMobileDevice(isSmallPhone);
+      const isMobile = checkIsMobile();
+      setIsMobileDevice(isMobile);
 
-      // On actual small mobile phones, match physical orientation.
-      if (isSmallPhone) {
-        let isPortrait = window.innerHeight >= window.innerWidth;
-        if (window.screen && window.screen.orientation && window.screen.orientation.type) {
-          isPortrait = window.screen.orientation.type.startsWith('portrait');
+      // On mobile phones/tablets or screens < 1024px: match physical device viewport orientation
+      if (isMobile || (typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) < 900)) {
+        // Ground truth: width vs height
+        let isPortrait = window.innerHeight > window.innerWidth;
+
+        // If width exceeds height by 5% or more, it is unmistakably landscape
+        if (window.innerWidth >= window.innerHeight * 1.05) {
+          isPortrait = false;
+        } else if (window.innerHeight >= window.innerWidth * 1.05) {
+          isPortrait = true;
+        } else if (window.screen && window.screen.orientation && window.screen.orientation.type) {
+          if (window.screen.orientation.type.startsWith('landscape')) {
+            isPortrait = false;
+          } else if (window.screen.orientation.type.startsWith('portrait')) {
+            isPortrait = true;
+          }
         } else if (typeof window.orientation !== 'undefined') {
-          isPortrait = window.orientation === 0 || window.orientation === 180;
+          if (window.orientation === 90 || window.orientation === -90) {
+            isPortrait = false;
+          } else if (window.orientation === 0 || window.orientation === 180) {
+            isPortrait = true;
+          }
         }
         setOrientation(isPortrait ? 'portrait' : 'landscape');
       }
@@ -839,23 +864,39 @@ export function Music() {
 
     const handleResize = () => {
       updateDimensionsAndOrientation();
-      // On iOS Safari / iPadOS, dimensions update shortly after orientationchange event
-      setTimeout(updateDimensionsAndOrientation, 100);
-      setTimeout(updateDimensionsAndOrientation, 300);
+      // On Android & iOS Safari, viewport dimensions update asynchronously during rotation animation
+      setTimeout(updateDimensionsAndOrientation, 50);
+      setTimeout(updateDimensionsAndOrientation, 150);
+      setTimeout(updateDimensionsAndOrientation, 350);
+      setTimeout(updateDimensionsAndOrientation, 600);
     };
 
     updateDimensionsAndOrientation();
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
     if (window.screen && window.screen.orientation) {
-      window.screen.orientation.addEventListener('change', updateDimensionsAndOrientation);
+      window.screen.orientation.addEventListener('change', handleResize);
+    }
+    const portraitMql = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(orientation: portrait)') : null;
+    const landscapeMql = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(orientation: landscape)') : null;
+    if (portraitMql && portraitMql.addEventListener) {
+      portraitMql.addEventListener('change', handleResize);
+    }
+    if (landscapeMql && landscapeMql.addEventListener) {
+      landscapeMql.addEventListener('change', handleResize);
     }
 
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
       if (window.screen && window.screen.orientation) {
-        window.screen.orientation.removeEventListener('change', updateDimensionsAndOrientation);
+        window.screen.orientation.removeEventListener('change', handleResize);
+      }
+      if (portraitMql && portraitMql.removeEventListener) {
+        portraitMql.removeEventListener('change', handleResize);
+      }
+      if (landscapeMql && landscapeMql.removeEventListener) {
+        landscapeMql.removeEventListener('change', handleResize);
       }
     };
   }, []);
@@ -1130,7 +1171,11 @@ export function Music() {
 
   // Active startup video check based on current orientation
   const activeStartupVideo = orientation === 'portrait' ? startupPortraitMov : startupLandscapeMov;
-  const isStartupVideoActive = Boolean(activeStartupVideo && !startupVideoFailed[orientation]);
+  const isStartupVideoActive = Boolean(
+    activeStartupVideo &&
+    !startupVideoFailed[orientation] &&
+    (isIOS || !activeStartupVideo.toLowerCase().endsWith('.mov'))
+  );
 
   // Clean transition from startup phase to albums view
   const endStartupPhase = () => {
@@ -1706,10 +1751,10 @@ export function Music() {
     }
 
     // Ensure audio element is routed through the Equalizer and master gain is active
-    // On iOS, Web Audio AudioContext is forcefully suspended by Apple when the app is backgrounded,
-    // which immediately silences playback when switching apps or locking the screen!
-    // Therefore on iOS, we bypass Web Audio so native HTML5 audio plays uninterrupted in the background!
-    if (!isIOS) {
+    // On mobile devices (iOS & Android), Web Audio AudioContext is forcefully suspended by browsers when backgrounded or locked,
+    // which silences playback! Furthermore, createMediaElementSource requires strict CORS headers.
+    // Therefore on mobile devices, we bypass Web Audio so native HTML5 audio plays uninterrupted in the background!
+    if (!isIOS && !isMobileDevice) {
       try {
         equalizerEngine.attachMediaElement(el);
         equalizerEngine.onResumeMediaElement(el, 150);
@@ -1767,7 +1812,7 @@ export function Music() {
             autoplayGestureCleanupRef.current();
             autoplayGestureCleanupRef.current = null;
           }
-          if (!isIOS) {
+          if (!isIOS && !isMobileDevice) {
             try {
               equalizerEngine.onResumeMediaElement(el, 150);
             } catch (err) {}
@@ -1808,9 +1853,9 @@ export function Music() {
       return;
     }
 
-    // Directe veilige pauzering voor iOS/iPhone om buffer-stotteren te elimineren
-    if (isIOS || el.paused || el.volume === 0) {
-      if (!isIOS) {
+    // Directe veilige pauzering voor mobiele apparaten (iOS / Android) om buffer-stotteren te elimineren
+    if (isIOS || isMobileDevice || el.paused || el.volume === 0) {
+      if (!isIOS && !isMobileDevice) {
         equalizerEngine.onPauseMediaElement(el);
       }
       try {
@@ -1820,10 +1865,12 @@ export function Music() {
       return;
     }
 
-    // Voor overige browsers (desktop / Android): korte akoestische fade-out alvorens pauzeren
+    // Voor overige browsers (desktop): korte akoestische fade-out alvorens pauzeren
     const targetVol = isMuted ? 0 : volume;
     fadeToVolume(el, 0, Math.min(durationMs, 250), () => {
-      equalizerEngine.onPauseMediaElement(el);
+      if (!isIOS && !isMobileDevice) {
+        equalizerEngine.onPauseMediaElement(el);
+      }
       try {
         el.pause();
         el.volume = targetVol;
@@ -1851,12 +1898,10 @@ export function Music() {
       setIsPlaying(true);
 
       if (isAutoplayMuted && el) {
-        if (!isIOS) {
-          if (!isIOS) {
-            try {
-              equalizerEngine.onResumeMediaElement(el, 150);
-            } catch (err) {}
-          }
+        if (!isIOS && !isMobileDevice) {
+          try {
+            equalizerEngine.onResumeMediaElement(el, 150);
+          } catch (err) {}
         }
         el.muted = false;
         setIsAutoplayMuted(false);
@@ -1964,9 +2009,9 @@ export function Music() {
         el.currentTime = 0;
       }
 
-      if (el.readyState >= 2) {
-        startPlaybackWithVolumeRamp(el);
-      }
+      // Start playback immediately within the user gesture context!
+      // This preserves user activation on Android & iOS and prevents NotAllowedError
+      startPlaybackWithVolumeRamp(el);
     }
   };
 
@@ -2112,8 +2157,8 @@ export function Music() {
       const absY = Math.abs(deltaY);
       if (absX > 8 || absY > 8) {
         if (isLeftZoneRef.current && absY > absX * 1.1) {
-          // iOS blocks volume manipulation via web JS, so disable volume gesture on iOS to avoid confusion
-          if (!isIOS) {
+          // Mobile phones have hardware volume buttons; disable touch volume gesture on mobile to prevent accidental hijacking
+          if (!isIOS && !isMobileDevice) {
             gestureTypeRef.current = 'volume';
           } else {
             gestureTypeRef.current = 'none';
@@ -2184,7 +2229,7 @@ export function Music() {
 
     const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
     if (isAutoplayMuted && activeEl) {
-      if (!isIOS) {
+      if (!isIOS && !isMobileDevice) {
         try {
           equalizerEngine.onResumeMediaElement(activeEl, 200);
         } catch (err) {}
@@ -2239,7 +2284,7 @@ export function Music() {
 
       const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
       if (isAutoplayMuted && activeEl) {
-        if (!isIOS) {
+        if (!isIOS && !isMobileDevice) {
           try {
             equalizerEngine.onResumeMediaElement(activeEl, 200);
           } catch (err) {}
@@ -4268,6 +4313,8 @@ export function Music() {
         ref={audioRef}
         src={effectiveFormat !== 'video' ? (currentMediaUrl || '') : ''}
         preload="auto"
+        playsInline
+        crossOrigin="anonymous"
         onTimeUpdate={() => handleMediaTimeUpdate(audioRef.current)}
         onCanPlay={() => {
           if (audioRef.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
