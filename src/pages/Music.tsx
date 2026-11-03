@@ -384,16 +384,44 @@ const decodeShareCode = (code: string): { trackIdentifier: string; format: 'mp3'
   }
 };
 
-const getDeviceOrientation = (): 'portrait' | 'landscape' => {
+const getAuthoritativeOrientation = (): 'portrait' | 'landscape' => {
   if (typeof window === 'undefined') return 'landscape';
+
+  // 1. Native Modern ScreenOrientation API (Authoritative on modern Android Chrome)
   if (window.screen && window.screen.orientation && window.screen.orientation.type) {
-    return window.screen.orientation.type.startsWith('portrait') ? 'portrait' : 'landscape';
+    if (window.screen.orientation.type.startsWith('landscape')) return 'landscape';
+    if (window.screen.orientation.type.startsWith('portrait')) return 'portrait';
   }
+
+  // 2. Native ScreenOrientation angle (90 or 270 = landscape, 0 or 180 = portrait)
+  if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
+    const angle = Math.abs(window.screen.orientation.angle);
+    if (angle === 90 || angle === 270) return 'landscape';
+    if (angle === 0 || angle === 180) return 'portrait';
+  }
+
+  // 3. CSS Media Query (extremely reliable across all mobile browsers)
+  if (typeof window.matchMedia === 'function') {
+    if (window.matchMedia('(orientation: landscape)').matches) return 'landscape';
+    if (window.matchMedia('(orientation: portrait)').matches) return 'portrait';
+  }
+
+  // 4. window.orientation (standard for iOS Safari and legacy mobile browsers)
   if (typeof window.orientation !== 'undefined') {
-    return (window.orientation === 0 || window.orientation === 180) ? 'portrait' : 'landscape';
+    const wo = Math.abs(Number(window.orientation));
+    if (wo === 90 || wo === 270) return 'landscape';
+    if (wo === 0 || wo === 180) return 'portrait';
   }
-  return window.innerHeight >= window.innerWidth ? 'portrait' : 'landscape';
+
+  // 5. Direct Viewport Dimensions Ratio
+  if (typeof window !== 'undefined' && window.innerWidth && window.innerHeight) {
+    return window.innerWidth >= window.innerHeight ? 'landscape' : 'portrait';
+  }
+
+  return 'portrait';
 };
+
+const getDeviceOrientation = getAuthoritativeOrientation;
 
 const checkHasDirectVideoRequest = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -563,6 +591,17 @@ export function Music() {
   });
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
   const [showIosFullscreenGuide, setShowIosFullscreenGuide] = useState(false);
+
+  // Manual orientation override ref (when user clicks the rotate button)
+  const manualOrientationOverrideRef = useRef<{ orientation: 'portrait' | 'landscape'; timestamp: number } | null>(null);
+
+  const toggleOrientation = () => {
+    setOrientation(prev => {
+      const next = prev === 'portrait' ? 'landscape' : 'portrait';
+      manualOrientationOverrideRef.current = { orientation: next, timestamp: Date.now() };
+      return next;
+    });
+  };
 
   // Music Section Localization (Dutch vs English)
   // Automatically detects user country: inside NL -> Dutch, outside NL -> English.
@@ -825,7 +864,7 @@ export function Music() {
     }
   };
 
-  // Detect mobile device screen size & window orientation (iPads, tablets & smartphones)
+  // Detect mobile device screen size & window orientation (iPads, tablets, Android & iPhone)
   useEffect(() => {
     const updateDimensionsAndOrientation = () => {
       setIsSwiping(false);
@@ -837,28 +876,23 @@ export function Music() {
 
       // On mobile phones/tablets or screens < 1024px: match physical device viewport orientation
       if (isMobile || (typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) < 900)) {
-        // Ground truth: width vs height
-        let isPortrait = window.innerHeight > window.innerWidth;
+        const detected = getAuthoritativeOrientation();
 
-        // If width exceeds height by 5% or more, it is unmistakably landscape
-        if (window.innerWidth >= window.innerHeight * 1.05) {
-          isPortrait = false;
-        } else if (window.innerHeight >= window.innerWidth * 1.05) {
-          isPortrait = true;
-        } else if (window.screen && window.screen.orientation && window.screen.orientation.type) {
-          if (window.screen.orientation.type.startsWith('landscape')) {
-            isPortrait = false;
-          } else if (window.screen.orientation.type.startsWith('portrait')) {
-            isPortrait = true;
-          }
-        } else if (typeof window.orientation !== 'undefined') {
-          if (window.orientation === 90 || window.orientation === -90) {
-            isPortrait = false;
-          } else if (window.orientation === 0 || window.orientation === 180) {
-            isPortrait = true;
+        // Check if user manually toggled orientation recently via rotate button
+        if (manualOrientationOverrideRef.current) {
+          const elapsed = Date.now() - manualOrientationOverrideRef.current.timestamp;
+          if (elapsed < 6000) {
+            if (detected === manualOrientationOverrideRef.current.orientation) {
+              manualOrientationOverrideRef.current = null;
+            } else {
+              return; // Honor user's manual button choice
+            }
+          } else {
+            manualOrientationOverrideRef.current = null;
           }
         }
-        setOrientation(isPortrait ? 'portrait' : 'landscape');
+
+        setOrientation(detected);
       }
     };
 
@@ -867,36 +901,82 @@ export function Music() {
       // On Android & iOS Safari, viewport dimensions update asynchronously during rotation animation
       setTimeout(updateDimensionsAndOrientation, 50);
       setTimeout(updateDimensionsAndOrientation, 150);
-      setTimeout(updateDimensionsAndOrientation, 350);
+      setTimeout(updateDimensionsAndOrientation, 300);
       setTimeout(updateDimensionsAndOrientation, 600);
+      setTimeout(updateDimensionsAndOrientation, 1000);
+    };
+
+    // Gyroscope / accelerometer listener for Android devices where system auto-rotate is disabled
+    let lastTilt: 'portrait' | 'landscape' | null = null;
+    let tiltDebounceTimer: any = null;
+
+    const handleDeviceOrientation = (e: DeviceOrientationEvent) => {
+      if (typeof e.gamma !== 'number' || typeof e.beta !== 'number') return;
+      const absGamma = Math.abs(e.gamma);
+      const absBeta = Math.abs(e.beta);
+
+      let tiltDetected: 'portrait' | 'landscape' | null = null;
+      // Phone held horizontally in landscape (rotated 90 degrees left or right)
+      if (absGamma > 38 && absBeta < 68) {
+        tiltDetected = 'landscape';
+      } else if (absGamma < 25 && e.beta > 25 && e.beta < 95) {
+        // Phone held upright in normal portrait viewing position
+        tiltDetected = 'portrait';
+      }
+
+      if (tiltDetected && tiltDetected !== lastTilt) {
+        lastTilt = tiltDetected;
+        if (tiltDebounceTimer) clearTimeout(tiltDebounceTimer);
+        tiltDebounceTimer = setTimeout(() => {
+          if (manualOrientationOverrideRef.current && Date.now() - manualOrientationOverrideRef.current.timestamp < 3500) {
+            return;
+          }
+          if (tiltDetected) {
+            setOrientation(tiltDetected);
+          }
+        }, 160);
+      }
     };
 
     updateDimensionsAndOrientation();
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
+    if (typeof window !== 'undefined' && 'ondeviceorientation' in window) {
+      window.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });
+    }
     if (window.screen && window.screen.orientation) {
       window.screen.orientation.addEventListener('change', handleResize);
+      window.screen.orientation.onchange = handleResize;
     }
     const portraitMql = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(orientation: portrait)') : null;
     const landscapeMql = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(orientation: landscape)') : null;
-    if (portraitMql && portraitMql.addEventListener) {
-      portraitMql.addEventListener('change', handleResize);
+    if (portraitMql) {
+      if (portraitMql.addEventListener) portraitMql.addEventListener('change', handleResize);
+      else if ((portraitMql as any).addListener) (portraitMql as any).addListener(handleResize);
     }
-    if (landscapeMql && landscapeMql.addEventListener) {
-      landscapeMql.addEventListener('change', handleResize);
+    if (landscapeMql) {
+      if (landscapeMql.addEventListener) landscapeMql.addEventListener('change', handleResize);
+      else if ((landscapeMql as any).addListener) (landscapeMql as any).addListener(handleResize);
     }
 
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
+      if (typeof window !== 'undefined' && 'ondeviceorientation' in window) {
+        window.removeEventListener('deviceorientation', handleDeviceOrientation);
+      }
+      if (tiltDebounceTimer) clearTimeout(tiltDebounceTimer);
       if (window.screen && window.screen.orientation) {
         window.screen.orientation.removeEventListener('change', handleResize);
+        window.screen.orientation.onchange = null;
       }
-      if (portraitMql && portraitMql.removeEventListener) {
-        portraitMql.removeEventListener('change', handleResize);
+      if (portraitMql) {
+        if (portraitMql.removeEventListener) portraitMql.removeEventListener('change', handleResize);
+        else if ((portraitMql as any).removeListener) (portraitMql as any).removeListener(handleResize);
       }
-      if (landscapeMql && landscapeMql.removeEventListener) {
-        landscapeMql.removeEventListener('change', handleResize);
+      if (landscapeMql) {
+        if (landscapeMql.removeEventListener) landscapeMql.removeEventListener('change', handleResize);
+        else if ((landscapeMql as any).removeListener) (landscapeMql as any).removeListener(handleResize);
       }
     };
   }, []);
@@ -2600,7 +2680,7 @@ export function Music() {
                 )}
                 <button
                   type="button"
-                  onClick={() => setOrientation(prev => prev === 'portrait' ? 'landscape' : 'portrait')}
+                  onClick={toggleOrientation}
                   className="p-2 rounded-full border transition-all bg-white/10 hover:bg-white/20 border-white/10 text-white cursor-pointer"
                   title={t.topNav.rotateScreen}
                 >
@@ -2932,7 +3012,7 @@ export function Music() {
                 )}
                 <button
                   type="button"
-                  onClick={() => setOrientation(prev => prev === 'portrait' ? 'landscape' : 'portrait')}
+                  onClick={toggleOrientation}
                   className="p-2 rounded-full border transition-all bg-white/10 hover:bg-white/20 border-white/10 text-white cursor-pointer"
                   title={t.topNav.rotateScreen}
                 >
@@ -3295,7 +3375,9 @@ export function Music() {
                         referrerPolicy="no-referrer"
                         onError={(e) => {
                           const target = e.currentTarget;
-                          const fallback = currentTrack?.landscapeJpg || startupPortrait;
+                          const fallback = effectiveOrientation === 'landscape'
+                            ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
+                            : (currentTrack?.landscapeJpg || startupPortrait);
                           if (fallback && target.src !== fallback) {
                             target.src = fallback;
                           }
@@ -3389,7 +3471,9 @@ export function Music() {
                         referrerPolicy="no-referrer"
                         onError={(e) => {
                           const target = e.currentTarget;
-                          const fallback = currentTrack?.landscapeJpg || startupPortrait;
+                          const fallback = effectiveOrientation === 'landscape'
+                            ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
+                            : (currentTrack?.landscapeJpg || startupPortrait);
                           if (fallback && target.src !== fallback) {
                             target.src = fallback;
                           }
@@ -3687,7 +3771,7 @@ export function Music() {
                     )}
                     <button
                       type="button"
-                      onClick={() => setOrientation(prev => prev === 'portrait' ? 'landscape' : 'portrait')}
+                      onClick={toggleOrientation}
                       className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all cursor-pointer"
                       title={t.topNav.rotateScreen}
                     >
@@ -4399,7 +4483,7 @@ export function Music() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => setOrientation(prev => prev === 'portrait' ? 'landscape' : 'portrait')}
+                onClick={toggleOrientation}
                 className="flex items-center gap-2 px-4 py-2.5 font-semibold rounded-xl transition-all shadow-md bg-earth-gold text-black hover:bg-earth-gold/90 cursor-pointer"
                 title={t.topNav.rotateScreen}
               >
