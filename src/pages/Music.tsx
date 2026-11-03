@@ -2146,7 +2146,10 @@ export function Music() {
       setShowNavBar(false);
       resetRatingButtonsTimer();
       const el = targetEffectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
-      if (el && el.paused) {
+      if (el) {
+        el.currentTime = 0;
+        setCurrentTime(0);
+        savedTimeRef.current = 0;
         startPlaybackWithVolumeRamp(el, 750);
       }
       return;
@@ -2225,21 +2228,37 @@ export function Music() {
       } catch (e) {}
     }
 
-    const outgoingImg = currBgImage;
-    const nextIndex = loopMode === 'one' ? currentTrackIndex : getNextTrackIndex();
+    // 1. LIJST (loopMode === 'all'): Automatisch doorgaan naar volgend nummer met beeld fade-out en fade-in
+    if (loopMode === 'all') {
+      const outgoingImg = currBgImage;
+      const nextIndex = getNextTrackIndex();
 
-    // Trigger visual fade-out of previous track image and fade-in of next track image
-    if (outgoingImg) {
-      setAutoAdvanceFade({ outgoing: outgoingImg });
-      if (autoAdvanceFadeTimerRef.current) clearTimeout(autoAdvanceFadeTimerRef.current);
-      autoAdvanceFadeTimerRef.current = setTimeout(() => {
-        setAutoAdvanceFade(null);
-      }, 1000);
+      if (outgoingImg) {
+        setAutoAdvanceFade({ outgoing: outgoingImg });
+        if (autoAdvanceFadeTimerRef.current) clearTimeout(autoAdvanceFadeTimerRef.current);
+        autoAdvanceFadeTimerRef.current = setTimeout(() => {
+          setAutoAdvanceFade(null);
+        }, 1000);
+      }
+
+      isDirectVideoRequested.current = false;
+      playTrack(nextIndex, selectedFormat);
+      return;
     }
 
-    // Automatically advance to the next track and start playing
-    isDirectVideoRequested.current = false;
-    playTrack(nextIndex, selectedFormat);
+    // 2. 1 TRACK (loopMode === 'one'): Blijft hetzelfde nummer herhalen
+    if (loopMode === 'one') {
+      autoNextTimeoutRef.current = setTimeout(() => {
+        playTrack(currentTrackIndex, selectedFormat);
+      }, 200);
+      return;
+    }
+
+    // 3. 1X (loopMode === 'off'): 1x afspelen en dan stopt de player
+    setCurrentTime(0);
+    savedTimeRef.current = 0;
+    setIsPlaying(false);
+    setShowNavBar(true);
   };
 
   // Swipe gesture & Kobo-style vertical volume control handling
