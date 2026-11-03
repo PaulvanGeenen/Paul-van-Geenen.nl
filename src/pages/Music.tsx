@@ -825,6 +825,8 @@ export function Music() {
   const activeListenRecordIdRef = useRef<string | number | null>(null);
   const isListenCompletedRef = useRef<boolean>(false);
   const autoplayGestureCleanupRef = useRef<(() => void) | null>(null);
+  const [autoAdvanceFade, setAutoAdvanceFade] = useState<{ outgoing: string } | null>(null);
+  const autoAdvanceFadeTimerRef = useRef<any>(null);
 
   const clearElFadeTimer = (targetEl: HTMLMediaElement | null) => {
     if (!targetEl) return;
@@ -1718,6 +1720,7 @@ export function Music() {
   useEffect(() => {
     return () => {
       clearFadeTimer();
+      if (autoAdvanceFadeTimerRef.current) clearTimeout(autoAdvanceFadeTimerRef.current);
       if (navBarTimeoutRef.current) clearTimeout(navBarTimeoutRef.current);
       if (ratingButtonsTimeoutRef.current) clearTimeout(ratingButtonsTimeoutRef.current);
       if (autoNextTimeoutRef.current) clearTimeout(autoNextTimeoutRef.current);
@@ -2222,31 +2225,21 @@ export function Music() {
       } catch (e) {}
     }
 
-    // Als de bezoeker via een directe video URL binnenkwam:
-    // Altijd stoppen en NIET doorgaan naar een volgende video
-    if (isDirectVideoRequested.current) {
-      setCurrentTime(0);
-      setIsPlaying(false);
-      setShowNavBar(true);
-      return;
+    const outgoingImg = currBgImage;
+    const nextIndex = loopMode === 'one' ? currentTrackIndex : getNextTrackIndex();
+
+    // Trigger visual fade-out of previous track image and fade-in of next track image
+    if (outgoingImg) {
+      setAutoAdvanceFade({ outgoing: outgoingImg });
+      if (autoAdvanceFadeTimerRef.current) clearTimeout(autoAdvanceFadeTimerRef.current);
+      autoAdvanceFadeTimerRef.current = setTimeout(() => {
+        setAutoAdvanceFade(null);
+      }, 1000);
     }
 
-    if (loopMode === 'one') {
-      autoNextTimeoutRef.current = setTimeout(() => {
-        playTrack(currentTrackIndex, selectedFormat, false);
-      }, 300);
-    } else if (loopMode === 'all') {
-      const nextIndex = getNextTrackIndex();
-      // Seamlessly advance right away so outgoing photo fades out while incoming photo fades in
-      playTrack(nextIndex, selectedFormat, false);
-    } else {
-      // loopMode === 'off': Play 1 song and stop
-      if (audioRefA.current) audioRefA.current.currentTime = 0;
-      if (audioRefB.current) audioRefB.current.currentTime = 0;
-      if (videoRef.current) videoRef.current.currentTime = 0;
-      setCurrentTime(0);
-      setShowNavBar(true);
-    }
+    // Automatically advance to the next track and start playing
+    isDirectVideoRequested.current = false;
+    playTrack(nextIndex, selectedFormat);
   };
 
   // Swipe gesture & Kobo-style vertical volume control handling
@@ -3442,31 +3435,78 @@ export function Music() {
                 </div>
               )}
 
-              {/* Center Panel: Current Track Image */}
-              {currBgImage && (
-                <div
-                  className="absolute inset-0 w-full h-full overflow-hidden"
-                  style={{
-                    transform: `translateX(${dragX}px)`,
-                    transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
-                  }}
+              {/* Outgoing Track Image Overlay on auto-advance: Fades out to black */}
+              {autoAdvanceFade && (
+                <motion.div
+                  key={`auto-fadeout-${autoAdvanceFade.outgoing}`}
+                  initial={{ opacity: 1 }}
+                  animate={{ opacity: 0 }}
+                  transition={{ duration: 0.45, ease: 'easeOut' }}
+                  className="absolute inset-0 w-full h-full overflow-hidden z-20 pointer-events-none"
                 >
                   <img
-                    src={currBgImage}
-                    alt={currentTrack?.title || 'Current track'}
+                    src={autoAdvanceFade.outgoing}
+                    alt="Outgoing track"
                     className="w-full h-full object-cover select-none pointer-events-none"
                     referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      const fallback = effectiveOrientation === 'landscape'
-                        ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
-                        : (currentTrack?.landscapeJpg || startupPortrait);
-                      if (fallback && target.src !== fallback) {
-                        target.src = fallback;
-                      }
-                    }}
                   />
-                </div>
+                </motion.div>
+              )}
+
+              {/* Center Panel: Current Track Image */}
+              {currBgImage && (
+                autoAdvanceFade ? (
+                  <motion.div
+                    key={`auto-fadein-${currentTrackIndex}-${currBgImage}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.55, delay: 0.35, ease: 'easeIn' }}
+                    className="absolute inset-0 w-full h-full overflow-hidden z-10"
+                    style={{
+                      transform: `translateX(${dragX}px)`,
+                    }}
+                  >
+                    <img
+                      src={currBgImage}
+                      alt={currentTrack?.title || 'Current track'}
+                      className="w-full h-full object-cover select-none pointer-events-none"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        const fallback = effectiveOrientation === 'landscape'
+                          ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
+                          : (currentTrack?.landscapeJpg || startupPortrait);
+                        if (fallback && target.src !== fallback) {
+                          target.src = fallback;
+                        }
+                      }}
+                    />
+                  </motion.div>
+                ) : (
+                  <div
+                    className="absolute inset-0 w-full h-full overflow-hidden"
+                    style={{
+                      transform: `translateX(${dragX}px)`,
+                      transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
+                    }}
+                  >
+                    <img
+                      src={currBgImage}
+                      alt={currentTrack?.title || 'Current track'}
+                      className="w-full h-full object-cover select-none pointer-events-none"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        const fallback = effectiveOrientation === 'landscape'
+                          ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
+                          : (currentTrack?.landscapeJpg || startupPortrait);
+                        if (fallback && target.src !== fallback) {
+                          target.src = fallback;
+                        }
+                      }}
+                    />
+                  </div>
+                )
               )}
 
               {/* Right Panel: Next Track Image */}
