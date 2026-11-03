@@ -81,6 +81,8 @@ export const musicTranslations = {
     },
     // Top navigation inside simulator / phone
     topNav: {
+      toHome: 'Home',
+      homeTitle: 'Sluit musicplayer en ga naar homepage',
       toAlbums: 'Albums',
       toTracks: 'Tracks',
       albumsTitle: 'Naar Albums',
@@ -301,6 +303,8 @@ export const musicTranslations = {
     },
     // Top navigation inside simulator / phone
     topNav: {
+      toHome: 'Home',
+      homeTitle: 'Close music player and go to homepage',
       toAlbums: 'Albums',
       toTracks: 'Tracks',
       albumsTitle: 'To Albums',

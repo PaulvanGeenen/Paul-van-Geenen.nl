@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Play, Pause, SkipForward, SkipBack, Volume1, Volume2, VolumeX,
@@ -7,7 +7,7 @@ import {
   MessageCircle, Video, RotateCw, X, Sparkles, ChevronRight, ChevronLeft,
   Maximize2, Minimize2, Check, ArrowLeft, Repeat, Repeat1, FlaskConical,
   Share2, Copy, ThumbsUp, ThumbsDown, Subtitles, Languages, Disc3, Layers,
-  Music2, Headphones, Film, Type, SlidersHorizontal
+  Music2, Headphones, Film, Type, SlidersHorizontal, Home
 } from 'lucide-react';
 import { useAudio } from '../context/AudioContext';
 import { IvoryHeartPendant } from '../components/ui/IvoryHeartPendant';
@@ -485,6 +485,7 @@ const checkHasDirectAlbumRequest = (): boolean => {
 };
 
 export function Music() {
+  const navigate = useNavigate();
   const { setIsAmbientPlaying, reportVideoAudioStatus } = useAudio();
 
   // Flag indicating if visitor arrived directly via track link (e.g. ?v=... / ?track=...)
@@ -2556,6 +2557,54 @@ export function Music() {
     }, 280);
   };
 
+  // Closes the music player, halts all audio/video playback, and navigates back to website homepage
+  const handleCloseToHome = () => {
+    if (audioRefA.current) {
+      try {
+        audioRefA.current.pause();
+        audioRefA.current.currentTime = 0;
+        audioRefA.current.removeAttribute('src');
+        audioRefA.current.load();
+        equalizerEngine.detachMediaElement(audioRefA.current);
+      } catch (e) {}
+    }
+    if (audioRefB.current) {
+      try {
+        audioRefB.current.pause();
+        audioRefB.current.currentTime = 0;
+        audioRefB.current.removeAttribute('src');
+        audioRefB.current.load();
+        equalizerEngine.detachMediaElement(audioRefB.current);
+      } catch (e) {}
+    }
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
+        videoRef.current.currentTime = 0;
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
+        equalizerEngine.detachMediaElement(videoRef.current);
+      } catch (e) {}
+    }
+    if (introAudioRef.current) {
+      try {
+        introAudioRef.current.pause();
+        introAudioRef.current.currentTime = 0;
+      } catch (e) {}
+    }
+
+    clearFadeTimer();
+    setIsPlaying(false);
+
+    if (isBrowserFullscreen && typeof document !== 'undefined' && document.fullscreenElement) {
+      try {
+        document.exitFullscreen().catch(() => {});
+      } catch (e) {}
+    }
+
+    navigate('/');
+  };
+
   // Time format helper (e.g. 3:45)
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return '0:00';
@@ -2733,6 +2782,15 @@ export function Music() {
             {/* Top Bar */}
             <div className={`flex items-center justify-between border-b border-white/10 ${effectiveOrientation === 'landscape' ? 'pb-1.5 mb-1.5' : 'pb-3 mb-3 sm:mb-4'}`}>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseToHome}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-sm"
+                  title={t.topNav.homeTitle}
+                >
+                  <Home className="w-3.5 h-3.5 text-earth-gold" />
+                  <span>{t.topNav.toHome}</span>
+                </button>
                 <Disc3 className="w-4 h-4 text-earth-gold animate-spin-slow" />
                 <span className="text-xs font-bold uppercase tracking-widest text-earth-gold">
                   {effectiveOrientation === 'landscape' 
@@ -3049,14 +3107,25 @@ export function Music() {
           <div className={`relative z-20 flex flex-col h-full bg-gradient-to-b from-[#141210] via-[#1c1916] to-[#0d0b09] ${effectiveOrientation === 'landscape' ? 'p-2 sm:p-3 overflow-hidden' : 'overflow-y-auto custom-scrollbar p-4 sm:p-5'}`}>
             {/* Top Bar with Back to Albums button */}
             <div className={`flex items-center justify-between border-b border-white/10 ${effectiveOrientation === 'landscape' ? 'pb-1.5 mb-1.5' : 'pb-3 mb-3 sm:mb-4'}`}>
-              <button
-                type="button"
-                onClick={() => setPhase('albums')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-earth-gold/15 hover:bg-earth-gold/25 text-earth-gold border border-earth-gold/40 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>{t.topNav.toAlbums}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseToHome}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95"
+                  title={t.topNav.homeTitle}
+                >
+                  <Home className="w-3.5 h-3.5 text-earth-gold" />
+                  <span>{t.topNav.toHome}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPhase('albums')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-earth-gold/15 hover:bg-earth-gold/25 text-earth-gold border border-earth-gold/40 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>{t.topNav.toAlbums}</span>
+                </button>
+              </div>
 
               <div className="text-center min-w-0 px-2">
                 <p className="text-[10px] uppercase tracking-widest text-earth-gold font-bold truncate">
@@ -3756,6 +3825,15 @@ export function Music() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      onClick={handleCloseToHome}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-sm"
+                      title={t.topNav.homeTitle}
+                    >
+                      <Home className="w-3.5 h-3.5 text-earth-gold" />
+                      <span>{t.topNav.toHome}</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setPhase('albums')}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-sm"
                       title={t.topNav.albumsTitle}
@@ -4422,8 +4500,18 @@ export function Music() {
 
                   {/* Main Controls Row: Prev, Play/Pause, Next & Ivory Heart Pendant (Identical & centered in both portrait and landscape) */}
                   <div className="flex items-center justify-between pt-1 w-full gap-2">
-                    {/* Left: Spacer to keep middle controls strictly centered */}
-                    <div className="flex-1" />
+                    {/* Left: Home Button to close player and return to website homepage */}
+                    <div className="flex-1 flex items-center justify-start">
+                      <button
+                        type="button"
+                        onClick={handleCloseToHome}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-sm"
+                        title={t.topNav.homeTitle}
+                      >
+                        <Home className="w-3.5 h-3.5 text-earth-gold" />
+                        <span>{t.topNav.toHome}</span>
+                      </button>
+                    </div>
 
                     {/* Middle: Prev, Play/Pause, Next strictly centered */}
                     <div className="flex items-center justify-center gap-3 sm:gap-4 shrink-0">
