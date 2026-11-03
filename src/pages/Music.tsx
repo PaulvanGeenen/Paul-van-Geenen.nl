@@ -2782,15 +2782,6 @@ export function Music() {
             {/* Top Bar */}
             <div className={`flex items-center justify-between border-b border-white/10 ${effectiveOrientation === 'landscape' ? 'pb-1.5 mb-1.5' : 'pb-3 mb-3 sm:mb-4'}`}>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCloseToHome}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-sm"
-                  title={t.topNav.homeTitle}
-                >
-                  <Home className="w-3.5 h-3.5 text-earth-gold" />
-                  <span>{t.topNav.toHome}</span>
-                </button>
                 <Disc3 className="w-4 h-4 text-earth-gold animate-spin-slow" />
                 <span className="text-xs font-bold uppercase tracking-widest text-earth-gold">
                   {effectiveOrientation === 'landscape' 
@@ -3107,25 +3098,14 @@ export function Music() {
           <div className={`relative z-20 flex flex-col h-full bg-gradient-to-b from-[#141210] via-[#1c1916] to-[#0d0b09] ${effectiveOrientation === 'landscape' ? 'p-2 sm:p-3 overflow-hidden' : 'overflow-y-auto custom-scrollbar p-4 sm:p-5'}`}>
             {/* Top Bar with Back to Albums button */}
             <div className={`flex items-center justify-between border-b border-white/10 ${effectiveOrientation === 'landscape' ? 'pb-1.5 mb-1.5' : 'pb-3 mb-3 sm:mb-4'}`}>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCloseToHome}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95"
-                  title={t.topNav.homeTitle}
-                >
-                  <Home className="w-3.5 h-3.5 text-earth-gold" />
-                  <span>{t.topNav.toHome}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPhase('albums')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-earth-gold/15 hover:bg-earth-gold/25 text-earth-gold border border-earth-gold/40 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>{t.topNav.toAlbums}</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setPhase('albums')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-earth-gold/15 hover:bg-earth-gold/25 text-earth-gold border border-earth-gold/40 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{t.topNav.toAlbums}</span>
+              </button>
 
               <div className="text-center min-w-0 px-2">
                 <p className="text-[10px] uppercase tracking-widest text-earth-gold font-bold truncate">
@@ -3823,15 +3803,6 @@ export function Music() {
                   onClick={(e) => { e.stopPropagation(); resetNavBarTimer(); }}
                 >
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleCloseToHome}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-sm"
-                      title={t.topNav.homeTitle}
-                    >
-                      <Home className="w-3.5 h-3.5 text-earth-gold" />
-                      <span>{t.topNav.toHome}</span>
-                    </button>
                     <button
                       type="button"
                       onClick={() => setPhase('albums')}
