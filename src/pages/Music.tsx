@@ -1343,8 +1343,8 @@ export function Music() {
   }, [currentTrack]);
 
   const hasSubtitles = Object.keys(availableSubtitles).length > 0;
-  // Subtitles can ONLY be viewed in landscape mode on both phone and desktop, and are NEVER shown during reflections
-  const areSubtitlesAvailableInCurrentView = hasSubtitles && effectiveOrientation === 'landscape' && effectiveFormat !== 'reflection';
+  // Subtitles can be viewed in both portrait and landscape mode, but are never shown during reflections
+  const areSubtitlesAvailableInCurrentView = hasSubtitles && effectiveFormat !== 'reflection';
 
   // If user preferred language is available, use it; otherwise fallback to other available subtitle
   const activeSubtitleUrl = availableSubtitles[subtitleLang] 
@@ -3655,16 +3655,20 @@ export function Music() {
               )}
             </AnimatePresence>
 
-            {/* Live Synchronized Subtitle / Lyrics Overlay (Strictly layered on z-30 under the song display at z-40, ONLY in landscape mode) */}
+            {/* Live Synchronized Subtitle / Lyrics Overlay (Supported in both Portrait & Landscape) */}
             {subtitlesEnabled && areSubtitlesAvailableInCurrentView && !isSwiping && !isSwipingRelease && (
               <motion.div
                 initial={{ opacity: 0 }}
-                animate={{ opacity: (!showNavBar && Boolean(currentCue?.text)) ? 1 : 0 }}
+                animate={{ opacity: Boolean(currentCue?.text) ? 1 : 0 }}
                 transition={{ duration: 0.15, ease: "easeInOut" }}
-                className={`absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none text-center px-2 sm:px-4 md:px-6 w-[98vw] max-w-[96vw] sm:max-w-[94vw] lg:max-w-[92vw] flex items-end justify-center ${
-                  desktopViewMode === 'fullscreen' || isBrowserFullscreen
-                    ? 'bottom-6 sm:bottom-8 md:bottom-10 lg:bottom-12'
-                    : 'bottom-3 sm:bottom-5'
+                className={`absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none text-center px-3 sm:px-4 md:px-6 w-[96vw] max-w-[94vw] flex items-end justify-center transition-all duration-300 ${
+                  effectiveOrientation === 'portrait'
+                    ? (showNavBar ? 'bottom-32 sm:bottom-36' : 'bottom-16 sm:bottom-20')
+                    : (showNavBar
+                        ? 'bottom-20 sm:bottom-24'
+                        : (desktopViewMode === 'fullscreen' || isBrowserFullscreen
+                            ? 'bottom-6 sm:bottom-8 md:bottom-10 lg:bottom-12'
+                            : 'bottom-3 sm:bottom-5'))
                 }`}
               >
                 <div className="inline-block text-center select-none w-full max-w-full">
@@ -3673,6 +3677,12 @@ export function Music() {
                     style={{
                       fontSize: (() => {
                         const isFs = desktopViewMode === 'fullscreen' || isBrowserFullscreen;
+                        if (effectiveOrientation === 'portrait') {
+                          if (subtitleSize === 'sm') return 'clamp(0.85rem, 3.4vw, 1.05rem)';
+                          if (subtitleSize === 'lg') return 'clamp(1.2rem, 4.6vw, 1.45rem)';
+                          if (subtitleSize === 'xl') return 'clamp(1.4rem, 5.4vw, 1.75rem)';
+                          return 'clamp(1rem, 4vw, 1.25rem)';
+                        }
                         if (subtitleSize === 'sm') {
                           return isFs ? 'clamp(0.85rem, 1.25vw, 1.25rem)' : 'clamp(0.7rem, 1.1vw, 0.95rem)';
                         }
