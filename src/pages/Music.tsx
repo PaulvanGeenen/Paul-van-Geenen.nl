@@ -1171,11 +1171,7 @@ export function Music() {
 
   // Active startup video check based on current orientation
   const activeStartupVideo = orientation === 'portrait' ? startupPortraitMov : startupLandscapeMov;
-  const isStartupVideoActive = Boolean(
-    activeStartupVideo &&
-    !startupVideoFailed[orientation] &&
-    (isIOS || !activeStartupVideo.toLowerCase().endsWith('.mov'))
-  );
+  const isStartupVideoActive = Boolean(activeStartupVideo && !startupVideoFailed[orientation]);
 
   // Clean transition from startup phase to albums view
   const endStartupPhase = () => {
@@ -2519,6 +2515,7 @@ export function Music() {
                   autoPlay
                   playsInline
                   muted
+                  preload="auto"
                   onEnded={endStartupPhase}
                   onError={() => {
                     setStartupVideoFailed(prev => ({ ...prev, [orientation]: true }));
