@@ -1695,7 +1695,6 @@ export function Music() {
   // Auto-hide navbar logic (4 seconds timeout when playing, 5 minutes when paused)
   const resetNavBarTimer = () => {
     setShowNavBar(true);
-    triggerSongCredit(5000);
     if (navBarTimeoutRef.current) clearTimeout(navBarTimeoutRef.current);
     if (phase === 'player') {
       const timeoutDuration = isPlaying ? 4000 : 5 * 60 * 1000; // 4s if playing, 5 minutes (300,000ms) if paused
@@ -3888,14 +3887,14 @@ export function Music() {
               </div>
             )}
 
-            {/* Song & Album Title Overlay (Shows in both portrait & landscape on track start, rotation, or user tap) */}
+            {/* Song & Album Title Overlay (Shows in both portrait & landscape on track start or rotation) */}
             <AnimatePresence>
               {Boolean(
                 phase === 'player' &&
                 currentTrack &&
                 !isSwiping &&
                 !isSwipingRelease &&
-                (songCreditVisible || (currentTime >= 1.5 && currentTime <= 9.0) || showNavBar)
+                (songCreditVisible || (currentTime >= 1.5 && currentTime <= 9.0))
               ) && (() => {
                 const matchingAlbumObj = albums.find(a => a.id === selectedAlbum || a.title === currentTrack?.album);
                 const songTitle = currentTrack.title ? `"${currentTrack.title}"` : '';
