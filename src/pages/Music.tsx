@@ -1466,7 +1466,7 @@ export function Music() {
   };
 
   const effectiveFormat = getEffectiveFormat(currentTrack, selectedFormat);
-  const isVideo = effectiveFormat === 'video' || selectedFormat === 'video';
+  const isVideo = effectiveFormat === 'video';
   const effectiveOrientation = orientation;
   const currentMediaUrl = currentTrack ? getMediaUrl(currentTrack, effectiveFormat) : undefined;
 
@@ -1828,6 +1828,8 @@ export function Music() {
         try {
           videoRef.current.pause();
           videoRef.current.currentTime = 0;
+          videoRef.current.removeAttribute('src');
+          videoRef.current.load();
           equalizerEngine.detachMediaElement(videoRef.current);
         } catch (e) {}
       }
@@ -2062,6 +2064,10 @@ export function Music() {
         videoRef.current.volume = 0;
         videoRef.current.pause();
         videoRef.current.currentTime = 0;
+        if (targetEffectiveFormat !== 'video') {
+          videoRef.current.removeAttribute('src');
+          videoRef.current.load();
+        }
         equalizerEngine.detachMediaElement(videoRef.current);
       } catch (e) {}
     }
@@ -2409,10 +2415,10 @@ export function Music() {
       if (deltaX < 0) {
         // Swiped LEFT -> Glide smoothly to Next Track
         setDragX(-containerWidth);
+        const nextIndex = getNextTrackIndex();
+        playTrack(nextIndex, selectedFormat, true);
         if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
         releaseTimerRef.current = setTimeout(() => {
-          const nextIndex = getNextTrackIndex();
-          playTrack(nextIndex, selectedFormat, true);
           setDragX(0);
           setIsSwiping(false);
           setIsSwipingRelease(false);
@@ -2420,10 +2426,10 @@ export function Music() {
       } else {
         // Swiped RIGHT -> Glide smoothly to Previous Track
         setDragX(containerWidth);
+        const prevIndex = getPrevTrackIndex();
+        playTrack(prevIndex, selectedFormat, true);
         if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
         releaseTimerRef.current = setTimeout(() => {
-          const prevIndex = getPrevTrackIndex();
-          playTrack(prevIndex, selectedFormat, true);
           setDragX(0);
           setIsSwiping(false);
           setIsSwipingRelease(false);
