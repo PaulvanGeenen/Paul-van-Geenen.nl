@@ -809,23 +809,35 @@ export function Music() {
     }, durationMs);
   };
 
-  // Audio & Video DOM refs
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Audio & Video DOM refs: Dual-Deck system (Deck A & Deck B) for seamless mobile acoustic crossfading
+  const audioRefA = useRef<HTMLAudioElement | null>(null);
+  const audioRefB = useRef<HTMLAudioElement | null>(null);
+  const activeDeckRef = useRef<'A' | 'B'>('A');
+
+  const getActiveAudioEl = () => (activeDeckRef.current === 'A' ? audioRefA.current : audioRefB.current);
+  const getInactiveAudioEl = () => (activeDeckRef.current === 'A' ? audioRefB.current : audioRefA.current);
+
   const introAudioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const savedTimeRef = useRef<number>(0);
   const shouldAutoPlayRef = useRef<boolean>(false);
-  const fadeTimerRef = useRef<any>(null);
   const hasRegisteredListenRef = useRef<boolean>(false);
   const activeListenRecordIdRef = useRef<string | number | null>(null);
   const isListenCompletedRef = useRef<boolean>(false);
   const autoplayGestureCleanupRef = useRef<(() => void) | null>(null);
 
-  const clearFadeTimer = () => {
-    if (fadeTimerRef.current) {
-      clearInterval(fadeTimerRef.current);
-      fadeTimerRef.current = null;
+  const clearElFadeTimer = (targetEl: HTMLMediaElement | null) => {
+    if (!targetEl) return;
+    if ((targetEl as any)._fadeTimer) {
+      clearInterval((targetEl as any)._fadeTimer);
+      (targetEl as any)._fadeTimer = null;
     }
+  };
+
+  const clearFadeTimer = () => {
+    clearElFadeTimer(audioRefA.current);
+    clearElFadeTimer(audioRefB.current);
+    clearElFadeTimer(videoRef.current);
   };
 
   const registerTrackListen = async (
@@ -1306,12 +1318,20 @@ export function Music() {
           introAudioRef.current.currentTime = 0;
         } catch (e) {}
       }
-      if (audioRef.current) {
+      if (audioRefA.current) {
         try {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          audioRef.current.removeAttribute('src');
-          equalizerEngine.detachMediaElement(audioRef.current);
+          audioRefA.current.pause();
+          audioRefA.current.currentTime = 0;
+          audioRefA.current.removeAttribute('src');
+          equalizerEngine.detachMediaElement(audioRefA.current);
+        } catch (e) {}
+      }
+      if (audioRefB.current) {
+        try {
+          audioRefB.current.pause();
+          audioRefB.current.currentTime = 0;
+          audioRefB.current.removeAttribute('src');
+          equalizerEngine.detachMediaElement(audioRefB.current);
         } catch (e) {}
       }
       if (videoRef.current) {
@@ -1572,7 +1592,7 @@ export function Music() {
   useEffect(() => {
     if (!isPlaying) return;
     const interval = setInterval(() => {
-      const el = isVideo ? videoRef.current : audioRef.current;
+      const el = isVideo ? videoRef.current : getActiveAudioEl();
       if (el && !el.paused) {
         handleMediaTimeUpdate(el);
       }
@@ -1740,12 +1760,16 @@ export function Music() {
         videoRef.current.volume = 0;
         equalizerEngine.detachMediaElement(videoRef.current);
       } catch (e) {}
-    } else if (effectiveFormat === 'video' && audioRef.current) {
-      try {
-        audioRef.current.pause();
-        audioRef.current.volume = 0;
-        equalizerEngine.detachMediaElement(audioRef.current);
-      } catch (e) {}
+    } else if (effectiveFormat === 'video') {
+      [audioRefA.current, audioRefB.current].forEach(a => {
+        if (a) {
+          try {
+            a.pause();
+            a.volume = 0;
+            equalizerEngine.detachMediaElement(a);
+          } catch (e) {}
+        }
+      });
     }
   }, [effectiveFormat]);
 
@@ -1774,7 +1798,7 @@ export function Music() {
       if (onComplete) onComplete();
       return;
     }
-    clearFadeTimer();
+    clearElFadeTimer(el);
 
     const startVol = typeof el.volume === 'number' ? el.volume : 0;
     if (Math.abs(startVol - targetVolume) < 0.01) {
@@ -1789,7 +1813,7 @@ export function Music() {
     const intervalMs = Math.max(10, Math.round(durationMs / steps));
     let step = 0;
 
-    fadeTimerRef.current = setInterval(() => {
+    (el as any)._fadeTimer = setInterval(() => {
       step++;
       const progress = step / steps;
       // Gentle sinusoidal easing (S-curve) for organic acoustic fade in/out
@@ -1803,7 +1827,7 @@ export function Music() {
         } catch (e) {}
       }
       if (step >= steps) {
-        clearFadeTimer();
+        clearElFadeTimer(el);
         if (el) {
           try {
             el.volume = targetVolume;
@@ -1817,13 +1841,13 @@ export function Music() {
   // Smooth volume ramp-in helper to fade in gently when starting or resuming playback
   const startPlaybackWithVolumeRamp = (el: HTMLMediaElement | null, durationMs = 750) => {
     if (!el) return;
-    clearFadeTimer();
+    clearElFadeTimer(el);
     shouldAutoPlayRef.current = false;
 
-    // Strikte handhaving van één enkele actieve geluidsbron:
+    // Strikte handhaving van actieve bronnen:
     // Als audio wordt gestart, pauzeer en ontkoppel video & intro audio.
-    // Als video wordt gestart, pauzeer en ontkoppel track audio & intro audio.
-    if (el === audioRef.current) {
+    // Als video wordt gestart, pauzeer en ontkoppel intro audio.
+    if (el === audioRefA.current || el === audioRefB.current) {
       if (videoRef.current) {
         try {
           videoRef.current.pause();
@@ -1834,14 +1858,17 @@ export function Music() {
         } catch (e) {}
       }
     } else if (el === videoRef.current) {
-      if (audioRef.current) {
-        try {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          equalizerEngine.detachMediaElement(audioRef.current);
-        } catch (e) {}
-      }
+      [audioRefA.current, audioRefB.current].forEach(a => {
+        if (a && a !== el) {
+          try {
+            a.pause();
+            a.currentTime = 0;
+            equalizerEngine.detachMediaElement(a);
+          } catch (e) {}
+        }
+      });
     }
+
     if (introAudioRef.current) {
       try {
         introAudioRef.current.pause();
@@ -1849,10 +1876,6 @@ export function Music() {
       } catch (e) {}
     }
 
-    // Ensure audio element is routed through the Equalizer and master gain is active
-    // On mobile devices (iOS & Android), Web Audio AudioContext is forcefully suspended by browsers when backgrounded or locked,
-    // which silences playback! Furthermore, createMediaElementSource requires strict CORS headers.
-    // Therefore on mobile devices, we bypass Web Audio so native HTML5 audio plays uninterrupted in the background!
     if (!isIOS && !isMobileDevice) {
       try {
         equalizerEngine.attachMediaElement(el);
@@ -1869,9 +1892,7 @@ export function Music() {
       return;
     }
 
-    if (el.paused) {
-      el.volume = 0;
-    }
+    el.volume = 0;
 
     const playPromise = el.play();
 
@@ -1884,8 +1905,6 @@ export function Music() {
     if (playPromise !== undefined) {
       playPromise.then(runRamp).catch(e => {
         console.warn('Playback with audio blocked by browser policy:', e);
-        // Autoplay policy prevented unmuted playback (common when pasting a URL in a new tab)
-        // Fallback: Start playback muted immediately so the media is running without delay!
         el.muted = true;
         setIsAutoplayMuted(true);
         const retryMuted = el.play();
@@ -1899,13 +1918,11 @@ export function Music() {
           });
         }
 
-        // Ruim eventueel eerdere listener op om meervoudige triggers te voorkomen
         if (autoplayGestureCleanupRef.current) {
           autoplayGestureCleanupRef.current();
           autoplayGestureCleanupRef.current = null;
         }
 
-        // On the very first user interaction anywhere, unmute and fade volume in!
         const handleUserGesture = () => {
           if (autoplayGestureCleanupRef.current) {
             autoplayGestureCleanupRef.current();
@@ -1940,9 +1957,8 @@ export function Music() {
   };
 
   // Smooth volume ramp-out helper to fade out gently before pausing
-  // Voorkomt op iOS / iPhone specifiek het stotteren en blijven hangen van audio-buffers ('plaat blijft hangen')
   const pausePlaybackWithVolumeRamp = (el: HTMLMediaElement | null, durationMs = 750, onPaused?: () => void) => {
-    clearFadeTimer();
+    clearElFadeTimer(el);
     setIsPlaying(false);
     shouldAutoPlayRef.current = false;
 
@@ -1952,7 +1968,6 @@ export function Music() {
       return;
     }
 
-    // Directe veilige pauzering voor mobiele apparaten (iOS / Android) om buffer-stotteren te elimineren
     if (isIOS || isMobileDevice || el.paused || el.volume === 0) {
       if (!isIOS && !isMobileDevice) {
         equalizerEngine.onPauseMediaElement(el);
@@ -1964,7 +1979,6 @@ export function Music() {
       return;
     }
 
-    // Voor overige browsers (desktop): korte akoestische fade-out alvorens pauzeren
     const targetVol = isMuted ? 0 : volume;
     fadeToVolume(el, 0, Math.min(durationMs, 250), () => {
       if (!isIOS && !isMobileDevice) {
@@ -1987,7 +2001,7 @@ export function Music() {
       autoNextTimeoutRef.current = null;
     }
     const activeFormat = getEffectiveFormat(currentTrack, selectedFormat);
-    const el = activeFormat === 'video' ? videoRef.current : audioRef.current;
+    const el = activeFormat === 'video' ? videoRef.current : getActiveAudioEl();
 
     if (isPlaying) {
       pausePlaybackWithVolumeRamp(el, 300);
@@ -2014,6 +2028,105 @@ export function Music() {
     resetRatingButtonsTimer();
   };
 
+  // Synchronously switches and starts media playback on the alternate deck with true crossfading
+  const startDeckPlayback = (
+    targetTrack: Track,
+    targetEffectiveFormat: 'mp3' | 'audiobook' | 'reflection' | 'video'
+  ) => {
+    if (introAudioRef.current) {
+      try {
+        introAudioRef.current.pause();
+        introAudioRef.current.currentTime = 0;
+      } catch (e) {}
+    }
+
+    const outgoingEl = effectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
+
+    let incomingEl: HTMLMediaElement | null = null;
+    if (targetEffectiveFormat === 'video') {
+      incomingEl = videoRef.current;
+    } else {
+      // Alternate audio deck for true acoustic crossfading
+      const nextDeck = activeDeckRef.current === 'A' ? 'B' : 'A';
+      activeDeckRef.current = nextDeck;
+      incomingEl = nextDeck === 'A' ? audioRefA.current : audioRefB.current;
+    }
+
+    // Smoothly fade OUT outgoing track over 320ms, then pause and reset
+    if (outgoingEl && outgoingEl !== incomingEl && !outgoingEl.paused) {
+      fadeToVolume(outgoingEl, 0, 320, () => {
+        try {
+          outgoingEl.pause();
+          outgoingEl.currentTime = 0;
+          if (outgoingEl === videoRef.current && targetEffectiveFormat !== 'video') {
+            outgoingEl.removeAttribute('src');
+            outgoingEl.load();
+          }
+          if (!isIOS && !isMobileDevice) {
+            equalizerEngine.detachMediaElement(outgoingEl);
+          }
+        } catch (e) {}
+      });
+    }
+
+    const targetMediaUrl = targetTrack ? getMediaUrl(targetTrack, targetEffectiveFormat) : undefined;
+    if (incomingEl && targetMediaUrl) {
+      const targetEncodedUrl = encodeURI(targetMediaUrl);
+      const isDifferent = incomingEl.src !== targetMediaUrl && !incomingEl.src.endsWith(targetEncodedUrl) && decodeURIComponent(incomingEl.src) !== targetMediaUrl;
+
+      if (isDifferent) {
+        incomingEl.src = targetMediaUrl;
+        incomingEl.currentTime = 0;
+        try {
+          incomingEl.load();
+        } catch (e) {}
+      } else {
+        incomingEl.currentTime = 0;
+      }
+
+      incomingEl.volume = 0;
+      incomingEl.muted = false;
+      setIsAutoplayMuted(false);
+
+      // Start playback SYNCHRONOUSLY within the user gesture context!
+      // This preserves user activation on Android & iOS and prevents NotAllowedError / silence!
+      startPlaybackWithVolumeRamp(incomingEl, 750);
+    }
+  };
+
+  // Finalizes React state, URL bar, and tracking metrics when track changes
+  const finalizeTrackSwitch = (
+    index: number,
+    format?: 'mp3' | 'audiobook' | 'reflection' | 'video'
+  ) => {
+    const targetTrack = tracks[index] || tracks[0];
+    const newSelectedFormat = format || selectedFormat || 'mp3';
+    const targetEffectiveFormat = getEffectiveFormat(targetTrack, newSelectedFormat);
+
+    if (newSelectedFormat === 'reflection' || targetEffectiveFormat === 'reflection') {
+      setShowSubtitleMenu(false);
+    }
+
+    savedTimeRef.current = 0;
+    setCurrentTime(0);
+    hasRegisteredListenRef.current = false;
+    activeListenRecordIdRef.current = null;
+    isListenCompletedRef.current = false;
+
+    setSelectedFormat(newSelectedFormat);
+    setCurrentTrackIndex(index);
+    setPhase('player');
+    setShowNavBar(false);
+    resetRatingButtonsTimer();
+
+    if (targetTrack && window.history && window.history.replaceState) {
+      try {
+        const cleanUrl = getCleanShareUrl(targetTrack, newSelectedFormat);
+        window.history.replaceState({}, '', cleanUrl);
+      } catch (e) {}
+    }
+  };
+
   // Start playing a track directly
   const playTrack = (index: number, format?: 'mp3' | 'audiobook' | 'reflection' | 'video', isFromSwipe = false) => {
     if (autoNextTimeoutRef.current) {
@@ -2026,96 +2139,20 @@ export function Music() {
     const newSelectedFormat = format || selectedFormat || 'mp3';
     const targetEffectiveFormat = getEffectiveFormat(targetTrack, newSelectedFormat);
 
-    if (newSelectedFormat === 'reflection' || targetEffectiveFormat === 'reflection') {
-      setShowSubtitleMenu(false);
-    }
-
     // If the EXACT same track and format is already loaded/playing and not in startup splash:
     if (index === currentTrackIndex && targetEffectiveFormat === effectiveFormat && phase !== 'startup') {
       setPhase('player');
       setShowNavBar(false);
       resetRatingButtonsTimer();
-      const el = targetEffectiveFormat === 'video' ? videoRef.current : audioRef.current;
+      const el = targetEffectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
       if (el && el.paused) {
         startPlaybackWithVolumeRamp(el, 750);
       }
       return;
     }
 
-    // Stop intro audio onmiddellijk en volledig
-    if (introAudioRef.current) {
-      try {
-        introAudioRef.current.pause();
-        introAudioRef.current.currentTime = 0;
-      } catch (e) {}
-    }
-
-    // Stop bestaande audio & video vóór src wijziging of herstart
-    if (audioRef.current) {
-      try {
-        audioRef.current.volume = 0;
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        equalizerEngine.detachMediaElement(audioRef.current);
-      } catch (e) {}
-    }
-    if (videoRef.current) {
-      try {
-        videoRef.current.volume = 0;
-        videoRef.current.pause();
-        videoRef.current.currentTime = 0;
-        if (targetEffectiveFormat !== 'video') {
-          videoRef.current.removeAttribute('src');
-          videoRef.current.load();
-        }
-        equalizerEngine.detachMediaElement(videoRef.current);
-      } catch (e) {}
-    }
-
-    savedTimeRef.current = 0;
-    setCurrentTime(0);
-    hasRegisteredListenRef.current = false;
-    activeListenRecordIdRef.current = null;
-    isListenCompletedRef.current = false;
-
-    // Keep user's chosen format preference sticky across tracks (e.g., 'video')
-    setSelectedFormat(newSelectedFormat);
-
-    setCurrentTrackIndex(index);
-    setPhase('player');
-    setShowNavBar(false); // Hide controls immediately on track change so ONLY the media/image is shown!
-    resetRatingButtonsTimer();
-
-    // Update browser address bar to clean URL without query parameters
-    if (targetTrack && window.history && window.history.replaceState) {
-      try {
-        const cleanUrl = getCleanShareUrl(targetTrack, newSelectedFormat);
-        window.history.replaceState({}, '', cleanUrl);
-      } catch (e) {}
-    }
-
-    shouldAutoPlayRef.current = true;
-    const targetMediaUrl = targetTrack ? getMediaUrl(targetTrack, targetEffectiveFormat) : undefined;
-    const el = targetEffectiveFormat === 'video' ? videoRef.current : audioRef.current;
-    
-    if (el && targetMediaUrl) {
-      const targetEncodedUrl = encodeURI(targetMediaUrl);
-      const isDifferent = el.src !== targetMediaUrl && !el.src.endsWith(targetEncodedUrl) && decodeURIComponent(el.src) !== targetMediaUrl;
-
-      if (isDifferent) {
-        el.src = targetMediaUrl;
-        el.currentTime = 0;
-        try {
-          el.load();
-        } catch (e) {}
-      } else {
-        el.currentTime = 0;
-      }
-
-      // Start playback immediately within the user gesture context!
-      // This preserves user activation on Android & iOS and prevents NotAllowedError
-      startPlaybackWithVolumeRamp(el);
-    }
+    startDeckPlayback(targetTrack, targetEffectiveFormat);
+    finalizeTrackSwitch(index, newSelectedFormat);
   };
 
   // Loop mode handler
@@ -2170,13 +2207,15 @@ export function Music() {
 
     const targetVol = isMuted ? 0 : volume;
 
-    if (audioRef.current) {
-      try {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current.volume = targetVol;
-      } catch (e) {}
-    }
+    [audioRefA.current, audioRefB.current].forEach(a => {
+      if (a) {
+        try {
+          a.pause();
+          a.currentTime = 0;
+          a.volume = targetVol;
+        } catch (e) {}
+      }
+    });
     if (videoRef.current) {
       try {
         videoRef.current.pause();
@@ -2204,7 +2243,8 @@ export function Music() {
       playTrack(nextIndex, selectedFormat, false);
     } else {
       // loopMode === 'off': Play 1 song and stop
-      if (audioRef.current) audioRef.current.currentTime = 0;
+      if (audioRefA.current) audioRefA.current.currentTime = 0;
+      if (audioRefB.current) audioRefB.current.currentTime = 0;
       if (videoRef.current) videoRef.current.currentTime = 0;
       setCurrentTime(0);
       setShowNavBar(true);
@@ -2330,7 +2370,7 @@ export function Music() {
 
     resetRatingButtonsTimer();
 
-    const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
+    const activeEl = effectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
     if (isAutoplayMuted && activeEl) {
       if (!isIOS && !isMobileDevice) {
         try {
@@ -2385,7 +2425,7 @@ export function Music() {
 
       resetRatingButtonsTimer();
 
-      const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
+      const activeEl = effectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
       if (isAutoplayMuted && activeEl) {
         if (!isIOS && !isMobileDevice) {
           try {
@@ -2413,26 +2453,22 @@ export function Music() {
       setIsSwipingRelease(true);
 
       const targetIndex = deltaX < 0 ? getNextTrackIndex() : getPrevTrackIndex();
+      const targetTrack = tracks[targetIndex] || tracks[0];
+      const targetEffectiveFormat = getEffectiveFormat(targetTrack, selectedFormat);
       setDragX(deltaX < 0 ? -containerWidth : containerWidth);
 
-      // Smoothly fade OUT the currently playing track over the 240ms swipe glide
-      const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
-      if (activeEl && !activeEl.paused && isPlaying) {
-        fadeToVolume(activeEl, 0, 240, () => {
-          try {
-            activeEl.pause();
-            activeEl.currentTime = 0;
-          } catch (e) {}
-        });
-      }
+      // Start playback SYNCHRONOUSLY within this touch release event!
+      // This preserves user activation on Android & iOS, prevents browser autoplay muting,
+      // and triggers the dual-deck acoustic crossfade immediately!
+      startDeckPlayback(targetTrack, targetEffectiveFormat);
 
       if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
       releaseTimerRef.current = setTimeout(() => {
-        playTrack(targetIndex, selectedFormat, true);
+        finalizeTrackSwitch(targetIndex, selectedFormat);
         setDragX(0);
         setIsSwiping(false);
         setIsSwipingRelease(false);
-      }, 260);
+      }, 250);
     } else {
       // Snap back to center smoothly
       setIsSwipingRelease(true);
@@ -2456,25 +2492,18 @@ export function Music() {
     finishGesture(e.clientX, e.clientY);
   };
 
-  // Next / Previous track actions with graceful fade-out before switching
+  // Next / Previous track actions with seamless acoustic crossfade
   const handleNext = () => {
     resetNavBarTimer();
     setSlideDirection('next');
     const nextIndex = getNextTrackIndex();
-    const activeEl = effectiveFormat === 'video' ? videoRef.current : audioRef.current;
-    if (activeEl && !activeEl.paused && isPlaying) {
-      fadeToVolume(activeEl, 0, 220, () => {
-        playTrack(nextIndex, selectedFormat);
-      });
-    } else {
-      playTrack(nextIndex, selectedFormat);
-    }
+    playTrack(nextIndex, selectedFormat);
   };
 
   const handlePrev = () => {
     resetNavBarTimer();
     const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
-    const el = effectiveFmt === 'video' ? videoRef.current : audioRef.current;
+    const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
     const currentProgress = el ? el.currentTime : currentTime;
 
     // If the track is more than 2 seconds in, restart the current track from the beginning
@@ -2490,13 +2519,7 @@ export function Music() {
     // If already at or near the beginning (<= 2 seconds), go to the previous track
     setSlideDirection('prev');
     const prevIndex = getPrevTrackIndex();
-    if (el && !el.paused && isPlaying) {
-      fadeToVolume(el, 0, 220, () => {
-        playTrack(prevIndex, selectedFormat);
-      });
-    } else {
-      playTrack(prevIndex, selectedFormat);
-    }
+    playTrack(prevIndex, selectedFormat);
   };
 
   // Time format helper (e.g. 3:45)
@@ -2507,10 +2530,13 @@ export function Music() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Synchronize audio volume
+  // Synchronize audio volume across all decks and video
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume;
+    if (audioRefA.current) {
+      audioRefA.current.volume = isMuted ? 0 : volume;
+    }
+    if (audioRefB.current) {
+      audioRefB.current.volume = isMuted ? 0 : volume;
     }
     if (videoRef.current) {
       videoRef.current.volume = isMuted ? 0 : volume;
@@ -2569,20 +2595,20 @@ export function Music() {
       ['seekto', (details) => {
         if (details.seekTime != null) {
           const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
-          const el = effectiveFmt === 'video' ? videoRef.current : audioRef.current;
+          const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
           if (el) el.currentTime = details.seekTime;
           setCurrentTime(details.seekTime);
         }
       }],
       ['seekbackward', (details) => {
         const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
-        const el = effectiveFmt === 'video' ? videoRef.current : audioRef.current;
+        const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
         const skip = details.seekOffset || 10;
         if (el) el.currentTime = Math.max(0, el.currentTime - skip);
       }],
       ['seekforward', (details) => {
         const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
-        const el = effectiveFmt === 'video' ? videoRef.current : audioRef.current;
+        const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
         const skip = details.seekOffset || 10;
         if (el) el.currentTime = Math.min(duration || 0, el.currentTime + skip);
       }]
@@ -4261,8 +4287,9 @@ export function Music() {
                         savedTimeRef.current = val;
                         if (selectedFormat === 'video' && videoRef.current) {
                           videoRef.current.currentTime = val;
-                        } else if (audioRef.current) {
-                          audioRef.current.currentTime = val;
+                        } else {
+                          const activeAudio = getActiveAudioEl();
+                          if (activeAudio) activeAudio.currentTime = val;
                         }
                       }}
                       className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-earth-gold"
@@ -4402,44 +4429,97 @@ export function Music() {
 
   return (
     <>
-      {/* Global Persistent Audio Element - stays permanently mounted to guarantee a single audio instance */}
+      {/* Global Persistent Audio Decks (Deck A & Deck B) - enables true acoustic crossfading without mobile autoplay blocking */}
       <audio
-        ref={audioRef}
-        src={effectiveFormat !== 'video' ? (currentMediaUrl || '') : ''}
+        ref={audioRefA}
         preload="auto"
         playsInline
         crossOrigin="anonymous"
-        onTimeUpdate={() => handleMediaTimeUpdate(audioRef.current)}
+        onTimeUpdate={() => {
+          if (activeDeckRef.current === 'A') handleMediaTimeUpdate(audioRefA.current);
+        }}
         onCanPlay={() => {
-          if (audioRef.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
+          if (activeDeckRef.current === 'A' && audioRefA.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
             shouldAutoPlayRef.current = false;
-            startPlaybackWithVolumeRamp(audioRef.current);
+            startPlaybackWithVolumeRamp(audioRefA.current);
           }
         }}
         onCanPlayThrough={() => {
-          if (audioRef.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
+          if (activeDeckRef.current === 'A' && audioRefA.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
             shouldAutoPlayRef.current = false;
-            startPlaybackWithVolumeRamp(audioRef.current);
+            startPlaybackWithVolumeRamp(audioRefA.current);
           }
         }}
         onLoadedData={() => {
-          if (audioRef.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
+          if (activeDeckRef.current === 'A' && audioRefA.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
             shouldAutoPlayRef.current = false;
-            startPlaybackWithVolumeRamp(audioRef.current);
+            startPlaybackWithVolumeRamp(audioRefA.current);
           }
         }}
         onLoadedMetadata={() => {
-          if (audioRef.current) {
-            audioRef.current.currentTime = savedTimeRef.current || 0;
+          if (audioRefA.current && activeDeckRef.current === 'A') {
+            audioRefA.current.currentTime = savedTimeRef.current || 0;
             if (shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
               shouldAutoPlayRef.current = false;
-              startPlaybackWithVolumeRamp(audioRef.current);
+              startPlaybackWithVolumeRamp(audioRefA.current);
             }
           }
         }}
-        onEnded={handleTrackEnded}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
+        onEnded={() => {
+          if (activeDeckRef.current === 'A') handleTrackEnded();
+        }}
+        onPlay={() => {
+          if (activeDeckRef.current === 'A') setIsPlaying(true);
+        }}
+        onPause={() => {
+          if (activeDeckRef.current === 'A') setIsPlaying(false);
+        }}
+      />
+
+      <audio
+        ref={audioRefB}
+        preload="auto"
+        playsInline
+        crossOrigin="anonymous"
+        onTimeUpdate={() => {
+          if (activeDeckRef.current === 'B') handleMediaTimeUpdate(audioRefB.current);
+        }}
+        onCanPlay={() => {
+          if (activeDeckRef.current === 'B' && audioRefB.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
+            shouldAutoPlayRef.current = false;
+            startPlaybackWithVolumeRamp(audioRefB.current);
+          }
+        }}
+        onCanPlayThrough={() => {
+          if (activeDeckRef.current === 'B' && audioRefB.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
+            shouldAutoPlayRef.current = false;
+            startPlaybackWithVolumeRamp(audioRefB.current);
+          }
+        }}
+        onLoadedData={() => {
+          if (activeDeckRef.current === 'B' && audioRefB.current && shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
+            shouldAutoPlayRef.current = false;
+            startPlaybackWithVolumeRamp(audioRefB.current);
+          }
+        }}
+        onLoadedMetadata={() => {
+          if (audioRefB.current && activeDeckRef.current === 'B') {
+            audioRefB.current.currentTime = savedTimeRef.current || 0;
+            if (shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
+              shouldAutoPlayRef.current = false;
+              startPlaybackWithVolumeRamp(audioRefB.current);
+            }
+          }
+        }}
+        onEnded={() => {
+          if (activeDeckRef.current === 'B') handleTrackEnded();
+        }}
+        onPlay={() => {
+          if (activeDeckRef.current === 'B') setIsPlaying(true);
+        }}
+        onPause={() => {
+          if (activeDeckRef.current === 'B') setIsPlaying(false);
+        }}
       />
 
       {/* Intro Audio element for startup splash */}
