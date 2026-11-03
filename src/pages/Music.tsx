@@ -3431,52 +3431,7 @@ export function Music() {
               ) : (
                 /* Simultaneous Fade-Out / Fade-In Layer when changing tracks automatically or via controls (Non-swiping) */
                 <AnimatePresence>
-                  {effectiveFormat === 'video' && currentMediaUrl ? (
-                    <motion.div
-                      key={`video-${currentTrackIndex}-${currentMediaUrl}`}
-                      initial={isSwipeTransition ? { opacity: 1 } : { opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={isSwipeTransition ? { opacity: 1 } : { opacity: 0 }}
-                      transition={{ duration: isSwipeTransition ? 0 : 1.2, ease: "easeInOut" }}
-                      className="absolute inset-0 w-full h-full overflow-hidden z-10 flex items-center justify-center bg-black"
-                    >
-                      <video
-                        ref={videoRef}
-                        src={currentMediaUrl}
-                        playsInline
-                        preload="auto"
-                        className={`w-full h-full ${effectiveOrientation === 'portrait' ? 'object-cover' : 'object-contain'} bg-black`}
-                        onTimeUpdate={() => handleMediaTimeUpdate(videoRef.current)}
-                        onCanPlay={() => {
-                          if (videoRef.current && (shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
-                            shouldAutoPlayRef.current = false;
-                            isDirectVideoRequested.current = false;
-                            startPlaybackWithVolumeRamp(videoRef.current);
-                          }
-                        }}
-                        onLoadedData={() => {
-                          if (videoRef.current && (shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
-                            shouldAutoPlayRef.current = false;
-                            isDirectVideoRequested.current = false;
-                            startPlaybackWithVolumeRamp(videoRef.current);
-                          }
-                        }}
-                        onLoadedMetadata={() => {
-                          if (videoRef.current) {
-                            videoRef.current.currentTime = savedTimeRef.current || 0;
-                            if ((shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
-                              shouldAutoPlayRef.current = false;
-                              isDirectVideoRequested.current = false;
-                              startPlaybackWithVolumeRamp(videoRef.current);
-                            }
-                          }
-                        }}
-                        onEnded={handleTrackEnded}
-                        onPlay={() => setIsPlaying(true)}
-                        onPause={() => setIsPlaying(false)}
-                      />
-                    </motion.div>
-                  ) : currBgImage ? (
+                  {currBgImage ? (
                     <motion.div
                       key={`img-${currentTrackIndex}-${currBgImage}`}
                       initial={isSwipeTransition ? { opacity: 1 } : { opacity: 0 }}
@@ -3505,35 +3460,55 @@ export function Music() {
                 </AnimatePresence>
               )}
 
+              {/* Persistent Video Player: Stays continuously mounted across swiping gestures to eliminate black flickering */}
+              {effectiveFormat === 'video' && currentMediaUrl && (
+                <div
+                  className="absolute inset-0 w-full h-full overflow-hidden z-10 flex items-center justify-center bg-transparent pointer-events-none"
+                  style={{
+                    transform: (isSwiping || isSwipingRelease) ? `translateX(${dragX}px)` : 'none',
+                    transition: isSwipingRelease ? 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
+                  }}
+                >
+                  <video
+                    ref={videoRef}
+                    src={currentMediaUrl}
+                    playsInline
+                    preload="auto"
+                    className={`w-full h-full ${effectiveOrientation === 'portrait' ? 'object-cover' : 'object-contain'} bg-transparent`}
+                    onTimeUpdate={() => handleMediaTimeUpdate(videoRef.current)}
+                    onCanPlay={() => {
+                      if (videoRef.current && (shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
+                        shouldAutoPlayRef.current = false;
+                        isDirectVideoRequested.current = false;
+                        startPlaybackWithVolumeRamp(videoRef.current);
+                      }
+                    }}
+                    onLoadedData={() => {
+                      if (videoRef.current && (shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
+                        shouldAutoPlayRef.current = false;
+                        isDirectVideoRequested.current = false;
+                        startPlaybackWithVolumeRamp(videoRef.current);
+                      }
+                    }}
+                    onLoadedMetadata={() => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = savedTimeRef.current || 0;
+                        if ((shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
+                          shouldAutoPlayRef.current = false;
+                          isDirectVideoRequested.current = false;
+                          startPlaybackWithVolumeRamp(videoRef.current);
+                        }
+                      }
+                    }}
+                    onEnded={handleTrackEnded}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                  />
+                </div>
+              )}
+
               {/* Fallback gradient for contrast when UI is visible; hidden during swipe so ONLY cover images show */}
               <div className={`absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/60 z-[1] transition-opacity duration-300 ${(isSwiping || !showNavBar) ? 'opacity-0' : 'opacity-100'}`} />
-
-              {/* Video Element during touch swipe gesture */}
-              {(isSwiping || isSwipingRelease) && effectiveFormat === 'video' && currentMediaUrl && (
-                <video
-                  ref={videoRef}
-                  src={currentMediaUrl}
-                  playsInline
-                  preload="auto"
-                  className={`absolute inset-0 w-full h-full ${effectiveOrientation === 'portrait' ? 'object-cover' : 'object-contain'} bg-black z-10`}
-                  onTimeUpdate={() => handleMediaTimeUpdate(videoRef.current)}
-                  onCanPlay={() => {
-                    if (videoRef.current && (shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
-                      shouldAutoPlayRef.current = false;
-                      isDirectVideoRequested.current = false;
-                      startPlaybackWithVolumeRamp(videoRef.current);
-                    }
-                  }}
-                  onLoadedMetadata={() => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = savedTimeRef.current || 0;
-                    }
-                  }}
-                  onEnded={handleTrackEnded}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                />
-              )}
             </div>
 
             {/* Kobo-style Left Vertical Volume Toast Indicator */}
