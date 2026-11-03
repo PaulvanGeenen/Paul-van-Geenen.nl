@@ -203,7 +203,8 @@ function parseSRTTime(timeStr: string): number {
 
 function parseSRT(data: string): SubtitleCue[] {
   const cues: SubtitleCue[] = [];
-  const normalized = data.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const cleanData = data.replace(/^\uFEFF/, '');
+  const normalized = cleanData.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const blocks = normalized.split(/\n\s*\n/);
 
   let cueId = 1;
@@ -229,6 +230,17 @@ function parseSRT(data: string): SubtitleCue[] {
       cues.push({ id: cueId++, startTime, endTime, text });
     }
   }
+
+  // Bridge micro-gaps between consecutive cues (<= 350ms) to eliminate flickering/blinking between lines
+  for (let i = 0; i < cues.length - 1; i++) {
+    const current = cues[i];
+    const next = cues[i + 1];
+    const gap = next.startTime - current.endTime;
+    if (gap > 0 && gap <= 0.35) {
+      current.endTime = next.startTime;
+    }
+  }
+
   return cues;
 }
 
@@ -1410,14 +1422,14 @@ export function Music() {
     };
   }, [activeSubtitleUrl]);
 
-  // Synchronize current subtitle cue with playback time
+  // Synchronize current subtitle cue with playback time (with boundary tolerance)
   useEffect(() => {
     if (!subtitlesEnabled || parsedCues.length === 0) {
       if (currentCue !== null) setCurrentCue(null);
       return;
     }
 
-    const active = parsedCues.find(cue => currentTime >= cue.startTime && currentTime <= cue.endTime) || null;
+    const active = parsedCues.find(cue => currentTime >= (cue.startTime - 0.02) && currentTime < cue.endTime) || null;
     if (active?.id !== currentCue?.id || active?.text !== currentCue?.text) {
       setCurrentCue(active);
     }
@@ -3657,11 +3669,8 @@ export function Music() {
 
             {/* Live Synchronized Subtitle / Lyrics Overlay (Supported in both Portrait & Landscape) */}
             {subtitlesEnabled && areSubtitlesAvailableInCurrentView && !isSwiping && !isSwipingRelease && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: Boolean(currentCue?.text) ? 1 : 0 }}
-                transition={{ duration: 0.15, ease: "easeInOut" }}
-                className={`absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none text-center px-3 sm:px-4 md:px-6 w-[96vw] max-w-[94vw] flex items-end justify-center transition-all duration-300 ${
+              <div
+                className={`absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none text-center px-3 sm:px-4 md:px-6 w-[96vw] max-w-[94vw] flex items-end justify-center transition-[bottom] duration-300 ease-out ${
                   effectiveOrientation === 'portrait'
                     ? (showNavBar ? 'bottom-32 sm:bottom-36' : 'bottom-16 sm:bottom-20')
                     : (showNavBar
@@ -3671,7 +3680,10 @@ export function Music() {
                             : 'bottom-3 sm:bottom-5'))
                 }`}
               >
-                <div className="inline-block text-center select-none w-full max-w-full">
+                <div
+                  className="inline-block text-center select-none w-full max-w-full transition-opacity duration-150 ease-out"
+                  style={{ opacity: currentCue?.text ? 1 : 0 }}
+                >
                   <div
                     className="text-white font-sans font-bold tracking-normal leading-[1.35] text-center w-full select-none"
                     style={{
@@ -3720,7 +3732,7 @@ export function Music() {
                     ))}
                   </div>
                 </div>
-              </motion.div>
+              </div>
             )}
 
             {/* Song & Album Title Overlay (ONLY in landscape mode at start of song: fades in at 2s, stays for 7s until 9s, then smoothly fades out) */}
