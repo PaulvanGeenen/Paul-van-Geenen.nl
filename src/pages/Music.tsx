@@ -2128,13 +2128,12 @@ export function Music() {
   };
 
   // Start playing a track directly
-  const playTrack = (index: number, format?: 'mp3' | 'audiobook' | 'reflection' | 'video', isFromSwipe = false) => {
+  const playTrack = (index: number, format?: 'mp3' | 'audiobook' | 'reflection' | 'video') => {
     if (autoNextTimeoutRef.current) {
       clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = null;
     }
     clearFadeTimer();
-    setIsSwipeTransition(isFromSwipe);
     const targetTrack = tracks[index] || tracks[0];
     const newSelectedFormat = format || selectedFormat || 'mp3';
     const targetEffectiveFormat = getEffectiveFormat(targetTrack, newSelectedFormat);
@@ -2255,7 +2254,6 @@ export function Music() {
   const [dragX, setDragX] = useState<number>(0);
   const [isSwiping, setIsSwiping] = useState<boolean>(false);
   const [isSwipingRelease, setIsSwipingRelease] = useState<boolean>(false);
-  const [isSwipeTransition, setIsSwipeTransition] = useState<boolean>(false);
   const [slideDirection, setSlideDirection] = useState<'next' | 'prev' | null>('next');
 
   // Kobo-style Left Vertical Volume Toast Indicator State
@@ -2492,12 +2490,25 @@ export function Music() {
     finishGesture(e.clientX, e.clientY);
   };
 
-  // Next / Previous track actions with seamless acoustic crossfade
+  // Next / Previous track actions with visual slide and acoustic crossfade (ZERO opacity fade)
   const handleNext = () => {
     resetNavBarTimer();
     setSlideDirection('next');
+    const containerWidth = typeof window !== 'undefined' ? window.innerWidth : 400;
     const nextIndex = getNextTrackIndex();
-    playTrack(nextIndex, selectedFormat);
+    const targetTrack = tracks[nextIndex] || tracks[0];
+    const targetEffectiveFormat = getEffectiveFormat(targetTrack, selectedFormat);
+    setIsSwipingRelease(true);
+    setDragX(-containerWidth);
+    startDeckPlayback(targetTrack, targetEffectiveFormat);
+
+    if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+    releaseTimerRef.current = setTimeout(() => {
+      finalizeTrackSwitch(nextIndex, selectedFormat);
+      setDragX(0);
+      setIsSwiping(false);
+      setIsSwipingRelease(false);
+    }, 280);
   };
 
   const handlePrev = () => {
@@ -2516,10 +2527,22 @@ export function Music() {
       return;
     }
 
-    // If already at or near the beginning (<= 2 seconds), go to the previous track
     setSlideDirection('prev');
+    const containerWidth = typeof window !== 'undefined' ? window.innerWidth : 400;
     const prevIndex = getPrevTrackIndex();
-    playTrack(prevIndex, selectedFormat);
+    const targetTrack = tracks[prevIndex] || tracks[0];
+    const targetEffectiveFormat = getEffectiveFormat(targetTrack, selectedFormat);
+    setIsSwipingRelease(true);
+    setDragX(containerWidth);
+    startDeckPlayback(targetTrack, targetEffectiveFormat);
+
+    if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+    releaseTimerRef.current = setTimeout(() => {
+      finalizeTrackSwitch(prevIndex, selectedFormat);
+      setDragX(0);
+      setIsSwiping(false);
+      setIsSwipingRelease(false);
+    }, 280);
   };
 
   // Time format helper (e.g. 3:45)
@@ -3397,110 +3420,75 @@ export function Music() {
             onMouseUp={handleMouseUp}
             onClick={handleScreenTap}
           >
-            {/* Background Image Layer (Seamless 0-Gap 3-Panel Side-by-Side Filmstrip when swiping, Simultaneous Crossfade when not swiping) */}
+            {/* Background Image Layer: Ribbon Filmstrip of previous, current, and next track (Pure physical slide, ZERO opacity fade) */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none bg-black">
-              {(isSwiping || isSwipingRelease) ? (
-                /* Interactive Filmstrip Layer during active touch swipe gesture */
-                <>
-                  {/* Left Panel: Previous Track Image */}
-                  {prevBgImage && (
-                    <div
-                      className="absolute inset-0 w-full h-full overflow-hidden"
-                      style={{
-                        transform: `translateX(calc(-100% + ${dragX}px))`,
-                        transition: isSwipingRelease ? 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
-                      }}
-                    >
-                      <img
-                        src={prevBgImage}
-                        alt={prevTrack?.title || 'Previous track'}
-                        className="w-full h-full object-cover select-none pointer-events-none"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  )}
+              {/* Left Panel: Previous Track Image */}
+              {prevBgImage && (
+                <div
+                  className="absolute inset-0 w-full h-full overflow-hidden"
+                  style={{
+                    transform: `translateX(calc(-100% + ${dragX}px))`,
+                    transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
+                  }}
+                >
+                  <img
+                    src={prevBgImage}
+                    alt={prevTrack?.title || 'Previous track'}
+                    className="w-full h-full object-cover select-none pointer-events-none"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
 
-                  {/* Center Panel: Current Track Image */}
-                  {currBgImage && (
-                    <div
-                      className="absolute inset-0 w-full h-full overflow-hidden"
-                      style={{
-                        transform: `translateX(${dragX}px)`,
-                        transition: isSwipingRelease ? 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
-                      }}
-                    >
-                      <img
-                        src={currBgImage}
-                        alt={currentTrack?.title || 'Current track'}
-                        className="w-full h-full object-cover select-none pointer-events-none"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          const fallback = effectiveOrientation === 'landscape'
-                            ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
-                            : (currentTrack?.landscapeJpg || startupPortrait);
-                          if (fallback && target.src !== fallback) {
-                            target.src = fallback;
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
+              {/* Center Panel: Current Track Image */}
+              {currBgImage && (
+                <div
+                  className="absolute inset-0 w-full h-full overflow-hidden"
+                  style={{
+                    transform: `translateX(${dragX}px)`,
+                    transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
+                  }}
+                >
+                  <img
+                    src={currBgImage}
+                    alt={currentTrack?.title || 'Current track'}
+                    className="w-full h-full object-cover select-none pointer-events-none"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      const fallback = effectiveOrientation === 'landscape'
+                        ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
+                        : (currentTrack?.landscapeJpg || startupPortrait);
+                      if (fallback && target.src !== fallback) {
+                        target.src = fallback;
+                      }
+                    }}
+                  />
+                </div>
+              )}
 
-                  {/* Right Panel: Next Track Image */}
-                  {nextBgImage && (
-                    <div
-                      className="absolute inset-0 w-full h-full overflow-hidden"
-                      style={{
-                        transform: `translateX(calc(100% + ${dragX}px))`,
-                        transition: isSwipingRelease ? 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
-                      }}
-                    >
-                      <img
-                        src={nextBgImage}
-                        alt={nextTrack?.title || 'Next track'}
-                        className="w-full h-full object-cover select-none pointer-events-none"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  )}
-                </>
-              ) : (
-                /* Simultaneous Fade-Out / Fade-In Layer when changing tracks automatically or via controls (Non-swiping) */
-                <AnimatePresence>
-                  {currBgImage ? (
-                    <motion.div
-                      key={`img-${currentTrackIndex}-${currBgImage}`}
-                      initial={isSwipeTransition ? { opacity: 1 } : { opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={isSwipeTransition ? { opacity: 1 } : { opacity: 0 }}
-                      transition={{ duration: isSwipeTransition ? 0 : 1.2, ease: "easeInOut" }}
-                      className="absolute inset-0 w-full h-full overflow-hidden"
-                    >
-                      <img
-                        src={currBgImage}
-                        alt={currentTrack?.title || 'Current track'}
-                        className="w-full h-full object-cover select-none pointer-events-none"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          const fallback = effectiveOrientation === 'landscape'
-                            ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
-                            : (currentTrack?.landscapeJpg || startupPortrait);
-                          if (fallback && target.src !== fallback) {
-                            target.src = fallback;
-                          }
-                        }}
-                      />
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
+              {/* Right Panel: Next Track Image */}
+              {nextBgImage && (
+                <div
+                  className="absolute inset-0 w-full h-full overflow-hidden"
+                  style={{
+                    transform: `translateX(calc(100% + ${dragX}px))`,
+                    transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
+                  }}
+                >
+                  <img
+                    src={nextBgImage}
+                    alt={nextTrack?.title || 'Next track'}
+                    className="w-full h-full object-cover select-none pointer-events-none"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </div>
               )}
 
               {/* Persistent Video Player: Stays continuously mounted across swiping gestures to eliminate black flickering */}
