@@ -12,28 +12,20 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
 
   useEffect(() => {
     // Check if user already saw the intro in this browser session
-    const hasSeen = sessionStorage.getItem('lion_books_intro_seen');
+    const hasSeen = sessionStorage.getItem('lion_books_intro_seen_v3');
     const isLion = isLionBooksDomain();
     const urlParams = new URLSearchParams(window.location.search);
     const forceParam = urlParams.has('intro') || urlParams.has('splash');
 
-    // Show if forced by prop, URL param, or if first time in session (prioritizing lionbooks.nl or initial entry)
+    // Show if forced by prop, URL param, or if first time in session
     if (forceShow || forceParam || (!hasSeen && isLion) || (!hasSeen && window.location.pathname === '/')) {
       setIsVisible(true);
-      sessionStorage.setItem('lion_books_intro_seen', 'true');
-
-      // Auto dismiss after 3.6 seconds total cinematic duration
-      const timer = setTimeout(() => {
-        handleDismiss();
-      }, 3600);
-
-      return () => clearTimeout(timer);
     }
   }, [forceShow]);
 
   const handleDismiss = () => {
     setIsVisible(false);
-    sessionStorage.setItem('lion_books_intro_seen', 'true');
+    sessionStorage.setItem('lion_books_intro_seen_v3', 'true');
     if (onComplete) {
       setTimeout(onComplete, 800);
     }
@@ -47,8 +39,8 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
           initial={{ opacity: 1 }}
           exit={{ 
             opacity: 0,
-            scale: 1.06,
-            filter: 'blur(10px)',
+            scale: 1.08,
+            filter: 'blur(12px)',
             transition: { duration: 0.9, ease: [0.4, 0, 0.2, 1] }
           }}
           onClick={handleDismiss}
@@ -66,11 +58,11 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ 
-              scale: [0.85, 1.15, 1.05],
-              opacity: [0, 0.5, 0.35]
+              scale: [0.9, 1.15, 0.95],
+              opacity: [0.2, 0.45, 0.3]
             }}
-            transition={{ duration: 3.2, ease: "easeOut" }}
-            className="absolute w-[360px] h-[360px] sm:w-[500px] sm:h-[500px] rounded-full bg-gradient-to-tr from-amber-600/20 via-yellow-500/25 to-amber-200/10 blur-3xl pointer-events-none"
+            transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute w-[360px] h-[360px] sm:w-[520px] sm:h-[520px] rounded-full bg-gradient-to-tr from-amber-600/20 via-yellow-500/25 to-amber-200/10 blur-3xl pointer-events-none"
           />
 
           {/* Central Showcase Container */}
@@ -99,12 +91,12 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
                 className="w-44 h-44 sm:w-60 sm:h-60 md:w-72 md:h-72 object-contain relative drop-shadow-[0_10px_35px_rgba(212,175,55,0.45)]"
                 animate={{
                   filter: [
-                    'drop-shadow(0 10px 25px rgba(212,175,55,0.3))',
-                    'drop-shadow(0 15px 45px rgba(212,175,55,0.6))',
-                    'drop-shadow(0 12px 35px rgba(212,175,55,0.45))'
+                    'drop-shadow(0 10px 25px rgba(212,175,55,0.35))',
+                    'drop-shadow(0 16px 45px rgba(212,175,55,0.65))',
+                    'drop-shadow(0 12px 35px rgba(212,175,55,0.4))'
                   ]
                 }}
-                transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
               />
             </motion.div>
 
@@ -123,7 +115,7 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
               <motion.div
                 initial={{ opacity: 0, letterSpacing: '0.2em' }}
                 animate={{ opacity: 1, letterSpacing: '0.45em' }}
-                transition={{ delay: 1.0, duration: 1.1, ease: "easeOut" }}
+                transition={{ delay: 0.9, duration: 1.1, ease: "easeOut" }}
                 className="text-xs sm:text-sm md:text-base font-light text-amber-300/90 tracking-[0.45em] uppercase font-sans"
               >
                 Publishing
@@ -134,7 +126,7 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
             <motion.div
               initial={{ scaleX: 0, opacity: 0 }}
               animate={{ scaleX: 1, opacity: 1 }}
-              transition={{ delay: 1.3, duration: 0.8, ease: "easeOut" }}
+              transition={{ delay: 1.2, duration: 0.8, ease: "easeOut" }}
               className="w-32 sm:w-48 h-[1px] bg-gradient-to-r from-transparent via-[#C9A96E]/70 to-transparent my-4 sm:my-5"
             />
 
@@ -142,22 +134,27 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.85 }}
-              transition={{ delay: 1.6, duration: 0.8 }}
+              transition={{ delay: 1.4, duration: 0.8 }}
               className="text-xs sm:text-sm font-serif italic text-amber-100/70 tracking-widest"
             >
               Uitgeversfonds van Paul van Geenen
             </motion.p>
-          </div>
 
-          {/* Subtle click to skip indicator */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.4 }}
-            transition={{ delay: 1.8, duration: 0.6 }}
-            className="absolute bottom-6 sm:bottom-8 text-[11px] font-sans text-amber-200/50 tracking-widest uppercase hover:opacity-90 transition-opacity"
-          >
-            Tik om direct te openen &rarr;
-          </motion.div>
+            {/* Explicit interactive action button: Tik om verder te gaan */}
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.8, duration: 0.7 }}
+              className="mt-8 sm:mt-10"
+            >
+              <div 
+                className="inline-flex items-center gap-3 px-7 py-3.5 rounded-full bg-gradient-to-r from-amber-500/15 via-amber-400/25 to-amber-500/15 border border-earth-gold/60 text-amber-200 hover:text-white font-sans text-xs sm:text-sm tracking-[0.22em] uppercase transition-all duration-300 shadow-[0_0_25px_rgba(212,175,55,0.25)] hover:shadow-[0_0_40px_rgba(212,175,55,0.5)] hover:scale-105 hover:border-earth-gold active:scale-95"
+              >
+                <span>Tik om verder te gaan</span>
+                <span className="text-earth-gold font-bold text-base">&rarr;</span>
+              </div>
+            </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
