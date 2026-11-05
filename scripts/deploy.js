@@ -87,11 +87,16 @@ async function deploy() {
       console.log(`✅ ${imageFiles.length} afbeeldingen gesynchroniseerd!`);
     }
 
-    // 4. Upload .htaccess
+    // 4. Upload .htaccess & manifest.json
     const localHtaccess = path.join(DIST_DIR, '.htaccess');
     if (fs.existsSync(localHtaccess)) {
       await sftp.fastPut(localHtaccess, `${REMOTE_ROOT}/.htaccess`);
       console.log('✅ .htaccess geüpload');
+    }
+    const localManifest = path.join(DIST_DIR, 'manifest.json');
+    if (fs.existsSync(localManifest)) {
+      await sftp.fastPut(localManifest, `${REMOTE_ROOT}/manifest.json`);
+      console.log('✅ manifest.json geüpload');
     }
 
     // 5. Upload index.html (as the final atomic step so users get new assets seamlessly)

@@ -234,12 +234,8 @@ class EqualizerEngine {
         this.masterGain.gain.setValueAtTime(1, ctx.currentTime);
       }
 
-      // Als er al een ander element actief was, pauzeer en ontkoppel die eerst
-      if (this.activeElement && this.activeElement !== element) {
-        try {
-          this.activeElement.pause();
-          this.activeElement.volume = 0;
-        } catch (e) {}
+      // Als er al een ander gepauzeerd element gekoppeld was, ontkoppel de bron (laat een lopende crossfade van startDeckPlayback netjes uitfaden)
+      if (this.activeElement && this.activeElement !== element && this.activeElement.paused) {
         const oldSource = this.connectedSources.get(this.activeElement);
         if (oldSource) {
           try {

@@ -256,7 +256,7 @@ interface MusicResponse {
 
 export const sanitizeMediaUrl = (url?: string): string | undefined => {
   if (!url || typeof url !== 'string') return undefined;
-  const trimmed = url.trim();
+  const trimmed = url.trim().replace(/^https?:\/\/(www\.)?(paulvangeenen|lionbooks)\.nl/i, '');
   if (!trimmed) return undefined;
   try {
     return encodeURI(decodeURI(trimmed));
@@ -769,6 +769,9 @@ export function Music() {
   const enterBrowserFullscreenSafely = () => {
     try {
       if (typeof document === 'undefined') return;
+      if (typeof navigator !== 'undefined' && 'userActivation' in navigator && !(navigator as any).userActivation?.isActive) {
+        return;
+      }
       const doc = document as any;
       const isAlreadyFs = !!(
         doc.fullscreenElement ||
@@ -1057,14 +1060,21 @@ export function Music() {
 
       // Source 1: Direct TransIP Database Bridge (/api/music_database.php?action=get_catalog)
       try {
-        const bridgeUrl = localStorage.getItem('transip_music_api_url') || 'https://paulvangeenen.nl/api/music_database.php';
+        const bridgeUrl = localStorage.getItem('transip_music_api_url') || '/api/music_database.php';
         const apiKey = localStorage.getItem('transip_music_api_key') || 'music-secret-key-paul-2026';
         const targetUrl = bridgeUrl.includes('?') ? `${bridgeUrl}&action=get_catalog` : `${bridgeUrl}?action=get_catalog`;
-        const res = await fetch(targetUrl, {
+        let res = await fetch(targetUrl, {
           cache: 'no-store',
           headers: { 'X-API-Key': apiKey }
         });
-        const contentType = res.headers.get('content-type') || '';
+        let contentType = res.headers.get('content-type') || '';
+        if (!res.ok || !contentType.includes('application/json')) {
+          res = await fetch('https://paulvangeenen.nl/api/music_database.php?action=get_catalog', {
+            cache: 'no-store',
+            headers: { 'X-API-Key': apiKey }
+          });
+          contentType = res.headers.get('content-type') || '';
+        }
         if (res.ok && contentType.includes('application/json')) {
           const data: any = await res.json();
           if (isMounted && data.success && data.tracks && data.tracks.length > 0) {
@@ -1074,11 +1084,11 @@ export function Music() {
               setAlbums(data.albums);
               setSelectedAlbum((prev) => prev || data.albums[0].title);
             }
-            if (data.startupPortrait) setStartupPortrait(data.startupPortrait);
-            if (data.startupLandscape) setStartupLandscape(data.startupLandscape);
-            if (data.startupPortraitMov) setStartupPortraitMov(data.startupPortraitMov);
-            if (data.startupLandscapeMov) setStartupLandscapeMov(data.startupLandscapeMov);
-            if (data.startupAudio) setStartupAudio(data.startupAudio);
+            if (data.startupPortrait) setStartupPortrait(sanitizeMediaUrl(data.startupPortrait) || data.startupPortrait);
+            if (data.startupLandscape) setStartupLandscape(sanitizeMediaUrl(data.startupLandscape) || data.startupLandscape);
+            if (data.startupPortraitMov) setStartupPortraitMov(sanitizeMediaUrl(data.startupPortraitMov) || data.startupPortraitMov);
+            if (data.startupLandscapeMov) setStartupLandscapeMov(sanitizeMediaUrl(data.startupLandscapeMov) || data.startupLandscapeMov);
+            if (data.startupAudio) setStartupAudio(sanitizeMediaUrl(data.startupAudio) || data.startupAudio);
             loadedSuccessfully = true;
           }
         }
@@ -1649,7 +1659,15 @@ export function Music() {
     if (phase === 'player' && effectiveFormat === 'video' && currentMediaUrl) {
       const vid = videoRef.current;
       if (vid) {
-        shouldAutoPlayRef.current = true;
+        const targetEncodedUrl = encodeURI(currentMediaUrl);
+        const isDifferent =
+          !vid.src ||
+          (vid.src !== currentMediaUrl &&
+            !vid.src.endsWith(targetEncodedUrl) &&
+            decodeURIComponent(vid.src) !== decodeURIComponent(currentMediaUrl));
+        if (isDifferent) {
+          vid.src = currentMediaUrl;
+        }
         if (vid.paused) {
           startPlaybackWithVolumeRamp(vid);
         }
@@ -1892,18 +1910,16 @@ export function Music() {
     // Als audio wordt gestart, pauzeer en ontkoppel video & intro audio.
     // Als video wordt gestart, pauzeer en ontkoppel intro audio.
     if (el === audioRefA.current || el === audioRefB.current) {
-      if (videoRef.current) {
+      if (videoRef.current && !videoRef.current.paused) {
         try {
           videoRef.current.pause();
           videoRef.current.currentTime = 0;
-          videoRef.current.removeAttribute('src');
-          videoRef.current.load();
           equalizerEngine.detachMediaElement(videoRef.current);
         } catch (e) {}
       }
     } else if (el === videoRef.current) {
       [audioRefA.current, audioRefB.current].forEach(a => {
-        if (a && a !== el) {
+        if (a && a !== el && !a.paused) {
           try {
             a.pause();
             a.currentTime = 0;
@@ -1913,14 +1929,12 @@ export function Music() {
       });
     }
 
-    if (introAudioRef.current) {
+    if (introAudioRef.current && !introAudioRef.current.paused) {
       try {
         introAudioRef.current.pause();
         introAudioRef.current.currentTime = 0;
       } catch (e) {}
     }
-
-    enterBrowserFullscreenSafely();
 
     if (!isIOS && !isMobileDevice) {
       try {
@@ -1928,6 +1942,9 @@ export function Music() {
         equalizerEngine.onResumeMediaElement(el, 150);
       } catch (e) {}
     }
+
+    el.muted = isMuted;
+    setIsAutoplayMuted(false);
 
     const targetVol = isMuted ? 0 : volume;
     if (targetVol <= 0) {
@@ -1950,6 +1967,16 @@ export function Music() {
 
     if (playPromise !== undefined) {
       playPromise.then(runRamp).catch(e => {
+        // Ignore AbortError: this occurs naturally when switching tracks/formats or pausing while loading
+        if (!e || e.name === 'AbortError') {
+          return;
+        }
+        // Only fall back to muted autoplay when the browser explicitly blocks unmuted autoplay (NotAllowedError)
+        if (e.name !== 'NotAllowedError') {
+          console.warn('Media playback error:', e);
+          return;
+        }
+
         console.warn('Playback with audio blocked by browser policy:', e);
         el.muted = true;
         setIsAutoplayMuted(true);
@@ -1959,8 +1986,10 @@ export function Music() {
             setIsPlaying(true);
             shouldAutoPlayRef.current = false;
           }).catch(err2 => {
-            console.warn('Muted autoplay also blocked:', err2);
-            shouldAutoPlayRef.current = true;
+            if (err2 && err2.name !== 'AbortError') {
+              console.warn('Muted autoplay also blocked:', err2);
+              shouldAutoPlayRef.current = true;
+            }
           });
         }
 
@@ -1982,6 +2011,9 @@ export function Music() {
           if (el) {
             el.muted = isMuted;
             setIsAutoplayMuted(false);
+            if (el.paused) {
+              el.play().catch(() => {});
+            }
             fadeToVolume(el, targetVol, durationMs);
           }
         };
@@ -2080,7 +2112,7 @@ export function Music() {
     targetTrack: Track,
     targetEffectiveFormat: 'mp3' | 'audiobook' | 'reflection' | 'video'
   ) => {
-    if (introAudioRef.current) {
+    if (introAudioRef.current && !introAudioRef.current.paused) {
       try {
         introAudioRef.current.pause();
         introAudioRef.current.currentTime = 0;
@@ -2099,40 +2131,48 @@ export function Music() {
       incomingEl = nextDeck === 'A' ? audioRefA.current : audioRefB.current;
     }
 
+    if (incomingEl) {
+      clearElFadeTimer(incomingEl);
+    }
+
     // Smoothly fade OUT outgoing track over 320ms, then pause and reset
-    if (outgoingEl && outgoingEl !== incomingEl && !outgoingEl.paused) {
-      fadeToVolume(outgoingEl, 0, 320, () => {
+    if (outgoingEl && outgoingEl !== incomingEl) {
+      if (!outgoingEl.paused) {
+        fadeToVolume(outgoingEl, 0, 320, () => {
+          try {
+            outgoingEl.pause();
+            outgoingEl.currentTime = 0;
+            if (!isIOS && !isMobileDevice) {
+              equalizerEngine.detachMediaElement(outgoingEl);
+            }
+          } catch (e) {}
+        });
+      } else if (!isIOS && !isMobileDevice) {
         try {
-          outgoingEl.pause();
-          outgoingEl.currentTime = 0;
-          if (outgoingEl === videoRef.current && targetEffectiveFormat !== 'video') {
-            outgoingEl.removeAttribute('src');
-            outgoingEl.load();
-          }
-          if (!isIOS && !isMobileDevice) {
-            equalizerEngine.detachMediaElement(outgoingEl);
-          }
+          equalizerEngine.detachMediaElement(outgoingEl);
         } catch (e) {}
-      });
+      }
     }
 
     const targetMediaUrl = targetTrack ? getMediaUrl(targetTrack, targetEffectiveFormat) : undefined;
     if (incomingEl && targetMediaUrl) {
       const targetEncodedUrl = encodeURI(targetMediaUrl);
-      const isDifferent = incomingEl.src !== targetMediaUrl && !incomingEl.src.endsWith(targetEncodedUrl) && decodeURIComponent(incomingEl.src) !== targetMediaUrl;
+      const isDifferent =
+        !incomingEl.src ||
+        (incomingEl.src !== targetMediaUrl &&
+          !incomingEl.src.endsWith(targetEncodedUrl) &&
+          decodeURIComponent(incomingEl.src) !== decodeURIComponent(targetMediaUrl));
 
       if (isDifferent) {
         incomingEl.src = targetMediaUrl;
-        incomingEl.currentTime = 0;
-        try {
-          incomingEl.load();
-        } catch (e) {}
       } else {
-        incomingEl.currentTime = 0;
+        try {
+          incomingEl.currentTime = 0;
+        } catch (e) {}
       }
 
       incomingEl.volume = 0;
-      incomingEl.muted = false;
+      incomingEl.muted = isMuted;
       setIsAutoplayMuted(false);
 
       // Start playback SYNCHRONOUSLY within the user gesture context!
@@ -2185,19 +2225,34 @@ export function Music() {
     const targetTrack = tracks[index] || tracks[0];
     const newSelectedFormat = format || selectedFormat || 'mp3';
     const targetEffectiveFormat = getEffectiveFormat(targetTrack, newSelectedFormat);
+    const targetMediaUrl = targetTrack ? getMediaUrl(targetTrack, targetEffectiveFormat) : undefined;
+    const activeEl = targetEffectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
+    const targetEncodedUrl = targetMediaUrl ? encodeURI(targetMediaUrl) : '';
+    const isAlreadyLoadedOnActiveEl = Boolean(
+      activeEl &&
+      activeEl.src &&
+      targetMediaUrl &&
+      (activeEl.src === targetMediaUrl ||
+        activeEl.src.endsWith(targetEncodedUrl) ||
+        decodeURIComponent(activeEl.src) === decodeURIComponent(targetMediaUrl))
+    );
 
-    // If the EXACT same track and format is already loaded/playing and not in startup splash:
-    if (index === currentTrackIndex && targetEffectiveFormat === effectiveFormat && phase !== 'startup') {
-      setPhase('player');
+    // Only restart on the same deck if the exact track + media URL is ALREADY loaded on the active element in player mode:
+    if (
+      index === currentTrackIndex &&
+      targetEffectiveFormat === effectiveFormat &&
+      phase === 'player' &&
+      isAlreadyLoadedOnActiveEl &&
+      activeEl
+    ) {
       setShowNavBar(false);
       resetRatingButtonsTimer();
-      const el = targetEffectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
-      if (el) {
-        el.currentTime = 0;
-        setCurrentTime(0);
-        savedTimeRef.current = 0;
-        startPlaybackWithVolumeRamp(el, 750);
-      }
+      try {
+        activeEl.currentTime = 0;
+      } catch (e) {}
+      setCurrentTime(0);
+      savedTimeRef.current = 0;
+      startPlaybackWithVolumeRamp(activeEl, 750);
       return;
     }
 
@@ -3529,7 +3584,6 @@ export function Music() {
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
-            onClick={handleScreenTap}
           >
             {/* Background Image Layer: Ribbon Filmstrip of previous, current, and next track (Pure physical slide, ZERO opacity fade) */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none bg-black">
@@ -3621,51 +3675,60 @@ export function Music() {
               )}
 
               {/* Persistent Video Player: Stays continuously mounted across swiping gestures to eliminate black flickering */}
-              {effectiveFormat === 'video' && currentMediaUrl && (
-                <div
-                  className="absolute inset-0 w-full h-full overflow-hidden z-10 flex items-center justify-center bg-transparent pointer-events-none"
-                  style={{
-                    transform: (isSwiping || isSwipingRelease) ? `translateX(${dragX}px)` : 'none',
-                    transition: isSwipingRelease ? 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
+              <div
+                className={`absolute inset-0 w-full h-full overflow-hidden z-10 flex items-center justify-center bg-transparent pointer-events-none ${
+                  effectiveFormat === 'video' && currentMediaUrl ? 'opacity-100' : 'opacity-0'
+                }`}
+                style={{
+                  transform: (isSwiping || isSwipingRelease) ? `translateX(${dragX}px)` : 'none',
+                  transition: isSwipingRelease ? 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
+                }}
+              >
+                <video
+                  ref={videoRef}
+                  playsInline
+                  preload="auto"
+                  className={`w-full h-full ${effectiveOrientation === 'portrait' ? 'object-cover' : 'object-contain'} bg-transparent`}
+                  onTimeUpdate={() => {
+                    if (effectiveFormat === 'video') handleMediaTimeUpdate(videoRef.current);
                   }}
-                >
-                  <video
-                    ref={videoRef}
-                    src={currentMediaUrl}
-                    playsInline
-                    preload="auto"
-                    className={`w-full h-full ${effectiveOrientation === 'portrait' ? 'object-cover' : 'object-contain'} bg-transparent`}
-                    onTimeUpdate={() => handleMediaTimeUpdate(videoRef.current)}
-                    onCanPlay={() => {
-                      if (videoRef.current && (shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
+                  onCanPlay={() => {
+                    if (videoRef.current && (shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
+                      shouldAutoPlayRef.current = false;
+                      isDirectVideoRequested.current = false;
+                      startPlaybackWithVolumeRamp(videoRef.current);
+                    }
+                  }}
+                  onLoadedData={() => {
+                    if (videoRef.current && (shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
+                      shouldAutoPlayRef.current = false;
+                      isDirectVideoRequested.current = false;
+                      startPlaybackWithVolumeRamp(videoRef.current);
+                    }
+                  }}
+                  onLoadedMetadata={() => {
+                    if (videoRef.current && effectiveFormat === 'video') {
+                      if (savedTimeRef.current > 0) {
+                        videoRef.current.currentTime = savedTimeRef.current;
+                      }
+                      if (shouldAutoPlayRef.current || isDirectVideoRequested.current) {
                         shouldAutoPlayRef.current = false;
                         isDirectVideoRequested.current = false;
                         startPlaybackWithVolumeRamp(videoRef.current);
                       }
-                    }}
-                    onLoadedData={() => {
-                      if (videoRef.current && (shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
-                        shouldAutoPlayRef.current = false;
-                        isDirectVideoRequested.current = false;
-                        startPlaybackWithVolumeRamp(videoRef.current);
-                      }
-                    }}
-                    onLoadedMetadata={() => {
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = savedTimeRef.current || 0;
-                        if ((shouldAutoPlayRef.current || isDirectVideoRequested.current) && effectiveFormat === 'video') {
-                          shouldAutoPlayRef.current = false;
-                          isDirectVideoRequested.current = false;
-                          startPlaybackWithVolumeRamp(videoRef.current);
-                        }
-                      }
-                    }}
-                    onEnded={handleTrackEnded}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                  />
-                </div>
-              )}
+                    }
+                  }}
+                  onEnded={() => {
+                    if (effectiveFormat === 'video') handleTrackEnded();
+                  }}
+                  onPlay={() => {
+                    if (effectiveFormat === 'video') setIsPlaying(true);
+                  }}
+                  onPause={() => {
+                    if (effectiveFormat === 'video') setIsPlaying(false);
+                  }}
+                />
+              </div>
 
               {/* Fallback gradient for contrast when UI is visible; hidden during swipe so ONLY cover images show */}
               <div className={`absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/60 z-[1] transition-opacity duration-300 ${(isSwiping || !showNavBar) ? 'opacity-0' : 'opacity-100'}`} />
@@ -4585,7 +4648,9 @@ export function Music() {
         }}
         onLoadedMetadata={() => {
           if (audioRefA.current && activeDeckRef.current === 'A') {
-            audioRefA.current.currentTime = savedTimeRef.current || 0;
+            if (savedTimeRef.current > 0) {
+              audioRefA.current.currentTime = savedTimeRef.current;
+            }
             if (shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
               shouldAutoPlayRef.current = false;
               startPlaybackWithVolumeRamp(audioRefA.current);
@@ -4631,7 +4696,9 @@ export function Music() {
         }}
         onLoadedMetadata={() => {
           if (audioRefB.current && activeDeckRef.current === 'B') {
-            audioRefB.current.currentTime = savedTimeRef.current || 0;
+            if (savedTimeRef.current > 0) {
+              audioRefB.current.currentTime = savedTimeRef.current;
+            }
             if (shouldAutoPlayRef.current && phase === 'player' && effectiveFormat !== 'video') {
               shouldAutoPlayRef.current = false;
               startPlaybackWithVolumeRamp(audioRefB.current);

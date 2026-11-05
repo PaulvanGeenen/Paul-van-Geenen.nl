@@ -374,7 +374,6 @@ export const EqualizerModal: React.FC<EqualizerModalProps> = ({ isOpen, onClose,
                           disabled={!preferences.enabled}
                           onChange={(e) => handleBandChange(idx, parseFloat(e.target.value))}
                           className="h-28 sm:h-32 -rotate-90 w-28 sm:w-32 accent-earth-gold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed z-10"
-                          style={{ WebkitAppearance: 'slider-vertical' as any }}
                           title={`${band.label} (${subLabel}): ${gain} dB`}
                         />
                       </div>
