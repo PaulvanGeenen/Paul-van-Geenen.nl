@@ -559,13 +559,8 @@ export function Music() {
   });
   
   // Desktop display mode: 'iphone' | 'fullscreen'
-  // When opened via direct track link (audio or video), automatically defaults to 'fullscreen'
-  const [desktopViewMode, setDesktopViewMode] = useState<'iphone' | 'fullscreen'>(() => {
-    if (typeof window !== 'undefined' && window.innerWidth >= 768 && checkHasDirectTrackRequest()) {
-      return 'fullscreen';
-    }
-    return 'iphone';
-  });
+  // Defaults to 'fullscreen' so the player opens as an immersive native app across all screens
+  const [desktopViewMode, setDesktopViewMode] = useState<'iphone' | 'fullscreen'>('fullscreen');
   const checkIsMobile = (): boolean => {
     if (typeof window === 'undefined') return false;
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
@@ -770,6 +765,53 @@ export function Music() {
       setShowIosFullscreenGuide(true);
     }
   };
+
+  // Safe helper to automatically request browser native fullscreen on initial user activation or playback
+  const enterBrowserFullscreenSafely = () => {
+    try {
+      if (typeof document === 'undefined') return;
+      const doc = document as any;
+      const isAlreadyFs = !!(
+        doc.fullscreenElement ||
+        doc.webkitFullscreenElement ||
+        doc.mozFullScreenElement ||
+        doc.msFullscreenElement
+      );
+      if (isAlreadyFs) return;
+
+      const docEl = document.documentElement as any;
+      let reqPromise: any = null;
+      if (docEl.requestFullscreen) {
+        reqPromise = docEl.requestFullscreen();
+      } else if (docEl.webkitRequestFullscreen) {
+        reqPromise = docEl.webkitRequestFullscreen();
+      } else if (docEl.mozRequestFullScreen) {
+        reqPromise = docEl.mozRequestFullScreen();
+      } else if (docEl.msRequestFullscreen) {
+        reqPromise = docEl.msRequestFullscreen();
+      }
+      if (reqPromise && typeof reqPromise.catch === 'function') {
+        reqPromise.catch(() => {});
+      }
+    } catch (e) {}
+  };
+
+  // Automatically request browser fullscreen on first user activation when opening the player
+  useEffect(() => {
+    const handleInitialUserGesture = () => {
+      enterBrowserFullscreenSafely();
+    };
+
+    window.addEventListener('click', handleInitialUserGesture, { once: true, passive: true });
+    window.addEventListener('touchstart', handleInitialUserGesture, { once: true, passive: true });
+    window.addEventListener('pointerdown', handleInitialUserGesture, { once: true, passive: true });
+
+    return () => {
+      window.removeEventListener('click', handleInitialUserGesture);
+      window.removeEventListener('touchstart', handleInitialUserGesture);
+      window.removeEventListener('pointerdown', handleInitialUserGesture);
+    };
+  }, []);
 
   // Auto-hide navigation bar timer state
   const [showNavBar, setShowNavBar] = useState(true);
@@ -1879,6 +1921,8 @@ export function Music() {
       } catch (e) {}
     }
 
+    enterBrowserFullscreenSafely();
+
     if (!isIOS && !isMobileDevice) {
       try {
         equalizerEngine.attachMediaElement(el);
@@ -2009,6 +2053,7 @@ export function Music() {
     if (isPlaying) {
       pausePlaybackWithVolumeRamp(el, 300);
     } else {
+      enterBrowserFullscreenSafely();
       setPhase('player');
       shouldAutoPlayRef.current = false;
       setIsPlaying(true);
@@ -2132,6 +2177,7 @@ export function Music() {
 
   // Start playing a track directly
   const playTrack = (index: number, format?: 'mp3' | 'audiobook' | 'reflection' | 'video') => {
+    enterBrowserFullscreenSafely();
     if (autoNextTimeoutRef.current) {
       clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = null;
@@ -2729,8 +2775,12 @@ export function Music() {
               exit={{ opacity: 0 }}
               transition={{ duration: 1.4, ease: [0.4, 0, 0.2, 1] }}
               className="absolute inset-0 z-50 bg-black overflow-hidden flex flex-col items-center justify-center cursor-pointer"
-              onClick={endStartupPhase}
+              onClick={() => {
+                enterBrowserFullscreenSafely();
+                endStartupPhase();
+              }}
               onTouchStart={() => {
+                enterBrowserFullscreenSafely();
                 // Ensure intro audio can start playing if browser blocked initial autoplay
                 if (introAudioRef.current && introAudioRef.current.paused) {
                   introAudioRef.current.play().catch(() => {});
