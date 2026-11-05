@@ -52,6 +52,7 @@ function ScrollToTop() {
 }
 
 import { AudioProvider } from './context/AudioContext';
+import { LionBooksIntro } from './components/ui/LionBooksIntro';
 
 function LoadingScreen() {
   return (
@@ -102,6 +103,7 @@ export default function App() {
   return (
     <AudioProvider>
       <Router>
+        <LionBooksIntro />
         <ScrollToTop />
         <AnalyticsTracker />
         <LayoutWrapper>
