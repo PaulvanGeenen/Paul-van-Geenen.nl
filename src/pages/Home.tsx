@@ -5,13 +5,19 @@ import { Link } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { useAudio } from '../context/AudioContext';
 import page9Img from '../assets/images/hoofdstuk9.jpg';
+import { isLionBooksDomain } from '../utils/domain';
 
 export function Home() {
   const { ambientMuted, toggleAmbientMute, setIsAmbientPlaying, masterVolume } = useAudio();
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [isPhotoHovered, setIsPhotoHovered] = useState(false);
+  const [isLionBooks, setIsLionBooks] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    setIsLionBooks(isLionBooksDomain());
+  }, []);
 
   useEffect(() => {
     const playVideo = async () => {
@@ -36,6 +42,37 @@ export function Home() {
 
   return (
     <div className="flex flex-col">
+      {/* Lion Books Publishing Welcome Banner (Shown when visiting via lionbooks.nl) */}
+      {isLionBooks && (
+        <div className="bg-gradient-to-r from-[#171412] via-[#241e19] to-[#171412] border-b border-earth-gold/40 px-6 py-4 shadow-2xl relative z-20">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <img 
+                src="/images/lion-books-logo.jpg" 
+                alt="Lion Books Publishing" 
+                className="w-12 h-12 md:w-14 md:h-14 rounded-xl object-cover border border-earth-gold/50 shadow-md shrink-0" 
+              />
+              <div className="text-center sm:text-left">
+                <div className="flex items-center justify-center sm:justify-start gap-2">
+                  <span className="font-serif font-bold text-white text-base md:text-lg tracking-wide">Lion Books Publishing</span>
+                  <span className="px-2 py-0.5 rounded-full bg-earth-gold/20 text-earth-gold border border-earth-gold/40 text-[10px] font-bold uppercase tracking-wider">Uitgeverij</span>
+                </div>
+                <p className="text-xs text-earth-light/85 font-light mt-0.5">
+                  Officiële imprint voor <em>De Geboorte van de Leeuw</em>, <em>De Echo</em> en <em>Koester het Leven</em>
+                </p>
+              </div>
+            </div>
+            <Link 
+              to="/boeken" 
+              className="px-4 py-2 rounded-xl bg-earth-gold hover:bg-earth-gold/90 text-black text-xs font-bold transition-all shadow-md shrink-0 flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Bekijk het boekenfonds</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
       <section className="relative min-h-[65vh] lg:min-h-[75vh] flex items-center bg-earth-dark pt-4">
         <div className="absolute inset-0 z-0 overflow-hidden">

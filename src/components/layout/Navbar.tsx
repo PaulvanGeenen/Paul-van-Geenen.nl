@@ -19,11 +19,17 @@ const NAV_ITEMS = [
 
 import { VolumeControl } from './VolumeControl';
 import { IvoryHeartPendant } from '../ui/IvoryHeartPendant';
+import { isLionBooksDomain } from '../../utils/domain';
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLionBooks, setIsLionBooks] = useState(false);
   const location = useLocation();
+
+  useEffect(() => {
+    setIsLionBooks(isLionBooksDomain());
+  }, [location]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -47,11 +53,31 @@ export function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#2D1E16] border-b border-white/5 h-16 md:h-20">
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-full">
         <div className="flex flex-col gap-1 items-start">
-          <Link to="/" className="flex items-center gap-3 group">
-            <IvoryHeartPendant size="sm" className="shrink-0 -mt-1" />
-            <span className="text-lg md:text-2xl font-serif tracking-tight text-white leading-none">
-              <span className="font-bold">Paul</span> <span className="font-light opacity-80">van Geenen</span>
-            </span>
+          <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group">
+            {isLionBooks ? (
+              <>
+                <img 
+                  src="/images/lion-books-logo.jpg" 
+                  alt="Lion Books Publishing" 
+                  className="w-9 h-9 md:w-11 md:h-11 rounded-xl object-cover border border-earth-gold/50 shadow-md shrink-0 group-hover:scale-105 transition-transform" 
+                />
+                <div className="flex flex-col">
+                  <span className="text-base md:text-xl font-serif font-bold tracking-tight text-white leading-tight">
+                    Lion Books <span className="text-earth-gold font-light text-xs md:text-sm uppercase tracking-wider block sm:inline sm:ml-1">Publishing</span>
+                  </span>
+                  <span className="text-[10px] text-earth-light/60 font-sans hidden sm:block">
+                    Fonds van Paul van Geenen
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <IvoryHeartPendant size="sm" className="shrink-0 -mt-1" />
+                <span className="text-lg md:text-2xl font-serif tracking-tight text-white leading-none">
+                  <span className="font-bold">Paul</span> <span className="font-light opacity-80">van Geenen</span>
+                </span>
+              </>
+            )}
           </Link>
         </div>
         

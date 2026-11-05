@@ -68,6 +68,25 @@ async function deploy() {
       console.log(`✅ Alle ${assetFiles.length} assets succesvol geüpload!`);
     }
 
+    // 3b. Upload images (such as lion-books-logo.jpg)
+    const localImagesDir = path.join(DIST_DIR, 'images');
+    const remoteImagesDir = `${REMOTE_ROOT}/images`;
+    if (fs.existsSync(localImagesDir)) {
+      const imageFiles = fs.readdirSync(localImagesDir);
+      for (const file of imageFiles) {
+        const localPath = path.join(localImagesDir, file);
+        const remotePath = `${remoteImagesDir}/${file}`;
+        if (fs.statSync(localPath).isFile()) {
+          try {
+            await sftp.fastPut(localPath, remotePath);
+          } catch (e) {
+            console.log(`Upload note for ${file}:`, e.message);
+          }
+        }
+      }
+      console.log(`✅ ${imageFiles.length} afbeeldingen gesynchroniseerd!`);
+    }
+
     // 4. Upload .htaccess
     const localHtaccess = path.join(DIST_DIR, '.htaccess');
     if (fs.existsSync(localHtaccess)) {

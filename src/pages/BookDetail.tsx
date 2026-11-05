@@ -117,6 +117,12 @@ export function BookDetail() {
                   <h1 className="text-4xl md:text-5xl font-serif font-bold text-earth-dark mt-2 mb-4">{book.title}</h1>
                 )}
                 <p className="text-xl text-earth-warm italic">{book.subtitle}</p>
+                <div className="mt-4 flex items-center gap-3">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-earth-clay/10 border border-earth-clay/20 text-xs text-earth-dark font-medium">
+                    <img src="/images/lion-books-logo.jpg" alt="Lion Books" className="w-5 h-5 rounded object-cover" />
+                    <span>Uitgeverij: <strong>Lion Books Publishing</strong></span>
+                  </div>
+                </div>
               </div>
 
               <div className="prose prose-lg prose-earth text-earth-warm max-w-none space-y-6">
