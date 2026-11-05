@@ -12,7 +12,7 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
 
   useEffect(() => {
     // Check if user already saw the intro in this browser session
-    const hasSeen = sessionStorage.getItem('lion_books_intro_seen_v3');
+    const hasSeen = sessionStorage.getItem('lion_books_intro_seen_v4');
     const isLion = isLionBooksDomain();
     const urlParams = new URLSearchParams(window.location.search);
     const forceParam = urlParams.has('intro') || urlParams.has('splash');
@@ -25,7 +25,7 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
 
   const handleDismiss = () => {
     setIsVisible(false);
-    sessionStorage.setItem('lion_books_intro_seen_v3', 'true');
+    sessionStorage.setItem('lion_books_intro_seen_v4', 'true');
     if (onComplete) {
       setTimeout(onComplete, 800);
     }
@@ -140,20 +140,15 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
               Uitgeversfonds van Paul van Geenen
             </motion.p>
 
-            {/* Explicit interactive action button: Tik om verder te gaan */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.8, duration: 0.7 }}
-              className="mt-8 sm:mt-10"
+            {/* Subtiele, bescheiden hint zonder knop of kaders */}
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.35, 0.25] }}
+              transition={{ delay: 1.8, duration: 1.2 }}
+              className="mt-12 text-[11px] sm:text-xs font-light text-amber-200/40 tracking-[0.25em] lowercase hover:text-amber-200/80 transition-colors"
             >
-              <div 
-                className="inline-flex items-center gap-3 px-7 py-3.5 rounded-full bg-gradient-to-r from-amber-500/15 via-amber-400/25 to-amber-500/15 border border-earth-gold/60 text-amber-200 hover:text-white font-sans text-xs sm:text-sm tracking-[0.22em] uppercase transition-all duration-300 shadow-[0_0_25px_rgba(212,175,55,0.25)] hover:shadow-[0_0_40px_rgba(212,175,55,0.5)] hover:scale-105 hover:border-earth-gold active:scale-95"
-              >
-                <span>Tik om verder te gaan</span>
-                <span className="text-earth-gold font-bold text-base">&rarr;</span>
-              </div>
-            </motion.div>
+              tik om verder te gaan
+            </motion.p>
           </div>
         </motion.div>
       )}
