@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Mail, Github, Linkedin, Instagram, BookOpen } from 'lucide-react';
+import { Mail, Github, Linkedin, Instagram } from 'lucide-react';
 import { NewsletterSignup } from '../ui/NewsletterSignup';
 
 export function Footer() {
@@ -15,7 +15,17 @@ export function Footer() {
       )}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12">
         <div className="col-span-1 md:col-span-2">
-          <BookOpen className="w-10 h-10 text-earth-gold mb-6" />
+          <div className="flex items-center gap-3.5 mb-6">
+            <img 
+              src="/images/lion-books-logo.jpg" 
+              alt="Lion Books Publishing" 
+              className="w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover border border-earth-gold/40 shadow-xl shrink-0" 
+            />
+            <div className="flex flex-col">
+              <span className="font-serif font-bold text-white text-lg md:text-xl tracking-wide">Lion Books Publishing</span>
+              <span className="text-xs text-earth-gold/90 font-mono uppercase tracking-widest">Uitgeversfonds</span>
+            </div>
+          </div>
           <p className="text-earth-light opacity-60 max-w-md leading-relaxed italic">
             Deze vier boeken zijn geen gewone memoires; ze vormen samen één rauw, kloppend levenswerk over de meest allesbepalende periode uit mijn bestaan. Hoewel ze een krachtig chronologisch geheel vormen, zijn de delen ook uitstekend los van elkaar te lezen.
           </p>
@@ -47,16 +57,9 @@ export function Footer() {
 
       {/* Official Lion Books Publishing Imprint Bar */}
       <div className="max-w-7xl mx-auto mt-12 pt-8 border-t border-earth-clay/20 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-earth-light/70">
-        <div className="flex items-center gap-3 text-center sm:text-left">
-          <img 
-            src="/images/lion-books-logo.jpg" 
-            alt="Lion Books Publishing" 
-            className="w-8 h-8 rounded-lg object-cover border border-earth-gold/40 shadow-sm shrink-0 hidden sm:block" 
-          />
-          <p className="font-medium text-white/85">
-            &copy; 2026 Lion Books Publishing | Officiële imprint voor De Geboorte van de Leeuw, De Echo en Koester het Leven
-          </p>
-        </div>
+        <p className="font-medium text-white/85 text-center sm:text-left">
+          &copy; 2026 Lion Books Publishing | Officiële imprint voor De Geboorte van de Leeuw, De Echo en Koester het Leven
+        </p>
         <div className="shrink-0">
           <Link to="/privacy" className="underline hover:text-white transition-colors">Privacyverklaring</Link>
         </div>

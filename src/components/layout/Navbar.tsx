@@ -56,11 +56,13 @@ export function Navbar() {
           <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group">
             {isLionBooks ? (
               <>
-                <img 
-                  src="/images/lion-books-logo.jpg" 
-                  alt="Lion Books Publishing" 
-                  className="w-9 h-9 md:w-11 md:h-11 rounded-xl object-cover border border-earth-gold/50 shadow-md shrink-0 group-hover:scale-105 transition-transform" 
-                />
+                <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl overflow-hidden border border-earth-gold/50 shadow-md shrink-0 bg-[#0e0d0c] flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <img 
+                    src="/images/lion-books-logo.jpg" 
+                    alt="Lion Books Emblem" 
+                    className="w-full h-full object-cover object-[center_30%] scale-[1.38] pointer-events-none" 
+                  />
+                </div>
                 <div className="flex flex-col">
                   <span className="text-base md:text-xl font-serif font-bold tracking-tight text-white leading-tight">
                     Lion Books <span className="text-earth-gold font-light text-xs md:text-sm uppercase tracking-wider block sm:inline sm:ml-1">Publishing</span>
