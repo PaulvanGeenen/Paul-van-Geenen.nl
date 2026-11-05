@@ -873,6 +873,23 @@ export function Music() {
   const [autoAdvanceFade, setAutoAdvanceFade] = useState<{ outgoing: string } | null>(null);
   const autoAdvanceFadeTimerRef = useRef<any>(null);
 
+  // End-of-track cinematic transition: image fades out to black -> next image fades in -> next track starts
+  const END_FADE_OUT_MS = 1400;
+  const END_HOLD_MS = 350;
+  const END_FADE_IN_MS = 1400;
+  const [endTransitionPhase, setEndTransitionPhase] = useState<'idle' | 'fadingOut' | 'fadingIn'>('idle');
+  const endTransitionTimersRef = useRef<any[]>([]);
+  const isEndTransitioningRef = useRef<boolean>(false);
+
+  const cancelEndTransition = () => {
+    endTransitionTimersRef.current.forEach(t => clearTimeout(t));
+    endTransitionTimersRef.current = [];
+    if (isEndTransitioningRef.current) {
+      isEndTransitioningRef.current = false;
+      setEndTransitionPhase('idle');
+    }
+  };
+
   const clearElFadeTimer = (targetEl: HTMLMediaElement | null) => {
     if (!targetEl) return;
     if ((targetEl as any)._fadeTimer) {
@@ -1264,7 +1281,7 @@ export function Music() {
       // Bypass startup/splash directly into player mode for shared links and start playing immediately
       setPhase('player');
       setShowNavBar(false);
-      playTrack(matchedIdx, matchedFormat, false);
+      playTrack(matchedIdx, matchedFormat);
 
       // Als iemand op de site komt met een link naar een track/video:
       // Altijd fullscreen tonen in de positie waarin het device zich dan bevindt.
@@ -1668,7 +1685,8 @@ export function Music() {
         if (isDifferent) {
           vid.src = currentMediaUrl;
         }
-        if (vid.paused) {
+        // During the end-of-track fade transition, only preload; playback starts after the fade-in
+        if (vid.paused && !isEndTransitioningRef.current) {
           startPlaybackWithVolumeRamp(vid);
         }
       }
@@ -1780,6 +1798,8 @@ export function Music() {
   useEffect(() => {
     return () => {
       clearFadeTimer();
+      endTransitionTimersRef.current.forEach(t => clearTimeout(t));
+      endTransitionTimersRef.current = [];
       if (autoAdvanceFadeTimerRef.current) clearTimeout(autoAdvanceFadeTimerRef.current);
       if (navBarTimeoutRef.current) clearTimeout(navBarTimeoutRef.current);
       if (ratingButtonsTimeoutRef.current) clearTimeout(ratingButtonsTimeoutRef.current);
@@ -2074,6 +2094,8 @@ export function Music() {
 
   // Play / Pause toggle with smooth fade-out on stop and smooth fade-in on play
   const togglePlayPause = () => {
+    // Tijdens de filmische eind-overgang start het volgende nummer vanzelf; negeer play/pause dan even
+    if (isEndTransitioningRef.current) return;
     if (autoNextTimeoutRef.current) {
       clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = null;
@@ -2112,6 +2134,7 @@ export function Music() {
     targetTrack: Track,
     targetEffectiveFormat: 'mp3' | 'audiobook' | 'reflection' | 'video'
   ) => {
+    cancelEndTransition();
     if (introAudioRef.current && !introAudioRef.current.paused) {
       try {
         introAudioRef.current.pause();
@@ -2216,6 +2239,7 @@ export function Music() {
 
   // Start playing a track directly
   const playTrack = (index: number, format?: 'mp3' | 'audiobook' | 'reflection' | 'video') => {
+    cancelEndTransition();
     enterBrowserFullscreenSafely();
     if (autoNextTimeoutRef.current) {
       clearTimeout(autoNextTimeoutRef.current);
@@ -2329,31 +2353,73 @@ export function Music() {
       } catch (e) {}
     }
 
-    // 1. LIJST (loopMode === 'all'): Automatisch doorgaan naar volgend nummer met gelijktijdig overvloeien van de beelden
-    if (loopMode === 'all') {
-      const outgoingImg = currBgImage;
-      const nextIndex = getNextTrackIndex();
-      const nextTrackItem = tracks[nextIndex];
-      const incomingImg = nextTrackItem ? getTrackBgImage(nextTrackItem, effectiveOrientation) : null;
+    // 1. LIJST (loopMode === 'all') & 2. 1 TRACK (loopMode === 'one'):
+    // Rustige filmische overgang: huidige afbeelding fade uit naar zwart -> afbeelding van het
+    // (volgende of zelfde) nummer fade in -> pas daarna start het nieuwe nummer.
+    if (loopMode === 'all' || loopMode === 'one') {
+      const targetIndex = loopMode === 'all' ? getNextTrackIndex() : currentTrackIndex;
+      const targetFormat = selectedFormat;
+      const targetTrack = tracks[targetIndex] || tracks[0];
+      const targetEffectiveFormat = getEffectiveFormat(targetTrack, targetFormat);
+      const targetMediaUrl = targetTrack ? getMediaUrl(targetTrack, targetEffectiveFormat) : undefined;
 
-      if (outgoingImg && incomingImg && outgoingImg !== incomingImg) {
-        setAutoAdvanceFade({ outgoing: outgoingImg });
-        if (autoAdvanceFadeTimerRef.current) clearTimeout(autoAdvanceFadeTimerRef.current);
-        autoAdvanceFadeTimerRef.current = setTimeout(() => {
-          setAutoAdvanceFade(null);
-        }, 1300);
+      if (loopMode === 'all') {
+        isDirectVideoRequested.current = false;
       }
 
-      isDirectVideoRequested.current = false;
-      playTrack(nextIndex, selectedFormat);
-      return;
-    }
+      cancelEndTransition();
+      isEndTransitioningRef.current = true;
+      setShowNavBar(false);
+      setEndTransitionPhase('fadingOut');
 
-    // 2. 1 TRACK (loopMode === 'one'): Blijft hetzelfde nummer herhalen
-    if (loopMode === 'one') {
-      autoNextTimeoutRef.current = setTimeout(() => {
-        playTrack(currentTrackIndex, selectedFormat);
-      }, 200);
+      // Stap A: na fade-out (scherm zwart) wisselen we stil naar het nieuwe nummer en laden de media voor
+      const tSwitch = setTimeout(() => {
+        finalizeTrackSwitch(targetIndex, targetFormat);
+        setShowNavBar(false);
+
+        if (targetMediaUrl) {
+          const el = targetEffectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
+          if (el) {
+            const encoded = encodeURI(targetMediaUrl);
+            const isDifferent =
+              !el.src ||
+              (el.src !== targetMediaUrl &&
+                !el.src.endsWith(encoded) &&
+                decodeURIComponent(el.src) !== decodeURIComponent(targetMediaUrl));
+            try {
+              if (isDifferent) {
+                el.src = targetMediaUrl;
+              } else {
+                el.currentTime = 0;
+              }
+              el.volume = 0;
+            } catch (e) {}
+          }
+        }
+
+        // Stap B: afbeelding van het nieuwe nummer fade in
+        const tFadeIn = setTimeout(() => {
+          setEndTransitionPhase('fadingIn');
+
+          // Stap C: na de fade-in start het nieuwe nummer (zacht invaden)
+          const tPlay = setTimeout(() => {
+            isEndTransitioningRef.current = false;
+            setEndTransitionPhase('idle');
+            endTransitionTimersRef.current = [];
+            const el = targetEffectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
+            if (el && targetMediaUrl) {
+              try {
+                el.currentTime = 0;
+              } catch (e) {}
+              savedTimeRef.current = 0;
+              startPlaybackWithVolumeRamp(el, 900);
+            }
+          }, END_FADE_IN_MS);
+          endTransitionTimersRef.current.push(tPlay);
+        }, END_HOLD_MS);
+        endTransitionTimersRef.current.push(tFadeIn);
+      }, END_FADE_OUT_MS);
+      endTransitionTimersRef.current.push(tSwitch);
       return;
     }
 
@@ -3608,23 +3674,16 @@ export function Music() {
                 </div>
               )}
 
-              {/* Outgoing Track Image Overlay on auto-advance: Dissolves simultaneously directly into incoming track image */}
-              {autoAdvanceFade && (
-                <motion.div
-                  key={`auto-fadeout-${autoAdvanceFade.outgoing}`}
-                  initial={{ opacity: 1 }}
-                  animate={{ opacity: 0 }}
-                  transition={{ duration: 1.2, ease: 'easeInOut' }}
-                  className="absolute inset-0 w-full h-full overflow-hidden z-20 pointer-events-none"
-                >
-                  <img
-                    src={autoAdvanceFade.outgoing}
-                    alt="Outgoing track"
-                    className="w-full h-full object-cover select-none pointer-events-none"
-                    referrerPolicy="no-referrer"
-                  />
-                </motion.div>
-              )}
+              {/* End-of-track cinematic fade: fade to black, switch track, then fade the new image in */}
+              <motion.div
+                initial={false}
+                animate={{ opacity: endTransitionPhase === 'fadingOut' ? 1 : 0 }}
+                transition={{
+                  duration: (endTransitionPhase === 'fadingOut' ? END_FADE_OUT_MS : END_FADE_IN_MS) / 1000,
+                  ease: [0.45, 0, 0.55, 1]
+                }}
+                className="absolute inset-0 w-full h-full bg-black z-20 pointer-events-none"
+              />
 
               {/* Center Panel: Current Track Image (Always rendered solid at z-10 for seamless cross-dissolve) */}
               {currBgImage && (
