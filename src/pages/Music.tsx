@@ -385,37 +385,37 @@ const decodeShareCode = (code: string): { trackIdentifier: string; format: 'mp3'
 };
 
 const getAuthoritativeOrientation = (): 'portrait' | 'landscape' => {
-  if (typeof window === 'undefined') return 'landscape';
+  if (typeof window === 'undefined') return 'portrait';
 
-  // 1. Native Modern ScreenOrientation API (Authoritative on modern Android Chrome)
+  // 1. Direct Viewport Dimensions: the absolute ground truth of how the device is held and how the page is rendered
+  if (window.innerWidth && window.innerHeight) {
+    return window.innerWidth >= window.innerHeight ? 'landscape' : 'portrait';
+  }
+
+  // 2. CSS Media Query (extremely reliable across all mobile browsers)
+  if (typeof window.matchMedia === 'function') {
+    if (window.matchMedia('(orientation: landscape)').matches) return 'landscape';
+    if (window.matchMedia('(orientation: portrait)').matches) return 'portrait';
+  }
+
+  // 3. Native ScreenOrientation API
   if (window.screen && window.screen.orientation && window.screen.orientation.type) {
     if (window.screen.orientation.type.startsWith('landscape')) return 'landscape';
     if (window.screen.orientation.type.startsWith('portrait')) return 'portrait';
   }
 
-  // 2. Native ScreenOrientation angle (90 or 270 = landscape, 0 or 180 = portrait)
+  // 4. Native ScreenOrientation angle (90 or 270 = landscape, 0 or 180 = portrait)
   if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
     const angle = Math.abs(window.screen.orientation.angle);
     if (angle === 90 || angle === 270) return 'landscape';
     if (angle === 0 || angle === 180) return 'portrait';
   }
 
-  // 3. CSS Media Query (extremely reliable across all mobile browsers)
-  if (typeof window.matchMedia === 'function') {
-    if (window.matchMedia('(orientation: landscape)').matches) return 'landscape';
-    if (window.matchMedia('(orientation: portrait)').matches) return 'portrait';
-  }
-
-  // 4. window.orientation (standard for iOS Safari and legacy mobile browsers)
+  // 5. window.orientation (standard for iOS Safari and legacy mobile browsers)
   if (typeof window.orientation !== 'undefined') {
     const wo = Math.abs(Number(window.orientation));
     if (wo === 90 || wo === 270) return 'landscape';
     if (wo === 0 || wo === 180) return 'portrait';
-  }
-
-  // 5. Direct Viewport Dimensions Ratio
-  if (typeof window !== 'undefined' && window.innerWidth && window.innerHeight) {
-    return window.innerWidth >= window.innerHeight ? 'landscape' : 'portrait';
   }
 
   return 'portrait';
@@ -804,14 +804,12 @@ export function Music() {
       enterBrowserFullscreenSafely();
     };
 
-    window.addEventListener('click', handleInitialUserGesture, { once: true, passive: true });
-    window.addEventListener('touchstart', handleInitialUserGesture, { once: true, passive: true });
-    window.addEventListener('pointerdown', handleInitialUserGesture, { once: true, passive: true });
+    window.addEventListener('click', handleInitialUserGesture, { passive: true });
+    window.addEventListener('touchend', handleInitialUserGesture, { passive: true });
 
     return () => {
       window.removeEventListener('click', handleInitialUserGesture);
-      window.removeEventListener('touchstart', handleInitialUserGesture);
-      window.removeEventListener('pointerdown', handleInitialUserGesture);
+      window.removeEventListener('touchend', handleInitialUserGesture);
     };
   }, []);
 
@@ -962,24 +960,26 @@ export function Music() {
       const isMobile = checkIsMobile();
       setIsMobileDevice(isMobile);
 
-      // On mobile phones/tablets or screens <= 1400px: match physical device viewport orientation
-      if (isMobile || (typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) <= 1400)) {
+      // On mobile phones/tablets: orientation is 100% strictly driven by physical screen viewport dimensions.
+      // Phone held upright (portrait) => portrait image
+      // Phone held sideways (landscape) => landscape image
+      if (isMobile) {
         const detected = getAuthoritativeOrientation();
-
-        // Check if user manually toggled orientation recently via rotate button
+        setOrientation(detected);
+      } else if (typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) <= 1400) {
+        const detected = getAuthoritativeOrientation();
         if (manualOrientationOverrideRef.current) {
           const elapsed = Date.now() - manualOrientationOverrideRef.current.timestamp;
           if (elapsed < 6000) {
             if (detected === manualOrientationOverrideRef.current.orientation) {
               manualOrientationOverrideRef.current = null;
             } else {
-              return; // Honor user's manual button choice
+              return;
             }
           } else {
             manualOrientationOverrideRef.current = null;
           }
         }
-
         setOrientation(detected);
       }
     };
@@ -994,44 +994,9 @@ export function Music() {
       setTimeout(updateDimensionsAndOrientation, 1000);
     };
 
-    // Gyroscope / accelerometer listener for Android devices where system auto-rotate is disabled
-    let lastTilt: 'portrait' | 'landscape' | null = null;
-    let tiltDebounceTimer: any = null;
-
-    const handleDeviceOrientation = (e: DeviceOrientationEvent) => {
-      if (typeof e.gamma !== 'number' || typeof e.beta !== 'number') return;
-      const absGamma = Math.abs(e.gamma);
-      const absBeta = Math.abs(e.beta);
-
-      let tiltDetected: 'portrait' | 'landscape' | null = null;
-      // Phone held horizontally in landscape (rotated 90 degrees left or right)
-      if (absGamma > 38 && absBeta < 68) {
-        tiltDetected = 'landscape';
-      } else if (absGamma < 25 && e.beta > 25 && e.beta < 95) {
-        // Phone held upright in normal portrait viewing position
-        tiltDetected = 'portrait';
-      }
-
-      if (tiltDetected && tiltDetected !== lastTilt) {
-        lastTilt = tiltDetected;
-        if (tiltDebounceTimer) clearTimeout(tiltDebounceTimer);
-        tiltDebounceTimer = setTimeout(() => {
-          if (manualOrientationOverrideRef.current && Date.now() - manualOrientationOverrideRef.current.timestamp < 3500) {
-            return;
-          }
-          if (tiltDetected) {
-            setOrientation(tiltDetected);
-          }
-        }, 160);
-      }
-    };
-
     updateDimensionsAndOrientation();
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
-    if (typeof window !== 'undefined' && 'ondeviceorientation' in window) {
-      window.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });
-    }
     if (window.screen && window.screen.orientation) {
       window.screen.orientation.addEventListener('change', handleResize);
       window.screen.orientation.onchange = handleResize;
@@ -1050,10 +1015,6 @@ export function Music() {
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
-      if (typeof window !== 'undefined' && 'ondeviceorientation' in window) {
-        window.removeEventListener('deviceorientation', handleDeviceOrientation);
-      }
-      if (tiltDebounceTimer) clearTimeout(tiltDebounceTimer);
       if (window.screen && window.screen.orientation) {
         window.screen.orientation.removeEventListener('change', handleResize);
         window.screen.orientation.onchange = null;
@@ -1532,9 +1493,9 @@ export function Music() {
   const getTrackBgImage = (track: Track | undefined, orient: 'portrait' | 'landscape') => {
     if (!track) return orient === 'portrait' ? startupPortrait : startupLandscape;
     if (orient === 'portrait') {
-      return track.portraitJpg || track.landscapeJpg || startupPortrait;
+      return track.portraitJpg || startupPortrait || track.landscapeJpg;
     } else {
-      return track.landscapeJpg || track.portraitJpg || startupLandscape;
+      return track.landscapeJpg || startupLandscape || track.portraitJpg;
     }
   };
 
@@ -2602,6 +2563,7 @@ export function Music() {
       gestureTypeRef.current = 'none';
 
       resetRatingButtonsTimer();
+      enterBrowserFullscreenSafely();
 
       const activeEl = effectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
       if (isAutoplayMuted && activeEl) {
@@ -3702,8 +3664,8 @@ export function Music() {
                     onError={(e) => {
                       const target = e.currentTarget;
                       const fallback = effectiveOrientation === 'landscape'
-                        ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
-                        : (currentTrack?.landscapeJpg || startupPortrait);
+                        ? (startupLandscape || startupPortrait)
+                        : (startupPortrait || startupLandscape);
                       if (fallback && target.src !== fallback) {
                         target.src = fallback;
                       }
