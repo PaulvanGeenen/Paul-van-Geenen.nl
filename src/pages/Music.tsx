@@ -2229,17 +2229,19 @@ export function Music() {
       } catch (e) {}
     }
 
-    // 1. LIJST (loopMode === 'all'): Automatisch doorgaan naar volgend nummer met beeld fade-out en fade-in
+    // 1. LIJST (loopMode === 'all'): Automatisch doorgaan naar volgend nummer met gelijktijdig overvloeien van de beelden
     if (loopMode === 'all') {
       const outgoingImg = currBgImage;
       const nextIndex = getNextTrackIndex();
+      const nextTrackItem = tracks[nextIndex];
+      const incomingImg = nextTrackItem ? getTrackBgImage(nextTrackItem, effectiveOrientation) : null;
 
-      if (outgoingImg) {
+      if (outgoingImg && incomingImg && outgoingImg !== incomingImg) {
         setAutoAdvanceFade({ outgoing: outgoingImg });
         if (autoAdvanceFadeTimerRef.current) clearTimeout(autoAdvanceFadeTimerRef.current);
         autoAdvanceFadeTimerRef.current = setTimeout(() => {
           setAutoAdvanceFade(null);
-        }, 1000);
+        }, 1300);
       }
 
       isDirectVideoRequested.current = false;
@@ -3503,13 +3505,13 @@ export function Music() {
                 </div>
               )}
 
-              {/* Outgoing Track Image Overlay on auto-advance: Fades out to black */}
+              {/* Outgoing Track Image Overlay on auto-advance: Dissolves simultaneously directly into incoming track image */}
               {autoAdvanceFade && (
                 <motion.div
                   key={`auto-fadeout-${autoAdvanceFade.outgoing}`}
                   initial={{ opacity: 1 }}
                   animate={{ opacity: 0 }}
-                  transition={{ duration: 0.45, ease: 'easeOut' }}
+                  transition={{ duration: 1.2, ease: 'easeInOut' }}
                   className="absolute inset-0 w-full h-full overflow-hidden z-20 pointer-events-none"
                 >
                   <img
@@ -3521,60 +3523,31 @@ export function Music() {
                 </motion.div>
               )}
 
-              {/* Center Panel: Current Track Image */}
+              {/* Center Panel: Current Track Image (Always rendered solid at z-10 for seamless cross-dissolve) */}
               {currBgImage && (
-                autoAdvanceFade ? (
-                  <motion.div
-                    key={`auto-fadein-${currentTrackIndex}-${currBgImage}`}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.55, delay: 0.35, ease: 'easeIn' }}
-                    className="absolute inset-0 w-full h-full overflow-hidden z-10"
-                    style={{
-                      transform: `translateX(${dragX}px)`,
+                <div
+                  className="absolute inset-0 w-full h-full overflow-hidden z-10"
+                  style={{
+                    transform: `translateX(${dragX}px)`,
+                    transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
+                  }}
+                >
+                  <img
+                    src={currBgImage}
+                    alt={currentTrack?.title || 'Current track'}
+                    className="w-full h-full object-cover select-none pointer-events-none"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      const fallback = effectiveOrientation === 'landscape'
+                        ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
+                        : (currentTrack?.landscapeJpg || startupPortrait);
+                      if (fallback && target.src !== fallback) {
+                        target.src = fallback;
+                      }
                     }}
-                  >
-                    <img
-                      src={currBgImage}
-                      alt={currentTrack?.title || 'Current track'}
-                      className="w-full h-full object-cover select-none pointer-events-none"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        const fallback = effectiveOrientation === 'landscape'
-                          ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
-                          : (currentTrack?.landscapeJpg || startupPortrait);
-                        if (fallback && target.src !== fallback) {
-                          target.src = fallback;
-                        }
-                      }}
-                    />
-                  </motion.div>
-                ) : (
-                  <div
-                    className="absolute inset-0 w-full h-full overflow-hidden"
-                    style={{
-                      transform: `translateX(${dragX}px)`,
-                      transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
-                    }}
-                  >
-                    <img
-                      src={currBgImage}
-                      alt={currentTrack?.title || 'Current track'}
-                      className="w-full h-full object-cover select-none pointer-events-none"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        const fallback = effectiveOrientation === 'landscape'
-                          ? (currentTrack?.portraitJpg || startupLandscape || startupPortrait)
-                          : (currentTrack?.landscapeJpg || startupPortrait);
-                        if (fallback && target.src !== fallback) {
-                          target.src = fallback;
-                        }
-                      }}
-                    />
-                  </div>
-                )
+                  />
+                </div>
               )}
 
               {/* Right Panel: Next Track Image */}
