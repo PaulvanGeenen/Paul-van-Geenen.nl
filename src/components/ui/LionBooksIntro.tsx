@@ -16,7 +16,7 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
       const forceParam = urlParams.has('intro') || urlParams.has('splash');
       if (forceShow || forceParam) return true;
 
-      const hasSeen = sessionStorage.getItem('lion_books_intro_seen_v5');
+      const hasSeen = sessionStorage.getItem('lion_books_intro_seen_v6');
       const isLion = isLionBooksDomain();
       return (!hasSeen && isLion) || (!hasSeen && window.location.pathname === '/');
     } catch (e) {
@@ -24,22 +24,22 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
     }
   });
 
-  // Adaptive label: "tik" for touch / mobile devices, "klik" for desktop / laptops
+  // Accurate detection: only show "tik" on true touch-first mobile/tablet devices (coarse pointer without hover)
   const [isTouch, setIsTouch] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
-    return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    return window.matchMedia('(hover: none) and (pointer: coarse)').matches;
   });
 
   useEffect(() => {
-    const checkTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia('(pointer: coarse)').matches;
+    const checkTouch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
     setIsTouch(checkTouch);
   }, []);
 
   const handleDismiss = () => {
     setIsVisible(false);
-    sessionStorage.setItem('lion_books_intro_seen_v5', 'true');
+    sessionStorage.setItem('lion_books_intro_seen_v6', 'true');
     if (onComplete) {
-      setTimeout(onComplete, 800);
+      setTimeout(onComplete, 2200);
     }
   };
 
@@ -51,15 +51,14 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
           initial={{ opacity: 1 }}
           exit={{ 
             opacity: 0,
-            scale: 1.08,
-            filter: 'blur(12px)',
-            transition: { duration: 0.9, ease: [0.4, 0, 0.2, 1] }
+            transition: { duration: 2.2, ease: [0.22, 1, 0.36, 1] }
           }}
           onClick={handleDismiss}
           className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0c0a09] cursor-pointer select-none overflow-hidden"
         >
           {/* Subtle warm ambient radial background glow */}
-          <div 
+          <motion.div 
+            exit={{ opacity: 0, scale: 1.2, transition: { duration: 2.0, ease: "easeInOut" } }}
             className="absolute inset-0 pointer-events-none opacity-60"
             style={{
               background: 'radial-gradient(circle at 50% 45%, rgba(212, 175, 55, 0.18) 0%, rgba(20, 15, 12, 0.8) 55%, #0c0a09 100%)'
@@ -73,12 +72,26 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
               scale: [0.9, 1.15, 0.95],
               opacity: [0.2, 0.45, 0.3]
             }}
+            exit={{
+              scale: 1.35,
+              opacity: 0,
+              transition: { duration: 2.0, ease: "easeInOut" }
+            }}
             transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
             className="absolute w-[360px] h-[360px] sm:w-[520px] sm:h-[520px] rounded-full bg-gradient-to-tr from-amber-600/20 via-yellow-500/25 to-amber-200/10 blur-3xl pointer-events-none"
           />
 
           {/* Central Showcase Container */}
-          <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 max-w-xl">
+          <motion.div 
+            exit={{ 
+              scale: 1.08, 
+              y: -15,
+              opacity: 0, 
+              filter: 'blur(10px)',
+              transition: { duration: 1.8, ease: [0.22, 1, 0.36, 1] } 
+            }}
+            className="relative z-10 flex flex-col items-center justify-center text-center px-6 max-w-xl"
+          >
             
             {/* The Majestic Golden Lion Emblem */}
             <motion.div
@@ -156,12 +169,13 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: [0, 0.45, 0.35] }}
+              exit={{ opacity: 0, transition: { duration: 0.4 } }}
               transition={{ delay: 1.8, duration: 1.2 }}
               className="mt-12 text-[11px] sm:text-xs font-light text-amber-200/40 tracking-[0.25em] lowercase hover:text-amber-200/80 transition-colors cursor-pointer"
             >
               {isTouch ? 'tik om verder te gaan' : 'klik om verder te gaan'}
             </motion.p>
-          </div>
+          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
