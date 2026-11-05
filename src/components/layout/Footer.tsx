@@ -15,15 +15,15 @@ export function Footer() {
       )}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12">
         <div className="col-span-1 md:col-span-2">
-          <div className="flex items-center gap-3.5 mb-6">
+          <div className="flex items-center gap-4 mb-6">
             <img 
-              src="/images/lion-books-logo.jpg" 
+              src="/images/lion-books-emblem.jpg" 
               alt="Lion Books Publishing" 
-              className="w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover border border-earth-gold/40 shadow-xl shrink-0" 
+              className="w-16 h-16 md:w-20 md:h-20 rounded-2xl object-cover border-2 border-earth-gold/50 shadow-2xl shrink-0" 
             />
             <div className="flex flex-col">
-              <span className="font-serif font-bold text-white text-lg md:text-xl tracking-wide">Lion Books Publishing</span>
-              <span className="text-xs text-earth-gold/90 font-mono uppercase tracking-widest">Uitgeversfonds</span>
+              <span className="font-serif font-bold text-white text-xl md:text-2xl tracking-wide">Lion Books Publishing</span>
+              <span className="text-xs text-earth-gold font-mono uppercase tracking-widest mt-0.5">Onafhankelijk Uitgeversfonds</span>
             </div>
           </div>
           <p className="text-earth-light opacity-60 max-w-md leading-relaxed italic">

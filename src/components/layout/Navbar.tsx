@@ -56,18 +56,18 @@ export function Navbar() {
           <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group">
             {isLionBooks ? (
               <>
-                <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl overflow-hidden border border-earth-gold/50 shadow-md shrink-0 bg-[#0e0d0c] flex items-center justify-center group-hover:scale-105 transition-transform">
+                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl overflow-hidden border border-earth-gold/60 shadow-lg shrink-0 bg-[#0e0d0c] flex items-center justify-center group-hover:scale-105 group-hover:border-earth-gold transition-all duration-300">
                   <img 
-                    src="/images/lion-books-logo.jpg" 
+                    src="/images/lion-books-emblem.jpg" 
                     alt="Lion Books Emblem" 
-                    className="w-full h-full object-cover object-[center_30%] scale-[1.38] pointer-events-none" 
+                    className="w-full h-full object-cover pointer-events-none" 
                   />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-base md:text-xl font-serif font-bold tracking-tight text-white leading-tight">
-                    Lion Books <span className="text-earth-gold font-light text-xs md:text-sm uppercase tracking-wider block sm:inline sm:ml-1">Publishing</span>
+                <div className="flex flex-col justify-center">
+                  <span className="text-lg md:text-2xl font-serif font-bold tracking-tight text-white leading-tight">
+                    Lion Books <span className="text-earth-gold font-light text-xs md:text-sm uppercase tracking-widest block sm:inline sm:ml-1.5">Publishing</span>
                   </span>
-                  <span className="text-[10px] text-earth-light/60 font-sans hidden sm:block">
+                  <span className="text-[11px] text-earth-light/60 font-sans hidden sm:block">
                     Fonds van Paul van Geenen
                   </span>
                 </div>
