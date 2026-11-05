@@ -8,24 +8,36 @@ interface LionBooksIntroProps {
 }
 
 export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntroProps) {
-  const [isVisible, setIsVisible] = useState(false);
+  // Synchronous initialization prevents ANY flash/FOUC of the underlying site
+  const [isVisible, setIsVisible] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const forceParam = urlParams.has('intro') || urlParams.has('splash');
+      if (forceShow || forceParam) return true;
+
+      const hasSeen = sessionStorage.getItem('lion_books_intro_seen_v5');
+      const isLion = isLionBooksDomain();
+      return (!hasSeen && isLion) || (!hasSeen && window.location.pathname === '/');
+    } catch (e) {
+      return false;
+    }
+  });
+
+  // Adaptive label: "tik" for touch / mobile devices, "klik" for desktop / laptops
+  const [isTouch, setIsTouch] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  });
 
   useEffect(() => {
-    // Check if user already saw the intro in this browser session
-    const hasSeen = sessionStorage.getItem('lion_books_intro_seen_v4');
-    const isLion = isLionBooksDomain();
-    const urlParams = new URLSearchParams(window.location.search);
-    const forceParam = urlParams.has('intro') || urlParams.has('splash');
-
-    // Show if forced by prop, URL param, or if first time in session
-    if (forceShow || forceParam || (!hasSeen && isLion) || (!hasSeen && window.location.pathname === '/')) {
-      setIsVisible(true);
-    }
-  }, [forceShow]);
+    const checkTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia('(pointer: coarse)').matches;
+    setIsTouch(checkTouch);
+  }, []);
 
   const handleDismiss = () => {
     setIsVisible(false);
-    sessionStorage.setItem('lion_books_intro_seen_v4', 'true');
+    sessionStorage.setItem('lion_books_intro_seen_v5', 'true');
     if (onComplete) {
       setTimeout(onComplete, 800);
     }
@@ -140,14 +152,14 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
               Uitgeversfonds van Paul van Geenen
             </motion.p>
 
-            {/* Subtiele, bescheiden hint zonder knop of kaders */}
+            {/* Subtiele, rustige hint zonder kaders - past zich aan op apparaat */}
             <motion.p
               initial={{ opacity: 0 }}
-              animate={{ opacity: [0, 0.35, 0.25] }}
+              animate={{ opacity: [0, 0.45, 0.35] }}
               transition={{ delay: 1.8, duration: 1.2 }}
-              className="mt-12 text-[11px] sm:text-xs font-light text-amber-200/40 tracking-[0.25em] lowercase hover:text-amber-200/80 transition-colors"
+              className="mt-12 text-[11px] sm:text-xs font-light text-amber-200/40 tracking-[0.25em] lowercase hover:text-amber-200/80 transition-colors cursor-pointer"
             >
-              tik om verder te gaan
+              {isTouch ? 'tik om verder te gaan' : 'klik om verder te gaan'}
             </motion.p>
           </div>
         </motion.div>
