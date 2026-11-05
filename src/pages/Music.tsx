@@ -565,18 +565,17 @@ export function Music() {
     if (typeof window === 'undefined') return false;
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
     const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const isIPad = typeof navigator !== 'undefined' && (
+      navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+    );
+    const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
     const isTouch = typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
-    const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) < 768;
-    return isMobileUA || (isTouch && isSmallScreen);
+    const isSmallOrTabletScreen = typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) <= 1366;
+    return isMobileUA || isIPad || isCoarse || (isTouch && isSmallOrTabletScreen);
   };
 
   const [isMobileDevice, setIsMobileDevice] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    const isTouch = typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
-    const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) < 768;
-    return isMobileUA || (isTouch && isSmallScreen);
+    return checkIsMobile();
   });
   const [isIOS, setIsIOS] = useState(() => {
     if (typeof navigator !== 'undefined') {
@@ -943,8 +942,8 @@ export function Music() {
       const isMobile = checkIsMobile();
       setIsMobileDevice(isMobile);
 
-      // On mobile phones/tablets or screens < 1024px: match physical device viewport orientation
-      if (isMobile || (typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) < 900)) {
+      // On mobile phones/tablets or screens <= 1400px: match physical device viewport orientation
+      if (isMobile || (typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) <= 1400)) {
         const detected = getAuthoritativeOrientation();
 
         // Check if user manually toggled orientation recently via rotate button
@@ -2899,9 +2898,9 @@ export function Music() {
               </div>
             </div>
 
-            {/* Album Grid / Carousel: Portrait = List of all, Landscape = 1 single responsive swipable album (with full tracklist on larger screens/desktop/iPad) */}
+            {/* Album Grid / Carousel: Portrait = Responsive Grid (1 col on mobile, 2 col on tablet/desktop) */}
             {effectiveOrientation === 'portrait' ? (
-              <div className="flex-1 space-y-3.5">
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4 content-start">
                 {orderedAlbums.map((album) => {
                   const albumTracks = tracks.filter(t => (t.album || 'Muzikale Krabbels').toLowerCase() === album.title.toLowerCase());
                   const trackCount = albumTracks.length > 0 ? albumTracks.length : (album.title === 'Muzikale Krabbels' ? tracks.length : 0);
@@ -3447,9 +3446,9 @@ export function Music() {
                     </div>
                   </div>
 
-                  {/* Track List: Full Image Feed in Portrait Mode */}
-                  <div className="space-y-4 sm:space-y-5 flex-1 pb-4">
-                    <div className="flex items-center justify-between mb-1 px-1">
+                  {/* Track List: Responsive Grid in Portrait Mode (1 col on mobile, 2 col on tablet, 3 col on large screens) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 flex-1 pb-4">
+                    <div className="flex items-center justify-between mb-1 px-1 col-span-full">
                       <h4 className="text-xs font-bold uppercase tracking-widest text-white/50">
                         {t.tracklist.tracksHeader(currentAlbumTracks.length)}
                       </h4>
