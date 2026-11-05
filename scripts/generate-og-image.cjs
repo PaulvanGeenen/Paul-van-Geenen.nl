@@ -5,21 +5,21 @@ async function createOgImage() {
   const width = 1200;
   const height = 630;
   
-  // Resize lion emblem to 340x340
+  // Make the lion emblem MUCH bigger (460x460 instead of 340)
   const emblemPath = path.join(__dirname, '../public/images/lion-books-emblem.png');
   const outputPath = path.join(__dirname, '../public/images/lion-books-og.jpg');
   
   const lionResized = await sharp(emblemPath)
-    .resize(340, 340, { fit: 'contain' })
+    .resize(460, 460, { fit: 'contain' })
     .toBuffer();
 
-  // Create high-res SVG overlay
+  // Create high-res SVG overlay: clean, uncluttered, pure luxury
   const svgOverlay = Buffer.from(`
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <radialGradient id="bg-glow" cx="50%" cy="45%" r="60%">
-          <stop offset="0%" stop-color="#2c1e15" stop-opacity="1" />
-          <stop offset="45%" stop-color="#140f0c" stop-opacity="1" />
+        <radialGradient id="bg-glow" cx="50%" cy="45%" r="65%">
+          <stop offset="0%" stop-color="#322217" stop-opacity="1" />
+          <stop offset="40%" stop-color="#18110d" stop-opacity="1" />
           <stop offset="100%" stop-color="#080706" stop-opacity="1" />
         </radialGradient>
         <linearGradient id="gold-text" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -27,39 +27,28 @@ async function createOgImage() {
           <stop offset="45%" stop-color="#F4E4BA" />
           <stop offset="100%" stop-color="#C9A96E" />
         </linearGradient>
-        <linearGradient id="line-gold" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#C9A96E" stop-opacity="0" />
-          <stop offset="50%" stop-color="#D4AF37" stop-opacity="0.9" />
-          <stop offset="100%" stop-color="#C9A96E" stop-opacity="0" />
-        </linearGradient>
       </defs>
 
-      <!-- Rich Charcoal Background with Warm Radial Core -->
+      <!-- Deep Charcoal Background with Strong Warm Core Glow -->
       <rect width="${width}" height="${height}" fill="url(#bg-glow)" />
 
-      <!-- Outer Subtle Gold Border -->
-      <rect x="24" y="24" width="1152" height="582" rx="18" fill="none" stroke="#D4AF37" stroke-opacity="0.25" stroke-width="1.5" />
-      <rect x="32" y="32" width="1136" height="566" rx="14" fill="none" stroke="#D4AF37" stroke-opacity="0.1" stroke-width="1" />
+      <!-- Subtle Luxury Frame Border -->
+      <rect x="20" y="20" width="1160" height="590" rx="20" fill="none" stroke="#D4AF37" stroke-opacity="0.2" stroke-width="1.5" />
 
-      <!-- Typography -->
-      <text x="600" y="440" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="bold" fill="url(#gold-text)" letter-spacing="8">LION BOOKS</text>
-      <text x="600" y="482" text-anchor="middle" font-family="Arial, 'Helvetica Neue', sans-serif" font-size="18" font-weight="300" fill="#E8C872" letter-spacing="14">PUBLISHING</text>
-
-      <line x1="440" y1="510" x2="760" y2="510" stroke="url(#line-gold)" stroke-width="1.5" />
-
-      <text x="600" y="546" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="17" font-style="italic" fill="#E8D5B7" fill-opacity="0.85" letter-spacing="3">Uitgeversfonds van Paul van Geenen</text>
-      <text x="600" y="582" text-anchor="middle" font-family="Arial, 'Helvetica Neue', sans-serif" font-size="13" font-weight="500" fill="#D4AF37" fill-opacity="0.7" letter-spacing="4">WWW.LIONBOOKS.NL</text>
+      <!-- Bold, Crystal Clear 'LION BOOKS' text only -->
+      <text x="600" y="550" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="52" font-weight="bold" fill="url(#gold-text)" letter-spacing="10">LION BOOKS</text>
     </svg>
   `);
 
+  // Center the 460x460 lion: left = (1200 - 460)/2 = 370, top = 40
   await sharp(svgOverlay)
     .composite([
-      { input: lionResized, top: 50, left: 430 }
+      { input: lionResized, top: 40, left: 370 }
     ])
     .jpeg({ quality: 92 })
     .toFile(outputPath);
 
-  console.log('OG image created successfully at:', outputPath);
+  console.log('Clean bold OG image created successfully at:', outputPath);
 }
 
 createOgImage().catch(console.error);
