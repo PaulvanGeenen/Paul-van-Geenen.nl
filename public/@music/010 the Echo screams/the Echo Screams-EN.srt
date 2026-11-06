@@ -1,103 +1,348 @@
-1
-00:00:16,500 --> 00:00:23,200
-The echo screams through empty halls
+﻿1
+00:00:13,582 --> 00:00:16,295
+Cold lead and heavy wood,
 
 2
-00:00:24,000 --> 00:00:30,800
-A shadow dances on the walls
+00:00:16,795 --> 00:00:19,710
+the bellows heave a sigh.
 
 3
-00:00:31,500 --> 00:00:38,200
-I hear the whispers of the past
+00:00:20,462 --> 00:00:23,222
+Melodies forged in dust,
 
 4
-00:00:39,000 --> 00:00:46,500
-A silence that was made to last
+00:00:23,307 --> 00:00:26,137
+rising to the sky.
 
 5
-00:00:47,200 --> 00:00:54,500
-Caught between what was and what will be
+00:00:26,806 --> 00:00:29,588
+The old Vermeulen pipes,
 
 6
-00:00:55,000 --> 00:01:02,800
-Searching for a way to set me free
+00:00:29,887 --> 00:00:32,907
+weeping in the dark,
 
 7
-00:01:03,500 --> 00:01:10,500
-And the echo screams into the night
+00:00:33,615 --> 00:00:36,194
+Tearing open heaven
 
 8
-00:01:11,000 --> 00:01:18,500
-Reaching out for a fading light
+00:00:36,528 --> 00:00:39,107
+to find a single spark.
 
 9
-00:01:19,200 --> 00:01:26,500
-Can you feel the tremble in the air?
+00:00:39,373 --> 00:00:45,271
+And the echo screams  across the hollow years,
 
 10
-00:01:27,000 --> 00:01:34,800
-The echo screams, but no one's there
+00:00:46,350 --> 00:00:49,467
+A silent tidal wave
 
 11
-00:01:35,500 --> 00:01:42,800
-Forty years behind a locked door
+00:00:49,622 --> 00:00:51,664
+of forty years of tears.
 
 12
-00:01:43,200 --> 00:01:50,500
-I cannot hide it anymore
+00:00:51,746 --> 00:00:58,025
+I built a fortress out of cold, unyielding stone,
 
 13
-00:01:51,200 --> 00:01:58,500
-The lion wakes, the beast is near
+00:00:59,327 --> 00:01:02,563
+But the echo always finds me,
 
 14
-00:01:59,000 --> 00:02:06,800
-Drowning out every single fear
+00:01:02,790 --> 00:01:05,930
+always claims its own.
 
 15
-00:02:07,500 --> 00:02:14,800
-Caught between what was and what will be
+00:01:06,396 --> 00:01:09,632
+Luna’s wild hair tangled in the summer heat.
 
 16
-00:02:15,200 --> 00:02:22,800
-Searching for a way to set me free
+00:01:09,744 --> 00:01:13,027
+
 
 17
-00:02:23,500 --> 00:02:30,800
-And the echo screams into the night
+00:01:09,696 --> 00:01:12,739
+A tent in Germany, where two heartbeats meet.
 
 18
-00:02:31,200 --> 00:02:38,800
-Reaching out for a fading light
+00:01:13,111 --> 00:01:17,612
+Two young lions roaring, wild and unbound,
 
 19
-00:02:39,500 --> 00:02:46,800
-Can you feel the tremble in the air?
+00:01:18,014 --> 00:01:21,476
+Before the quiet came, before we hit the ground.
 
 20
-00:02:47,200 --> 00:02:55,000
-The echo screams, but no one's there
+00:01:21,666 --> 00:01:25,511
+It batters at the walls of who I used to be
 
 21
-00:03:11,500 --> 00:03:19,200
-Let the walls come crashing down
+00:01:25,773 --> 00:01:31,290
+Luna, are you still calling out to me?
 
 22
-00:03:19,800 --> 00:03:27,500
-Let the voice reclaim the crown
+00:01:31,969 --> 00:01:37,509
+And the echo screams across the hollow years,
 
 23
-00:03:28,200 --> 00:03:35,500
-And the echo screams into the night
+00:01:38,894 --> 00:01:41,986
+A silent tidal wave
 
 24
-00:03:36,000 --> 00:03:43,500
-Reaching out for a fading light
+00:01:42,249 --> 00:01:45,807
+of forty years of tears.
 
 25
-00:03:44,200 --> 00:03:51,500
-Can you feel the tremble in the air?
+00:01:46,142 --> 00:01:48,613
+Whispers in the hallway,
 
 26
-00:03:52,000 --> 00:04:00,500
-The echo screams, and I am there
+00:01:48,828 --> 00:01:52,004
+rules of kith and kin,
+
+27
+00:01:52,504 --> 00:01:55,191
+Building up the prison
+
+28
+00:01:55,537 --> 00:01:58,546
+that we were captured in.
+
+29
+00:01:58,761 --> 00:02:01,639
+The heavy garage door
+
+30
+00:02:01,806 --> 00:02:04,791
+slamming on our youth,
+
+31
+00:02:05,017 --> 00:02:08,683
+The shadow of the Demon
+
+32
+00:02:08,826 --> 00:02:10,737
+choking out the truth.
+
+33
+00:02:10,832 --> 00:02:17,161
+I built a fortress out of cold, unyielding stone,
+
+34
+00:02:18,211 --> 00:02:21,591
+But the echo always finds me,
+
+35
+00:02:21,734 --> 00:02:24,038
+always claims its own.
+
+36
+00:02:24,217 --> 00:02:28,050
+It batters at the walls of who I used to be
+
+37
+00:02:28,202 --> 00:02:34,519
+Luna, are you still calling out to me?
+
+38
+00:02:38,708 --> 00:02:41,813
+Christmas Eve, the cathedral packed and tight.
+
+39
+00:02:41,825 --> 00:02:45,108
+I saw you standing there in the freezing light.
+
+40
+00:02:45,173 --> 00:02:50,176
+The Demon whispered cold: "Sit still, let her depart."
+
+41
+00:02:50,868 --> 00:02:53,985
+And I froze on the bench,
+
+42
+00:02:54,185 --> 00:02:57,026
+and I broke my own heart.
+
+43
+00:02:57,444 --> 00:03:03,319
+And the echo screams across the hollow years,
+
+44
+00:03:04,290 --> 00:03:07,574
+A silent tidal wave
+
+45
+00:03:07,765 --> 00:03:09,974
+forty years of tears.
+
+46
+00:03:09,986 --> 00:03:16,099
+I built a fortress out of cold, unyielding stone,
+
+47
+00:03:17,425 --> 00:03:20,780
+But the echo always finds me,
+
+48
+00:03:20,899 --> 00:03:24,195
+always claims its own.
+
+49
+00:03:24,238 --> 00:03:30,149
+I watched your lips move through the frost and snow,
+
+50
+00:03:30,972 --> 00:03:34,172
+Words without a sound,
+
+51
+00:03:34,507 --> 00:03:37,122
+forty years ago.
+
+52
+00:03:37,286 --> 00:03:40,355
+A plea without a voice,
+
+53
+00:03:40,450 --> 00:03:43,399
+a cry I couldn't hear,
+
+54
+00:03:43,409 --> 00:03:43,517
+
+
+55
+00:03:43,527 --> 00:03:47,419
+Vibrating in my chest,
+
+56
+00:03:47,567 --> 00:03:49,620
+year after year.
+
+57
+00:03:49,630 --> 00:03:53,582
+It batters at the walls of who I used to be
+
+58
+00:03:53,734 --> 00:03:59,561
+Luna, are you still calling out to me?
+
+59
+00:04:03,074 --> 00:04:09,426
+And the echo screams across the hollow years,
+
+60
+00:04:09,927 --> 00:04:13,282
+A silent tidal wave
+
+61
+00:04:13,496 --> 00:04:16,959
+of forty years of tears.
+
+62
+00:04:17,162 --> 00:04:20,445
+Kneeling in the gravel,
+
+63
+00:04:20,654 --> 00:04:23,138
+on my faded knees,
+
+64
+00:04:23,305 --> 00:04:26,660
+Touching the smooth white stone
+
+65
+00:04:26,780 --> 00:04:29,944
+beneath the silent trees.
+
+66
+00:04:30,149 --> 00:04:32,597
+A heavy golden paw
+
+67
+00:04:32,752 --> 00:04:36,084
+rests gently on my chest:
+
+68
+00:04:36,215 --> 00:04:39,463
+"The echo is your fire, Paul,
+
+69
+00:04:39,497 --> 00:04:41,706
+let the ghosts finally rest."
+
+70
+00:04:41,863 --> 00:04:48,955
+I built a fortress out of cold, unyielding stone,
+
+71
+00:04:49,290 --> 00:04:52,645
+But the echo always finds me,
+
+72
+00:04:52,862 --> 00:04:55,333
+always claims its own.
+
+73
+00:04:55,343 --> 00:04:59,176
+It batters at the walls of who I used to be
+
+74
+00:04:59,499 --> 00:05:06,161
+Luna, are you still calling out to me?
+
+75
+00:05:09,254 --> 00:05:12,251
+The book lies on the table,
+
+76
+00:05:12,437 --> 00:05:16,019
+the ink is wet and red.
+
+77
+00:05:16,356 --> 00:05:18,803
+Every single word
+
+78
+00:05:18,813 --> 00:05:22,169
+is a tear that I have shed.
+
+79
+00:05:22,515 --> 00:05:25,440
+The cage is blown apart,
+
+80
+00:05:25,603 --> 00:05:28,719
+the iron doors are torn,
+
+81
+00:05:28,887 --> 00:05:32,075
+The beast is finally loose,
+
+82
+00:05:32,169 --> 00:05:37,446
+a quiet fury born. Written in my blood...
+
+83
+00:05:37,468 --> 00:05:41,122
+The cage is open wide.
+
+84
+00:05:41,417 --> 00:05:44,068
+No more hiding.
+
+85
+00:05:44,161 --> 00:05:48,448
+The music swells so high
+
+86
+00:05:48,617 --> 00:05:54,623
+The echo screams across the hollow years,
+
+87
+00:05:55,111 --> 00:06:01,821
+And finally we let the ghosts part.
+

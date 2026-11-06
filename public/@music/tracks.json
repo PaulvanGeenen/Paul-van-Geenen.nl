@@ -1,0 +1,247 @@
+{
+  "startupPortrait": "/@music/startup%20portrait.move",
+  "startupLandscape": "/@music/startup%20landscape.move",
+  "albums": [
+    {
+      "id": "muzikale-krabbels",
+      "title": "Muzikale Krabbels",
+      "artist": "Paul van Geenen",
+      "cover": "/@music/_albums/Muzikale%20Krabbels%20Album.jpg",
+      "description": "Verhalen, melodieën en gedachten"
+    },
+    {
+      "id": "de-echo",
+      "title": "De Echo",
+      "artist": "Paul van Geenen",
+      "cover": "/@music/_albums/De%20Echo%20Album.jpg",
+      "description": "Soundtrack"
+    },
+    {
+      "id": "de-geboorte-van-de-leeuw",
+      "title": "De Geboorte van de Leeuw",
+      "artist": "Paul van Geenen",
+      "cover": "/@music/_albums/De%20Geboorte%20van%20de%20Leeuw%20Album.jpg",
+      "description": "Soundtrack"
+    }
+  ],
+  "tracks": [
+    {
+      "id": "001 Leeuw",
+      "order": "001",
+      "title": "Leeuw",
+      "album": "Muzikale Krabbels",
+      "folderName": "001 Leeuw",
+      "mp3": "/@music/001%20Leeuw/Leeuw.mp3",
+      "audiobook": "/@music/001%20Leeuw/Leeuw%20audiobook.wav",
+      "reflection": "/@music/001%20Leeuw/Leeuw%20reflectie.m4a",
+      "portraitJpg": "/@music/001%20Leeuw/Leeuw%20portrait.jpg",
+      "landscapeJpg": "/@music/001%20Leeuw/Leeuw%20landscape.jpg",
+      "thumbnailJpg": "/@music/001%20Leeuw/Leeuw%20thumbnail.jpg",
+      "videoMov": "/@music/001%20Leeuw/Leeuw.mov"
+    },
+    {
+      "id": "002 de Passant",
+      "order": "002",
+      "title": "de Passant",
+      "album": "Muzikale Krabbels",
+      "folderName": "002 de Passant",
+      "mp3": "/@music/002%20de%20Passant/de%20Passant.mp3",
+      "audiobook": "/@music/002%20de%20Passant/de%20Passant%20audiobook.wav",
+      "reflection": "/@music/002%20de%20Passant/de%20Passant%20reflectie.m4a",
+      "portraitJpg": "/@music/002%20de%20Passant/de%20Passant%20portrait.jpg",
+      "landscapeJpg": "/@music/002%20de%20Passant/de%20Passant%20landscape.jpg",
+      "thumbnailJpg": "/@music/002%20de%20Passant/de%20Passant%20thumbnail.jpg"
+    },
+    {
+      "id": "003 in de Leegte",
+      "order": "003",
+      "title": "in de Leegte",
+      "album": "Muzikale Krabbels",
+      "folderName": "003 in de Leegte",
+      "mp3": "/@music/003%20in%20de%20Leegte/in%20de%20Leegte.mp3",
+      "audiobook": "/@music/003%20in%20de%20Leegte/in%20de%20Leegte%20audiobook.wav",
+      "reflection": "/@music/003%20in%20de%20Leegte/in%20de%20Leegte%20reflectie.m4a",
+      "portraitJpg": "/@music/003%20in%20de%20Leegte/in%20de%20Leegte%20portrait.jpg",
+      "landscapeJpg": "/@music/003%20in%20de%20Leegte/in%20de%20Leegte%20landscape.jpg",
+      "thumbnailJpg": "/@music/003%20in%20de%20Leegte/in%20de%20Leegte%20thumbnail.jpg"
+    },
+    {
+      "id": "004 niet meer mijn wereld",
+      "order": "006",
+      "title": "niet meer mijn wereld",
+      "album": "Muzikale Krabbels",
+      "folderName": "004 niet meer mijn wereld",
+      "mp3": "/@music/004%20niet%20meer%20mijn%20wereld/niet%20meer%20mijn%20wereld.mp3",
+      "audiobook": "/@music/004%20niet%20meer%20mijn%20wereld/niet%20meer%20mijn%20wereld%20audiobook.wav",
+      "reflection": "/@music/004%20niet%20meer%20mijn%20wereld/niet%20meer%20mijn%20wereld%20reflectie.m4a",
+      "portraitJpg": "/@music/004%20niet%20meer%20mijn%20wereld/niet%20meer%20mijn%20wereld%20portrait.jpg",
+      "landscapeJpg": "/@music/004%20niet%20meer%20mijn%20wereld/niet%20meer%20mijn%20wereld%20landscape.jpg",
+      "thumbnailJpg": "/@music/004%20niet%20meer%20mijn%20wereld/niet%20meer%20mijn%20wereld%20thumbnail.jpg"
+    },
+    {
+      "id": "005 de Echo",
+      "order": "007",
+      "title": "de Echo",
+      "album": "Muzikale Krabbels",
+      "folderName": "005 de Echo",
+      "mp3": "/@music/005%20de%20Echo/de%20Echo.mp3",
+      "audiobook": "/@music/005%20de%20Echo/de%20Echo%20audiobook.wav",
+      "reflection": "/@music/005%20de%20Echo/de%20Echo%20reflectie.m4a",
+      "portraitJpg": "/@music/005%20de%20Echo/de%20Echo%20portrait.jpg",
+      "landscapeJpg": "/@music/005%20de%20Echo/de%20Echo%20landscape.jpg",
+      "thumbnailJpg": "/@music/005%20de%20Echo/de%20Echo%20thumbnail.jpg",
+      "videoMov": "/@music/005%20de%20Echo/de%20Echo.mov"
+    },
+    {
+      "id": "006 de Tumor",
+      "order": "006",
+      "title": "de Tumor",
+      "album": "Muzikale Krabbels",
+      "folderName": "006 de Tumor",
+      "mp3": "/@music/006%20de%20Tumor/de%20Tumor.mp3",
+      "audiobook": "/@music/006%20de%20Tumor/de%20Tumor%20audiobook.wav",
+      "reflection": "/@music/006%20de%20Tumor/de%20Tumor%20reflectie.m4a",
+      "portraitJpg": "/@music/006%20de%20Tumor/de%20Tumor%20portrait.jpg",
+      "landscapeJpg": "/@music/006%20de%20Tumor/de%20Tumor%20landscape.jpg",
+      "thumbnailJpg": "/@music/006%20de%20Tumor/de%20Tumor%20thumbnail.jpg",
+      "videoMov": "/@music/006%20de%20Tumor/de%20Tumor.mov"
+    },
+        {
+      "id": "006 the Tumor",
+      "order": "006",
+      "title": "the Tumor (rage version)",
+      "album": "Muzikale Krabbels",
+      "folderName": "006 dthe Tumor",
+      "mp3": "/@music/006%20the%20Tumor/the%20Tumor.mp3",
+      "portraitJpg": "/@music/006%20the%20Tumor/the%20Tumor%20portrait.jpg",
+      "landscapeJpg": "/@music/006%20the%20Tumor/the%20Tumor%20landscape.jpg",
+      "thumbnailJpg": "/@music/006%20the%20Tumor/the%20Tumor%20thumbnail.jpg"
+    },
+    {
+      "id": "007 de Sleutel",
+      "order": "008",
+      "title": "de Sleutel",
+      "album": "Muzikale Krabbels",
+      "folderName": "007 de Sleutel",
+      "mp3": "/@music/007%20de%20Sleutel/de%20Sleutel.mp3",
+      "audiobook": "/@music/007%20de%20Sleutel/de%20Sleutel%20audiobook.wav",
+      "reflection": "/@music/007%20de%20Sleutel/de%20Sleutel%20reflectie.m4a",
+      "portraitJpg": "/@music/007%20de%20Sleutel/de%20Sleutel%20portrait.jpg",
+      "landscapeJpg": "/@music/007%20de%20Sleutel/de%20Sleutel%20landscape.jpg",
+      "thumbnailJpg": "/@music/007%20de%20Sleutel/de%20Sleutel%20thumbnail.jpg",
+      "videoMov": "/@music/007%20de%20Sleutel/de%20Sleutel.mov"
+    },
+    {
+      "id": "008 Rumbameisje",
+      "order": "008",
+      "title": "Rumbameisje",
+      "album": "De Geboorte van de Leeuw",
+      "folderName": "008 Rumbameisje",
+      "mp3": "/@music/008%20Rumbameisje/Rumbameisje.mp3",
+      "portraitJpg": "/@music/008%20Rumbameisje/Rumbameisje%20portrait.jpg",
+      "landscapeJpg": "/@music/008%20Rumbameisje/Rumbameisje%20landscape.jpg",
+      "thumbnailJpg": "/@music/008%20Rumbameisje/Rumbameisje%20thumbnail.jpg"
+    },
+    {
+      "id": "009 Milonga's Nacht",
+      "order": "009",
+      "title": "Milonga's Nacht",
+      "album": "De Geboorte van de Leeuw",
+      "folderName": "009 Milongas Nacht",
+      "mp3": "/@music/009%20Milongas Nacht/Milongas Nacht.mp3",
+      "portraitJpg": "/@music/009%20Milongas Nacht/Milongas Nacht%20portrait.jpg",
+      "landscapeJpg": "/@music/009%20Milongas Nacht/Milongas Nacht%20landscape.jpg",
+      "thumbnailJpg": "/@music/009%20Milongas Nacht/Milongas Nacht%20thumbnail.jpg"
+    },
+        {
+      "id": "010 the Echo screams",
+      "order": "099",
+      "title": "the Echo screams",
+      "album": "De Echo",
+      "folderName": "010 the Echo screams",
+      "mp3": "/@music/010%20the Echo screams/the Echo screams.mp3",
+      "portraitJpg": "/@music/010%20the Echo screams/the Echo screams%20portrait.jpg",
+      "landscapeJpg": "/@music/010%20the Echo screams/the Echo screams%20landscape.jpg",
+      "thumbnailJpg": "/@music/010%20the Echo screams/the Echo screams%20thumbnail.jpg",
+      "subtitles": {
+        "EN": "/@music/010%20the%20Echo%20screams/the%20Echo%20Screams-EN.srt",
+        "NL": "/@music/010%20the%20Echo%20screams/the%20Echo%20Screams-NL.srt"
+      }
+    },
+        {
+      "id": "011 the Silent Code",
+      "order": "001",
+      "title": "the Silent Code",
+      "album": "De Echo",
+      "folderName": "011 the Silent Code",
+      "mp3": "/@music/011%20the Silent Code/the Silent Code.mp3",
+      "portraitJpg": "/@music/011%20the%20Silent%20Code/the%20Silent%20Code%20portrait.jpg",
+      "landscapeJpg": "/@music/011%20the%20Silent%20Code/the%20Silent%20Code%20landscape.jpg",
+      "thumbnailJpg": "/@music/011%20the%20Silent%20Code/the%20Silent%20Code%20thumbnail.jpg",
+      "subtitles": {
+        "EN": "/@music/011%20the%20Silent%20Code/the%20Silent%20Code-EN.srt",
+        "NL": "/@music/011%20the%20Silent%20Code/the%20Silent%20Code-NL.srt"
+      }
+    },
+        {
+      "id": "012 the Red Stain",
+      "order": "000",
+      "title": "the Red Stain",
+      "album": "De Echo",
+      "folderName": "012 the Red Stain",
+      "mp3": "/@music/012%20the Red Stain/the Red Stain.mp3",
+      "portraitJpg": "/@music/012%20the%20Red%20Stain/the%20Red%20Stain%20portrait.jpg",
+      "landscapeJpg": "/@music/012%20the%20Red%20Stain/the%20Red%20Stain%20landscape.jpg",
+      "thumbnailJpg": "/@music/012%20the%20Red%20Stain/the%20Red%20Stain%20thumbnail.jpg",
+      "subtitles": {
+        "EN": "/@music/012%20the%20Red%20Stain/the%20Red%20Stain-EN.srt",
+        "NL": "/@music/012%20the%20Red%20Stain/the%20Red%20Stain-NL.srt"
+      }
+    },
+        {
+      "id": "013 a Silver Chime",
+      "order": "002",
+      "title": "a Silver Chime",
+      "album": "De Echo",
+      "folderName": "013 a Silver Chime",
+      "mp3": "/@music/013%20a Silver Chime/a Silver Chime.mp3",
+      "portraitJpg": "/@music/013%20a%20Silver%20Chime/a%20Silver%20Chime%20portrait.jpg",
+      "landscapeJpg": "/@music/013%20a%20Silver%20Chime/a%20Silver%20Chime%20landscape.jpg",
+      "thumbnailJpg": "/@music/013%20a%20Silver%20Chime/a%20Silver%20Chime%20thumbnail.jpg",
+      "subtitles": {
+        "EN": "/@music/013%20a%20Silver%20Chime/a%20Silver%20Chime-EN.srt",
+        "NL": "/@music/013%20a%20Silver%20Chime/a%20Silver%20Chime-NL.srt"
+      }
+    },
+        {
+      "id": "014 the Roaring Sky",
+      "order": "003",
+      "title": "the Roaring Sky",
+      "album": "De Echo",
+      "folderName": "014 the Roaring Sky",
+      "mp3": "/@music/014%20the Roaring Sky/the Roaring Sky.mp3",
+      "portraitJpg": "/@music/014%20the%20Roaring%20Sky/the%20Roaring%20Sky%20portrait.jpg",
+      "landscapeJpg": "/@music/014%20the%20Roaring%20Sky/the%20Roaring%20Sky%20landscape.jpg",
+      "thumbnailJpg": "/@music/014%20the%20Roaring%20Sky/the%20Roaring%20Sky%20thumbnail.jpg",
+      "subtitles": {
+        "EN": "/@music/014%20the%20Roaring%20Sky/the%20Roaring%20Sky-EN.srt",
+        "NL": "/@music/014%20the%20Roaring%20Sky/the%20Roaring%20Sky-NL.srt"
+      }
+    },
+        {
+      "id": "015 the Awakening",
+      "order": "004",
+      "title": "the Awakening",
+      "album": "De Echo",
+      "folderName": "015 the Awakening",
+      "mp3": "/@music/015%20the Awakening/the Awakening.mp3",
+      "portraitJpg": "/@music/015%20the%20Awakening/the%20Awakening%20portrait.jpg",
+      "landscapeJpg": "/@music/015%20the%20Awakening/the%20Awakening%20landscape.jpg",
+      "thumbnailJpg": "/@music/015%20the%20Awakening/the%20Awakening%20thumbnail.jpg",
+      "subtitles": {
+        "EN": "/@music/015%20the%20Awakening/the%20Awakening-EN.srt",
+        "NL": "/@music/015%20the%20Awakening/the%20Awakening-NL.srt"
+      }
+    }
+  ]
+}

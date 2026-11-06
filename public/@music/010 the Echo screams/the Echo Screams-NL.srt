@@ -1,103 +1,349 @@
-1
-00:00:16,500 --> 00:00:23,200
-De echo schreeuwt door lege zalen
+﻿1
+00:00:13,582 --> 00:00:16,295
+Koud lood en zwaar hout,
 
 2
-00:00:24,000 --> 00:00:30,800
-Een schaduw danst op de muren
+00:00:16,795 --> 00:00:19,710
+de balg slaakt een zucht.
 
 3
-00:00:31,500 --> 00:00:38,200
-Ik hoor het gefluister van het verleden
+00:00:20,462 --> 00:00:23,222
+Melodieën gesmeed in stof,
 
 4
-00:00:39,000 --> 00:00:46,500
-Een stilte die bedoeld was om te blijven
+00:00:23,307 --> 00:00:26,137
+naar de hemel stijgen.
 
 5
-00:00:47,200 --> 00:00:54,500
-Gevangen tussen wat was en wat zal zijn
+00:00:26,806 --> 00:00:29,588
+De oude Vermeulenpijpen,
 
 6
-00:00:55,000 --> 00:01:02,800
-Zoekend naar een weg naar vrijheid
+00:00:29,887 --> 00:00:32,907
+huilend in het donker,
 
 7
-00:01:03,500 --> 00:01:10,500
-En de echo schreeuwt in de nacht
+00:00:33,615 --> 00:00:36,194
+De hemel openscheuren
 
 8
-00:01:11,000 --> 00:01:18,500
-Reikend naar een doovend licht
+00:00:36,528 --> 00:00:39,107
+om een ​​enkele vonk te vinden.
 
 9
-00:01:19,200 --> 00:01:26,500
-Voel je het trillen in de lucht?
+00:00:39,373 --> 00:00:45,271
+En de echo schreeuwt door de holle jaren,
 
 10
-00:01:27,000 --> 00:01:34,800
-De echo schreeuwt, maar niemand is er
+00:00:46,350 --> 00:00:49,467
+Een stille vloedgolf
 
 11
-00:01:35,500 --> 00:01:42,800
-Veertig jaar achter een gesloten deur
+00:00:49,622 --> 00:00:51,664
+van veertig jaar tranen.
 
 12
-00:01:43,200 --> 00:01:50,500
-Ik kan het niet langer verbergen
+00:00:51,746 --> 00:00:58,025
+Ik bouwde een fort uit koude, onverzettelijke steen,
 
 13
-00:01:51,200 --> 00:01:58,500
-De leeuw ontwaakt, het beest is nabij
+00:00:59,327 --> 00:01:02,563
+Maar de echo vindt mij altijd,
 
 14
-00:01:59,000 --> 00:02:06,800
-Overstemt elke afzonderlijke angst
+00:01:02,790 --> 00:01:05,930
+claimt altijd zijn eigen.
 
 15
-00:02:07,500 --> 00:02:14,800
-Gevangen tussen wat was en wat zal zijn
+00:01:06,396 --> 00:01:09,632
+Luna’s wilde haar raakte verstrikt in de zomerhitte.
 
 16
-00:02:15,200 --> 00:02:22,800
-Zoekend naar een weg naar vrijheid
+00:01:09,744 --> 00:01:13,027
+
 
 17
-00:02:23,500 --> 00:02:30,800
-En de echo schreeuwt in de nacht
+00:01:09,696 --> 00:01:12,739
+Een tent in Duitsland, waar twee hartslagen elkaar ontmoeten.
 
 18
-00:02:31,200 --> 00:02:38,800
-Reikend naar een doovend licht
+00:01:13,111 --> 00:01:17,612
+Twee jonge leeuwen brullen, wild en ongebonden,
 
 19
-00:02:39,500 --> 00:02:46,800
-Voel je het trillen in de lucht?
+00:01:18,014 --> 00:01:21,476
+Voordat de stilte kwam, voordat we de grond raakten.
 
 20
-00:02:47,200 --> 00:02:55,000
-De echo schreeuwt, maar niemand is er
+00:01:21,666 --> 00:01:25,511
+Het rammelt aan de muren van wie ik was
 
 21
-00:03:11,500 --> 00:03:19,200
-Laat de muren maar instorten
+00:01:25,773 --> 00:01:31,290
+Luna, roep je nog steeds naar mij?
 
 22
-00:03:19,800 --> 00:03:27,500
-Laat de stem de kroon heroveren
+00:01:31,969 --> 00:01:37,509
+En de echo schreeuwt door de holle jaren,
 
 23
-00:03:28,200 --> 00:03:35,500
-En de echo schreeuwt in de nacht
+00:01:38,894 --> 00:01:41,986
+Een stille vloedgolf
 
 24
-00:03:36,000 --> 00:03:43,500
-Reikend naar een doovend licht
+00:01:42,249 --> 00:01:45,807
+van veertig jaar tranen.
 
 25
-00:03:44,200 --> 00:03:51,500
-Voel je het trillen in de lucht?
+00:01:46,142 --> 00:01:48,613
+Gefluister in de gang,
 
 26
-00:03:52,000 --> 00:04:00,500
-De echo schreeuwt, en ik ben daar
+00:01:48,828 --> 00:01:52,004
+regels van vrienden en verwanten,
+
+27
+00:01:52,504 --> 00:01:55,191
+Het opbouwen van de gevangenis
+
+28
+00:01:55,537 --> 00:01:58,546
+waarin we gevangen zaten.
+
+29
+00:01:58,761 --> 00:02:01,639
+De zware garagedeur
+
+30
+00:02:01,806 --> 00:02:04,791
+onze jeugd in de steek laten,
+
+31
+00:02:05,017 --> 00:02:08,683
+De schaduw van de demon
+
+32
+00:02:08,826 --> 00:02:10,737
+de waarheid verstikken.
+
+33
+00:02:10,832 --> 00:02:17,161
+Ik bouwde een fort uit koude, onverzettelijke steen,
+
+34
+00:02:18,211 --> 00:02:21,591
+Maar de echo vindt mij altijd,
+
+35
+00:02:21,734 --> 00:02:24,038
+claimt altijd zijn eigen.
+
+36
+00:02:24,217 --> 00:02:28,050
+Het rammelt aan de muren van wie ik was
+
+37
+00:02:28,202 --> 00:02:34,519
+Luna, roep je nog steeds naar mij?
+
+38
+00:02:38,708 --> 00:02:41,813
+Kerstavond, de kathedraal vol en krap.
+
+39
+00:02:41,825 --> 00:02:45,108
+Ik zag je daar staan ​​in het ijskoude licht.
+
+40
+00:02:45,173 --> 00:02:50,176
+De demon fluisterde koel: 'Zit stil, laat haar gaan.'
+
+41
+00:02:50,868 --> 00:02:53,985
+En ik verstijfde op de bank,
+
+42
+00:02:54,185 --> 00:02:57,026
+en ik brak mijn eigen hart.
+
+43
+00:02:57,444 --> 00:03:03,319
+En de echo schreeuwt door de holle jaren,
+
+44
+00:03:04,290 --> 00:03:07,574
+Een stille vloedgolf
+
+45
+00:03:07,765 --> 00:03:09,974
+veertig jaar tranen.
+
+46
+00:03:09,986 --> 00:03:16,099
+Ik bouwde een fort uit koude, onverzettelijke steen,
+
+47
+00:03:17,425 --> 00:03:20,780
+Maar de echo vindt mij altijd,
+
+48
+00:03:20,899 --> 00:03:24,195
+claimt altijd zijn eigen.
+
+49
+00:03:24,238 --> 00:03:30,149
+Ik zag je lippen bewegen door de vorst en de sneeuw,
+
+50
+00:03:30,972 --> 00:03:34,172
+Woorden zonder klank,
+
+51
+00:03:34,507 --> 00:03:37,122
+veertig jaar geleden.
+
+52
+00:03:37,286 --> 00:03:40,355
+Een pleidooi zonder stem,
+
+53
+00:03:40,450 --> 00:03:43,399
+een schreeuw die ik niet kon horen,
+
+54
+00:03:43,409 --> 00:03:43,517
+
+
+55
+00:03:43,527 --> 00:03:47,419
+Trillend in mijn borst,
+
+56
+00:03:47,567 --> 00:03:49,620
+jaar na jaar.
+
+57
+00:03:49,630 --> 00:03:53,582
+Het rammelt aan de muren van wie ik was
+
+58
+00:03:53,734 --> 00:03:59,561
+Luna, roep je nog steeds naar mij?
+
+59
+00:04:03,074 --> 00:04:09,426
+En de echo schreeuwt door de holle jaren,
+
+60
+00:04:09,927 --> 00:04:13,282
+Een stille vloedgolf
+
+61
+00:04:13,496 --> 00:04:16,959
+van veertig jaar tranen.
+
+62
+00:04:17,162 --> 00:04:20,445
+Knielend in het grind,
+
+63
+00:04:20,654 --> 00:04:23,138
+op mijn versleten knieën,
+
+64
+00:04:23,305 --> 00:04:26,660
+De gladde witte steen aanraken
+
+65
+00:04:26,780 --> 00:04:29,944
+onder de stille bomen.
+
+66
+00:04:30,149 --> 00:04:32,597
+Een zware gouden poot
+
+67
+00:04:32,752 --> 00:04:36,084
+ligt zachtjes op mijn borst:
+
+68
+00:04:36,215 --> 00:04:39,463
+"De echo is jouw vuur, Paul,
+
+69
+00:04:39,497 --> 00:04:41,706
+laat de geesten eindelijk rusten."
+
+70
+00:04:41,863 --> 00:04:48,955
+Ik bouwde een fort uit koude, onverzettelijke steen,
+
+71
+00:04:49,290 --> 00:04:52,645
+Maar de echo vindt mij altijd,
+
+72
+00:04:52,862 --> 00:04:55,333
+claimt altijd zijn eigen.
+
+73
+00:04:55,343 --> 00:04:59,176
+Het rammelt aan de muren van wie ik was
+
+74
+00:04:59,499 --> 00:05:06,161
+Luna, roep je nog steeds naar mij?
+
+75
+00:05:09,254 --> 00:05:12,251
+Het boek ligt op tafel,
+
+76
+00:05:12,437 --> 00:05:16,019
+de inkt is nat en rood.
+
+77
+00:05:16,356 --> 00:05:18,803
+Elk woord
+
+78
+00:05:18,813 --> 00:05:22,169
+is een traan die ik heb vergoten.
+
+79
+00:05:22,515 --> 00:05:25,440
+De kooi wordt uit elkaar geblazen,
+
+80
+00:05:25,603 --> 00:05:28,719
+de ijzeren deuren zijn gescheurd,
+
+81
+00:05:28,887 --> 00:05:32,075
+Het beest is eindelijk los,
+
+82
+00:05:32,169 --> 00:05:37,446
+een stille woede geboren.
+Geschreven in mijn bloed...
+
+83
+00:05:37,468 --> 00:05:41,122
+De kooi is wijd open.
+
+84
+00:05:41,417 --> 00:05:44,068
+Niet meer verstoppen.
+
+85
+00:05:44,161 --> 00:05:48,448
+De muziek zwelt zo hoog aan
+
+86
+00:05:48,617 --> 00:05:54,623
+De echo schreeuwt door de holle jaren,
+
+87
+00:05:55,111 --> 00:06:01,821
+En ten slotte lieten we de geesten gaan.
+

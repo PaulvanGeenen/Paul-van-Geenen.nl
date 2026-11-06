@@ -53,3 +53,8 @@ _private_manuscripts/
 *.pdf
 *.epub
 *.docx
+
+# Large video files in music directory (streamed/hosted directly on web server)
+public/@music/**/*.mov
+public/@music/*.mov
+
