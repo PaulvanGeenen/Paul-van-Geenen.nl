@@ -38,17 +38,75 @@ async function deploy() {
     await sftp.connect(SFTP_CONFIG);
     console.log('✅ Verbonden!');
 
-    // 2. Upload visitor_database.php
-    console.log('\n2. Updaten van visitor_database.php...');
-    const localPhp = path.join(process.cwd(), 'public', 'api', 'visitor_database.php');
-    const remotePhp = `${REMOTE_ROOT}/api/visitor_database.php`;
-    if (fs.existsSync(localPhp)) {
-      // Backup current file first
-      try {
-        await sftp.fastPut(localPhp, `${remotePhp}.bak_${Date.now()}`);
-      } catch {}
-      await sftp.fastPut(localPhp, remotePhp);
-      console.log('✅ visitor_database.php geüpload');
+    // 2. Upload API scripts (visitor_database.php, music_database.php, etc.)
+    console.log('\n2. Updaten van API scripts in public/api/...');
+    const localApiDir = path.join(process.cwd(), 'public', 'api');
+    const remoteApiDir = `${REMOTE_ROOT}/api`;
+    if (fs.existsSync(localApiDir)) {
+      const apiFiles = fs.readdirSync(localApiDir);
+      for (const file of apiFiles) {
+        if (file.endsWith('.php')) {
+          const localPath = path.join(localApiDir, file);
+          const remotePath = `${remoteApiDir}/${file}`;
+          await sftp.fastPut(localPath, remotePath);
+          console.log(`✅ api/${file} geüpload`);
+        }
+      }
+    }
+
+    // 2b. Synchroniseer teksten en ondertitels (.srt, .txt, .json) in public/@music/
+    console.log('\n2b. Synchroniseren van ondertitels (.srt) en songteksten (.txt) in @music...');
+    const localMusicDir = path.join(process.cwd(), 'public', '@music');
+    const remoteMusicDir = `${REMOTE_ROOT}/@music`;
+    if (fs.existsSync(localMusicDir)) {
+      let uploadedCount = 0;
+      function getFilesRecursive(dir) {
+        let results = [];
+        const list = fs.readdirSync(dir);
+        for (const file of list) {
+          const filePath = path.join(dir, file);
+          const stat = fs.statSync(filePath);
+          if (stat.isDirectory()) {
+            results = results.concat(getFilesRecursive(filePath));
+          } else {
+            const ext = path.extname(file).toLowerCase();
+            if (['.srt', '.txt', '.json'].includes(ext)) {
+              results.push(filePath);
+            }
+          }
+        }
+        return results;
+      }
+
+      const textFiles = getFilesRecursive(localMusicDir);
+      console.log(`📡 Controleren van ${textFiles.length} ondertitels/teksten op server...`);
+
+      for (const localPath of textFiles) {
+        const relativePath = path.relative(localMusicDir, localPath).replace(/\\/g, '/');
+        const remotePath = `${remoteMusicDir}/${relativePath}`;
+        const remoteSubdir = path.posix.dirname(remotePath);
+
+        let needUpload = true;
+        try {
+          const stat = await sftp.stat(remotePath);
+          const localStat = fs.statSync(localPath);
+          if (stat.size === localStat.size && Math.abs(stat.modifyTime - Math.floor(localStat.mtimeMs / 1000)) < 2) {
+            needUpload = false;
+          }
+        } catch (e) {
+          needUpload = true;
+        }
+
+        if (needUpload) {
+          try {
+            await sftp.mkdir(remoteSubdir, true);
+          } catch {}
+          await sftp.fastPut(localPath, remotePath);
+          uploadedCount++;
+          console.log(`  ✔ Geüpload: @music/${relativePath}`);
+        }
+      }
+      console.log(`✅ ${uploadedCount} ondertitels/teksten gesynchroniseerd naar server!`);
     }
 
     // 3. Upload assets

@@ -1565,16 +1565,24 @@ export function Music() {
       return;
     }
 
-    // Build fallback candidate URLs to try in order (e.g. trying -EN.srt if -GB.srt fails)
+    // Build fallback candidate URLs to try in order (e.g. trying -EN.srt if -GB.srt fails, or _EN.srt)
     const candidateUrls = [activeSubtitleUrl];
     if (activeSubtitleUrl.includes('-GB.srt')) {
       candidateUrls.push(activeSubtitleUrl.replace('-GB.srt', '-EN.srt'));
+      candidateUrls.push(activeSubtitleUrl.replace('-GB.srt', '_EN.srt'));
       candidateUrls.push(activeSubtitleUrl.replace('-GB.srt', '-gb.srt'));
-    } else if (activeSubtitleUrl.includes('-EN.srt')) {
+    } else if (activeSubtitleUrl.includes('-EN.srt') || activeSubtitleUrl.includes('_EN.srt')) {
+      candidateUrls.push(activeSubtitleUrl.replace('-EN.srt', '_EN.srt'));
+      candidateUrls.push(activeSubtitleUrl.replace('_EN.srt', '-EN.srt'));
       candidateUrls.push(activeSubtitleUrl.replace('-EN.srt', '-GB.srt'));
+      candidateUrls.push(activeSubtitleUrl.replace('_EN.srt', '-GB.srt'));
       candidateUrls.push(activeSubtitleUrl.replace('-EN.srt', '-en.srt'));
-    } else if (activeSubtitleUrl.includes('-NL.srt')) {
+      candidateUrls.push(activeSubtitleUrl.replace('_EN.srt', '_en.srt'));
+    } else if (activeSubtitleUrl.includes('-NL.srt') || activeSubtitleUrl.includes('_NL.srt')) {
+      candidateUrls.push(activeSubtitleUrl.replace('-NL.srt', '_NL.srt'));
+      candidateUrls.push(activeSubtitleUrl.replace('_NL.srt', '-NL.srt'));
       candidateUrls.push(activeSubtitleUrl.replace('-NL.srt', '-nl.srt'));
+      candidateUrls.push(activeSubtitleUrl.replace('_NL.srt', '_nl.srt'));
     }
 
     async function fetchFirstValidSRT() {

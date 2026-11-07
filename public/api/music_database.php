@@ -256,13 +256,13 @@ function resolveTrackFiles($folderName, $title) {
             $result['thumbnailJpg'] = $fileUrl;
         }
         // Subtitles
-        else if (preg_match('/-en\.srt$/i', $f)) {
+        else if (preg_match('/[-_]en\.srt$/i', $f)) {
             $result['subtitles']['EN'] = $fileUrl;
         }
-        else if (preg_match('/-nl\.srt$/i', $f)) {
+        else if (preg_match('/[-_]nl\.srt$/i', $f)) {
             $result['subtitles']['NL'] = $fileUrl;
         }
-        else if (preg_match('/-gb\.srt$/i', $f)) {
+        else if (preg_match('/[-_]gb\.srt$/i', $f)) {
             $result['subtitles']['GB'] = $fileUrl;
         }
         else if (preg_match('/\.srt$/i', $f)) {

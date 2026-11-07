@@ -1,63 +1,37 @@
+Style: 1940s Glenn Miller big band swing, fast 200 BPM ballroom quickstep, young male lead singer front and center, close-harmony female trio backing vocals, Star Sisters style female ad-libs, signature lead clarinet over lush saxophone section, muted brass stabs, walking upright bass, crisp swinging ride cymbals, extended instrumental breaks, virtuoso clarinet solo, vintage dancehall energy
 
-fast ballroom quickstep, energetic big band swing, 200 BPM, driving acoustic walking upright bass, brisk swinging jazz ride cymbals, blazing brass horns fanfares, energetic male lead vocals, rhythmically tight phrasing, lively piano comping, dynamic drum breaks, breathless theatrical climax, authentic vintage ballroom sound
-
-
-[Verse 1]
-
+[verse]
 Needle drops and brass ignites.
-
 Green silk flashes in the lights.
-
 One, two, take the floor.
-
 No more thinking anymore.
 
-[Chorus 1]
-
+[chorus]
 Feet fly across the oak.
-
 All the heavy chains are broke.
-
 Scatter chassés cut the air.
-
 Lifting up without a care.
 
-[Verse 2]
-
+[verse]
 Other dancers step aside.
-
 Caught within our racing tide.
-
 Her hand locked into my spine.
-
 Every syncopation fine.
 
-[Chorus 2]
-
+[chorus]
 Roaring inside my chest.
-
 Putting all my fears to rest.
-
 Turn and hover, sharp and bold.
-
 Turning motion into gold.
 
-[Verse 3]
-
+[verse]
 Mara watches from the wall.
-
 Mary silent in the hall.
-
 Pendulum swing in the bend.
-
 Rushing blindly to the end.
 
-[Chorus 3]
-
+[chorus]
 Final lockstep, sudden freeze.
-
 No more trembling in my knees.
-
 Silence where the thunder stood.
-
 Breath and sweat upon the wood.
