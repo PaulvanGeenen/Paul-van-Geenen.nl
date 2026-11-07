@@ -7,13 +7,22 @@ import {
   MessageCircle, Video, RotateCw, X, Sparkles, ChevronRight, ChevronLeft,
   Maximize2, Minimize2, Check, ArrowLeft, Repeat, Repeat1, FlaskConical,
   Share2, Copy, ThumbsUp, ThumbsDown, Subtitles, Languages, Disc3, Layers,
-  Music2, Headphones, Film, Type, SlidersHorizontal, Home
+  Music2, Headphones, Film, Type, SlidersHorizontal, Home, Lock, LockOpen
 } from 'lucide-react';
 import { useAudio } from '../context/AudioContext';
 import { IvoryHeartPendant } from '../components/ui/IvoryHeartPendant';
 import { isOwnAnalyticsIgnored, getUserGeoLocation, getSubtitlePreferences, setSubtitlePreferences, recordMusicPlay, updateMusicPlay, recordMusicRating, SubtitleSize } from '../lib/analytics';
 import { EqualizerModal } from '../components/EqualizerModal';
 import { getEqualizerPreferences, equalizerEngine, EqualizerPreferences } from '../lib/equalizer';
+import {
+  isLockSystemEnabled,
+  setLockSystemEnabled,
+  isTrackUnlocked,
+  unlockTrack,
+  resetUnlockedTracks,
+  playLockRattleSound,
+  playLockUnlockSound
+} from '../lib/trackLocks';
 import {
   MusicLanguage,
   getInitialMusicLanguage,
@@ -675,6 +684,44 @@ export function Music() {
     return getEqualizerPreferences();
   });
 
+  // Track Lock & Vault System states (LocalStorage based, no cookies)
+  const [lockSystemActive, setLockSystemActive] = useState<boolean>(() => isLockSystemEnabled());
+  const [unlockedRevision, setUnlockedRevision] = useState<number>(0);
+  const [rattlingLockKey, setRattlingLockKey] = useState<string | null>(null);
+  const rattleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [unlockCeremonyPhase, setUnlockCeremonyPhase] = useState<'idle' | 'locked' | 'rattling' | 'opening' | 'fading-out'>('idle');
+  const unlockCeremonyTimersRef = useRef<NodeJS.Timeout[]>([]);
+  const isUnlockCeremonyActiveRef = useRef<boolean>(false);
+
+  // Sync lock state when changed in Admin or via unlock events
+  useEffect(() => {
+    const syncLocks = () => {
+      setLockSystemActive(isLockSystemEnabled());
+      setUnlockedRevision(r => r + 1);
+    };
+    window.addEventListener('pvg-locks-changed', syncLocks);
+    window.addEventListener('storage', syncLocks);
+    return () => {
+      window.removeEventListener('pvg-locks-changed', syncLocks);
+      window.removeEventListener('storage', syncLocks);
+    };
+  }, []);
+
+  // Trigger physical lock rattle animation + mechanical rattle sound when clicking a locked slotje
+  const handleRattleLock = useCallback((lockKey: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    playLockRattleSound();
+    setRattlingLockKey(null);
+    requestAnimationFrame(() => {
+      setRattlingLockKey(lockKey);
+    });
+    if (rattleTimeoutRef.current) clearTimeout(rattleTimeoutRef.current);
+    rattleTimeoutRef.current = setTimeout(() => {
+      setRattlingLockKey(null);
+    }, 650);
+  }, []);
+
+
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -1227,22 +1274,75 @@ export function Music() {
       setCurrentTrackIndex(matchedIdx);
       setSelectedFormat(matchedFormat);
 
+      const hasUnlockParam = urlParams.get('unlock') === '1' || urlParams.get('unlock') === 'true';
+
       // Replace ugly URL parameters in the browser address bar with clean route URL
       const matchedTrack = tracks[matchedIdx];
+      let shouldRunUnlockCeremony = hasUnlockParam;
+
       if (matchedTrack) {
         if (matchedTrack.album) {
           setSelectedAlbum(matchedTrack.album);
         }
+
+        // Check album index of this track to see if it's track 3+ (locked by default)
+        const albumTracksForMatch = tracks.filter(
+          t => (t.album || 'Muzikale Krabbels').toLowerCase() === (matchedTrack.album || 'Muzikale Krabbels').toLowerCase()
+        );
+        const idxInAlb = albumTracksForMatch.findIndex(t => t.id === matchedTrack.id);
+        const wasAlreadyUnlocked = isTrackUnlocked(matchedTrack, idxInAlb !== -1 ? idxInAlb : 99);
+
+        // Permanently unlock this track in the reader's browser localStorage
+        unlockTrack(matchedTrack);
+
+        if (isLockSystemEnabled() && (hasUnlockParam || !wasAlreadyUnlocked || idxInAlb >= 2)) {
+          shouldRunUnlockCeremony = true;
+        }
+
         if (window.history && window.history.replaceState) {
           const cleanUrl = getCleanShareUrl(matchedTrack, matchedFormat);
           window.history.replaceState({}, '', cleanUrl);
         }
       }
 
-      // Bypass startup/splash directly into player mode for shared links and start playing immediately
+      // Bypass startup/splash directly into player mode for shared/QR links
       setPhase('player');
       setShowNavBar(false);
-      playTrack(matchedIdx, matchedFormat);
+
+      if (shouldRunUnlockCeremony) {
+        // Filmische Unlock-ervaring:
+        // 1. Slot verschijnt op zwart scherm
+        // 2. Slot rammelt en klikt open met geluid
+        // 3. Slot fade uit & audiocover van het nummer fade in
+        // 4. Muziek begint te spelen
+        unlockCeremonyTimersRef.current.forEach(t => clearTimeout(t));
+        unlockCeremonyTimersRef.current = [];
+        isUnlockCeremonyActiveRef.current = true;
+        setUnlockCeremonyPhase('locked');
+
+        const t1 = setTimeout(() => {
+          setUnlockCeremonyPhase('rattling');
+          playLockUnlockSound();
+        }, 320);
+
+        const t2 = setTimeout(() => {
+          setUnlockCeremonyPhase('opening');
+        }, 920);
+
+        const t3 = setTimeout(() => {
+          setUnlockCeremonyPhase('fading-out');
+        }, 1480);
+
+        const t4 = setTimeout(() => {
+          isUnlockCeremonyActiveRef.current = false;
+          setUnlockCeremonyPhase('idle');
+          playTrack(matchedIdx, matchedFormat);
+        }, 2850);
+
+        unlockCeremonyTimersRef.current = [t1, t2, t3, t4];
+      } else {
+        playTrack(matchedIdx, matchedFormat);
+      }
 
       // Als iemand op de site komt met een link naar een track/video:
       // Altijd fullscreen tonen in de positie waarin het device zich dan bevindt.
@@ -1476,19 +1576,33 @@ export function Music() {
     });
   }, [tracks, selectedAlbum]);
 
+  // Split currentAlbumTracks into unlocked and locked tracks (first 2 tracks free + QR unlocked in localStorage)
+  const { unlockedAlbumTracks, lockedAlbumTracks } = React.useMemo(() => {
+    const unlocked: { track: Track; albumIdx: number }[] = [];
+    const locked: { track: Track; albumIdx: number }[] = [];
+    currentAlbumTracks.forEach((tr, idx) => {
+      if (isTrackUnlocked(tr, idx, lockSystemActive)) {
+        unlocked.push({ track: tr, albumIdx: idx });
+      } else {
+        locked.push({ track: tr, albumIdx: idx });
+      }
+    });
+    return { unlockedAlbumTracks: unlocked, lockedAlbumTracks: locked };
+  }, [currentAlbumTracks, lockSystemActive, unlockedRevision]);
+
   // Keep landscapeTrackInListIndex synchronized when album or playing track changes
   useEffect(() => {
     setLandscapeTrackInListIndex(0);
   }, [selectedAlbum]);
 
   useEffect(() => {
-    if (tracks[currentTrackIndex] && currentAlbumTracks.length > 0) {
-      const idxInAlbum = currentAlbumTracks.findIndex(t => t.id === tracks[currentTrackIndex]?.id);
-      if (idxInAlbum !== -1) {
-        setLandscapeTrackInListIndex(idxInAlbum);
+    if (tracks[currentTrackIndex] && unlockedAlbumTracks.length > 0) {
+      const idxInUnlocked = unlockedAlbumTracks.findIndex(item => item.track.id === tracks[currentTrackIndex]?.id);
+      if (idxInUnlocked !== -1) {
+        setLandscapeTrackInListIndex(idxInUnlocked);
       }
     }
-  }, [currentTrackIndex, currentAlbumTracks, tracks]);
+  }, [currentTrackIndex, unlockedAlbumTracks, tracks]);
 
   const getTrackBgImage = (track: Track | undefined, orient: 'portrait' | 'landscape') => {
     if (!track) return orient === 'portrait' ? startupPortrait : startupLandscape;
@@ -1654,8 +1768,8 @@ export function Music() {
         if (isDifferent) {
           vid.src = currentMediaUrl;
         }
-        // During the end-of-track fade transition, only preload; playback starts after the fade-in
-        if (vid.paused && !isEndTransitioningRef.current) {
+        // During the end-of-track fade transition or unlock ceremony, only preload; playback starts after the fade-in
+        if (vid.paused && !isEndTransitioningRef.current && !isUnlockCeremonyActiveRef.current) {
           startPlaybackWithVolumeRamp(vid);
         }
       }
@@ -1692,27 +1806,35 @@ export function Music() {
     });
   };
 
-  // Helper to find the next and previous track index based on current album / playlist ordering
+  // Helper to find the next and previous track index based strictly on unlocked tracks in the current album
   const getNextTrackIndex = () => {
-    if (currentAlbumTracks.length === 0) {
+    const playableList = unlockedAlbumTracks.length > 0
+      ? unlockedAlbumTracks.map(item => item.track)
+      : currentAlbumTracks;
+
+    if (playableList.length === 0) {
       return (currentTrackIndex + 1) % (tracks.length || 1);
     }
-    const currentInAlbumIdx = currentAlbumTracks.findIndex(t => t.id === currentTrack?.id);
-    const nextInAlbumIdx = currentInAlbumIdx !== -1 ? (currentInAlbumIdx + 1) % currentAlbumTracks.length : 0;
-    const nextTrackItem = currentAlbumTracks[nextInAlbumIdx];
+    const currentInListIdx = playableList.findIndex(t => t.id === currentTrack?.id);
+    const nextInListIdx = currentInListIdx !== -1 ? (currentInListIdx + 1) % playableList.length : 0;
+    const nextTrackItem = playableList[nextInListIdx];
     const masterIdx = tracks.findIndex(t => t.id === nextTrackItem?.id);
-    return masterIdx !== -1 ? masterIdx : nextInAlbumIdx;
+    return masterIdx !== -1 ? masterIdx : nextInListIdx;
   };
 
   const getPrevTrackIndex = () => {
-    if (currentAlbumTracks.length === 0) {
+    const playableList = unlockedAlbumTracks.length > 0
+      ? unlockedAlbumTracks.map(item => item.track)
+      : currentAlbumTracks;
+
+    if (playableList.length === 0) {
       return (currentTrackIndex - 1 + tracks.length) % (tracks.length || 1);
     }
-    const currentInAlbumIdx = currentAlbumTracks.findIndex(t => t.id === currentTrack?.id);
-    const prevInAlbumIdx = currentInAlbumIdx !== -1 ? (currentInAlbumIdx - 1 + currentAlbumTracks.length) % currentAlbumTracks.length : 0;
-    const prevTrackItem = currentAlbumTracks[prevInAlbumIdx];
+    const currentInListIdx = playableList.findIndex(t => t.id === currentTrack?.id);
+    const prevInListIdx = currentInListIdx !== -1 ? (currentInListIdx - 1 + playableList.length) % playableList.length : 0;
+    const prevTrackItem = playableList[prevInListIdx];
     const masterIdx = tracks.findIndex(t => t.id === prevTrackItem?.id);
-    return masterIdx !== -1 ? masterIdx : prevInAlbumIdx;
+    return masterIdx !== -1 ? masterIdx : prevInListIdx;
   };
 
   // Current track background image synchronously calculated (eliminates 1-frame state lag/flicker)
@@ -1769,6 +1891,9 @@ export function Music() {
       clearFadeTimer();
       endTransitionTimersRef.current.forEach(t => clearTimeout(t));
       endTransitionTimersRef.current = [];
+      unlockCeremonyTimersRef.current.forEach(t => clearTimeout(t));
+      unlockCeremonyTimersRef.current = [];
+      if (rattleTimeoutRef.current) clearTimeout(rattleTimeoutRef.current);
       if (autoAdvanceFadeTimerRef.current) clearTimeout(autoAdvanceFadeTimerRef.current);
       if (navBarTimeoutRef.current) clearTimeout(navBarTimeoutRef.current);
       if (ratingButtonsTimeoutRef.current) clearTimeout(ratingButtonsTimeoutRef.current);
@@ -3316,27 +3441,35 @@ export function Music() {
               const albumCover = getAlbumCover(matchingAlbum, currentAlbumTracks);
 
               return effectiveOrientation === 'landscape' ? (
-                /* Landscape mode: Full-Height & Full-Width Landscape Track View */
+                /* Landscape mode: Full-Height & Full-Width Landscape Track View (+ Vault Slide for Locked Tracks) */
                 (() => {
-                  const totalTracksInList = currentAlbumTracks.length || 1;
-                  const safeTrackIdx = ((landscapeTrackInListIndex % totalTracksInList) + totalTracksInList) % totalTracksInList;
-                  const currentTrackInList = currentAlbumTracks[safeTrackIdx] || currentAlbumTracks[0];
-                  if (!currentTrackInList) return null;
+                  const hasVaultSlide = lockedAlbumTracks.length > 0;
+                  const unlockedCount = unlockedAlbumTracks.length;
+                  const totalCarouselSlides = Math.max(1, unlockedCount + (hasVaultSlide ? 1 : 0));
+                  const safeSlideIdx = ((landscapeTrackInListIndex % totalCarouselSlides) + totalCarouselSlides) % totalCarouselSlides;
+                  const isVaultSlide = hasVaultSlide && safeSlideIdx >= unlockedCount;
 
-                  const masterIdx = tracks.findIndex(t => t.id === currentTrackInList.id);
-                  const playIdx = masterIdx !== -1 ? masterIdx : safeTrackIdx;
-                  const isSelected = currentTrackIndex === playIdx;
+                  const currentUnlockedItem = !isVaultSlide
+                    ? (unlockedAlbumTracks[safeSlideIdx] || unlockedAlbumTracks[0])
+                    : null;
+                  const currentTrackInList = currentUnlockedItem?.track;
+
+                  const masterIdx = currentTrackInList ? tracks.findIndex(t => t.id === currentTrackInList.id) : -1;
+                  const playIdx = masterIdx !== -1 ? masterIdx : (currentUnlockedItem?.albumIdx ?? 0);
+                  const isSelected = currentTrackInList ? currentTrackIndex === playIdx : false;
                   const isTrackActiveAndPlaying = isSelected && isPlaying;
-                  const trackArtwork = currentTrackInList.landscapeJpg || currentTrackInList.portraitJpg || currentTrackInList.thumbnailJpg || albumCover;
+                  const trackArtwork = currentTrackInList
+                    ? (currentTrackInList.landscapeJpg || currentTrackInList.portraitJpg || currentTrackInList.thumbnailJpg || albumCover)
+                    : albumCover;
 
                   const handlePrevTrackInList = (e?: React.MouseEvent) => {
                     if (e) e.stopPropagation();
-                    setLandscapeTrackInListIndex(prev => (prev - 1 + totalTracksInList) % totalTracksInList);
+                    setLandscapeTrackInListIndex(prev => (prev - 1 + totalCarouselSlides) % totalCarouselSlides);
                   };
 
                   const handleNextTrackInList = (e?: React.MouseEvent) => {
                     if (e) e.stopPropagation();
-                    setLandscapeTrackInListIndex(prev => (prev + 1) % totalTracksInList);
+                    setLandscapeTrackInListIndex(prev => (prev + 1) % totalCarouselSlides);
                   };
 
                   return (
@@ -3393,114 +3526,197 @@ export function Music() {
                         }
                       }}
                     >
-                      {/* Previous Track Button */}
-                      {totalTracksInList > 1 && (
+                      {/* Previous Slide Button */}
+                      {totalCarouselSlides > 1 && (
                         <button
                           type="button"
                           onClick={handlePrevTrackInList}
                           className="absolute left-1 md:left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/80 hover:bg-earth-gold text-white hover:text-black border border-white/20 hover:border-earth-gold flex items-center justify-center transition-all shadow-2xl active:scale-95 cursor-pointer backdrop-blur-md"
-                          title="Vorig nummer"
+                          title="Vorige"
                         >
                           <ChevronLeft className="w-6 h-6 -ml-0.5" />
                         </button>
                       )}
 
-                      {/* Next Track Button */}
-                      {totalTracksInList > 1 && (
+                      {/* Next Slide Button */}
+                      {totalCarouselSlides > 1 && (
                         <button
                           type="button"
                           onClick={handleNextTrackInList}
                           className="absolute right-1 md:right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/80 hover:bg-earth-gold text-white hover:text-black border border-white/20 hover:border-earth-gold flex items-center justify-center transition-all shadow-2xl active:scale-95 cursor-pointer backdrop-blur-md"
-                          title="Volgend nummer"
+                          title="Volgende"
                         >
                           <ChevronRight className="w-6 h-6 ml-0.5" />
                         </button>
                       )}
 
-                      {/* Full Landscape Track Artwork Showcase between top and bottom bars */}
+                      {/* Full Landscape Track Artwork OR Landscape Vault Template */}
                       <div className="w-full flex-1 flex items-center justify-center min-h-0 px-8 sm:px-12 py-1">
-                        <motion.div
-                          key={currentTrackInList.id || currentTrackInList.title}
-                          initial={{ opacity: 0.6, scale: 0.98 }}
-                          animate={{ 
-                            opacity: 1, 
-                            scale: 1, 
-                            x: trackListSwipeOffset 
-                          }}
-                          transition={{ type: 'spring', damping: 26, stiffness: 280 }}
-                          onClick={() => playTrack(playIdx)}
-                          className="w-full h-full max-h-full rounded-2xl sm:rounded-3xl overflow-hidden relative shadow-2xl border-2 border-earth-gold/40 hover:border-earth-gold transition-all cursor-pointer group bg-black/90 flex flex-col justify-between"
-                        >
-                          {/* Full Landscape Photo Covering Available Container */}
-                          <img
-                            src={trackArtwork}
-                            alt={currentTrackInList.title}
-                            className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 pointer-events-none"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = albumCover;
+                        {isVaultSlide ? (
+                          <motion.div
+                            key="landscape-vault-card"
+                            initial={{ opacity: 0.6, scale: 0.98 }}
+                            animate={{
+                              opacity: 1,
+                              scale: 1,
+                              x: trackListSwipeOffset
                             }}
-                          />
+                            transition={{ type: 'spring', damping: 26, stiffness: 280 }}
+                            onClick={(e) => handleRattleLock('landscape-vault-all', e)}
+                            className="w-full h-full max-h-full rounded-2xl sm:rounded-3xl overflow-hidden relative shadow-2xl border-2 border-earth-gold/40 bg-gradient-to-br from-[#17120e] via-[#0e0b09] to-[#060504] flex flex-col justify-between p-3 sm:p-5 cursor-pointer"
+                          >
+                            {/* Subtle blurred album cover ambiance */}
+                            <img
+                              src={albumCover}
+                              alt=""
+                              aria-hidden="true"
+                              className="absolute inset-0 w-full h-full object-cover blur-3xl scale-125 opacity-15 pointer-events-none"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/70 pointer-events-none" />
 
-                          {/* Gradient Vignette for High Legibility */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/60 pointer-events-none" />
-
-                          {/* Top Row Overlay: Track Index & Play Indicator */}
-                          <div className="relative z-10 p-3 sm:p-4 flex items-center justify-between pointer-events-none">
-                            <div className="flex items-center gap-2">
-                              <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-md text-earth-gold border border-earth-gold/40 text-xs sm:text-sm font-bold uppercase tracking-wider shadow-lg">
-                                Track {safeTrackIdx + 1} / {totalTracksInList}
+                            {/* Top Row: Vault Header */}
+                            <div className="relative z-10 flex items-center justify-between gap-2">
+                              <span className="px-3 py-1 rounded-full bg-black/75 backdrop-blur-md text-earth-gold border border-earth-gold/40 text-xs sm:text-sm font-bold uppercase tracking-wider shadow-lg flex items-center gap-1.5">
+                                <Lock className="w-3.5 h-3.5 text-earth-gold" />
+                                <span>{lockedAlbumTracks.length} {lockedAlbumTracks.length === 1 ? 'nummer' : 'nummers'} op slot</span>
+                              </span>
+                              <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono text-white/70">
+                                {unlockedAlbumTracks.length} / {currentAlbumTracks.length} open
                               </span>
                             </div>
 
-                            {/* Play or Equalizer Pulse Badge */}
-                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/70 backdrop-blur-md border border-earth-gold/60 text-earth-gold flex items-center justify-center shadow-2xl group-hover:scale-110 group-hover:bg-earth-gold group-hover:text-black transition-all">
-                              {isTrackActiveAndPlaying ? (
-                                <div className="flex items-end gap-1 h-5">
-                                  <span className="w-1 bg-current animate-bounce h-full" style={{ animationDelay: '0ms' }} />
-                                  <span className="w-1 bg-current animate-bounce h-full" style={{ animationDelay: '150ms' }} />
-                                  <span className="w-1 bg-current animate-bounce h-full" style={{ animationDelay: '300ms' }} />
-                                </div>
-                              ) : (
-                                <Play className="w-5 h-5 fill-current ml-0.5" />
-                              )}
+                            {/* Center: Responsive Landscape Grid of All Remaining Locks */}
+                            <div className="relative z-10 flex-1 min-h-0 flex items-center justify-center my-1.5 overflow-y-auto custom-scrollbar px-1">
+                              <div
+                                className={`grid gap-1.5 sm:gap-2 w-full my-auto ${
+                                  lockedAlbumTracks.length <= 12
+                                    ? 'grid-cols-6'
+                                    : lockedAlbumTracks.length <= 24
+                                    ? 'grid-cols-8'
+                                    : 'grid-cols-8 sm:grid-cols-10'
+                                }`}
+                              >
+                                {lockedAlbumTracks.map(({ track: lockedTr, albumIdx }) => {
+                                  const lockKey = `land-lock-${lockedTr.id || albumIdx}`;
+                                  const isRattling = rattlingLockKey === lockKey || rattlingLockKey === 'landscape-vault-all';
+                                  return (
+                                    <motion.button
+                                      key={lockKey}
+                                      type="button"
+                                      onClick={(e) => handleRattleLock(lockKey, e)}
+                                      animate={
+                                        isRattling
+                                          ? {
+                                              rotate: [0, -18, 18, -14, 14, -9, 9, -4, 4, 0],
+                                              x: [0, -4, 4, -3, 3, -1.5, 1.5, 0],
+                                              scale: [1, 1.12, 1.08, 1.1, 1]
+                                            }
+                                          : { rotate: 0, x: 0, scale: 1 }
+                                      }
+                                      transition={{ duration: 0.48, ease: 'easeInOut' }}
+                                      className="aspect-square rounded-lg sm:rounded-xl bg-gradient-to-b from-earth-gold/15 via-black/70 to-black/90 border border-earth-gold/35 hover:border-earth-gold hover:bg-earth-gold/25 flex flex-col items-center justify-center gap-0.5 shadow-md transition-colors cursor-pointer group/lock"
+                                      title={`Track ${albumIdx + 1} (Op slot)`}
+                                    >
+                                      <Lock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-earth-gold group-hover/lock:text-amber-200 transition-colors" />
+                                      <span className="text-[9px] sm:text-[10px] font-mono font-bold text-earth-gold/80 group-hover/lock:text-white leading-none">
+                                        {String(albumIdx + 1).padStart(2, '0')}
+                                      </span>
+                                    </motion.button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Bottom Row Overlay: Track Title and Artist */}
-                          <div className="relative z-10 p-3 sm:p-5 flex flex-col items-start gap-1 pointer-events-none">
-                            <h3 className="font-serif text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-wide drop-shadow-md">
-                              {currentTrackInList.title}
-                            </h3>
-                            <div className="flex items-center gap-2.5 flex-wrap">
-                              <p className="text-xs sm:text-sm text-earth-light font-medium drop-shadow-sm">
-                                {matchingAlbum?.artist || 'Paul van Geenen'}
-                              </p>
-                              <span className="px-2 py-0.5 rounded-md bg-earth-gold/20 text-earth-gold border border-earth-gold/30 text-[10px] font-medium flex items-center gap-1 backdrop-blur-sm">
-                                <Music2 className="w-3 h-3" />
-                                <span>Muziek</span>
-                              </span>
-                              {currentTrackInList.audiobook && (
-                                <span className="px-2 py-0.5 rounded-md bg-blue-500/30 text-blue-200 border border-blue-400/30 text-[10px] font-medium flex items-center gap-1 backdrop-blur-sm">
-                                  <Headphones className="w-3 h-3" />
-                                  <span>Audiobook</span>
-                                </span>
-                              )}
-                              {currentTrackInList.reflection && (
-                                <span className="px-2 py-0.5 rounded-md bg-amber-500/30 text-amber-200 border border-amber-400/30 text-[10px] font-medium flex items-center gap-1 backdrop-blur-sm">
-                                  <BookOpen className="w-3 h-3" />
-                                  <span>Reflectie</span>
-                                </span>
-                              )}
-                              {currentTrackInList.videoMov && (
-                                <span className="px-2 py-0.5 rounded-md bg-purple-500/30 text-purple-200 border border-purple-400/30 text-[10px] font-medium flex items-center gap-1 backdrop-blur-sm">
-                                  <Film className="w-3 h-3" />
-                                  <span>Video</span>
-                                </span>
-                              )}
+                            {/* Bottom Row */}
+                            <div className="relative z-10 flex items-center justify-between text-[10px] sm:text-xs text-white/50 font-serif italic">
+                              <span>{selectedAlbum || 'Boeksoundtrack'}</span>
+                              <span>Scan de QR-code in het boek om een nummer vrij te spelen</span>
                             </div>
-                          </div>
-                        </motion.div>
+                          </motion.div>
+                        ) : currentTrackInList ? (
+                          <motion.div
+                            key={currentTrackInList.id || currentTrackInList.title}
+                            initial={{ opacity: 0.6, scale: 0.98 }}
+                            animate={{ 
+                              opacity: 1, 
+                              scale: 1, 
+                              x: trackListSwipeOffset 
+                            }}
+                            transition={{ type: 'spring', damping: 26, stiffness: 280 }}
+                            onClick={() => playTrack(playIdx)}
+                            className="w-full h-full max-h-full rounded-2xl sm:rounded-3xl overflow-hidden relative shadow-2xl border-2 border-earth-gold/40 hover:border-earth-gold transition-all cursor-pointer group bg-black/90 flex flex-col justify-between"
+                          >
+                            {/* Full Landscape Photo Covering Available Container */}
+                            <img
+                              src={trackArtwork}
+                              alt={currentTrackInList.title}
+                              className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 pointer-events-none"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = albumCover;
+                              }}
+                            />
+
+                            {/* Gradient Vignette for High Legibility */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/60 pointer-events-none" />
+
+                            {/* Top Row Overlay: Track Index & Play Indicator */}
+                            <div className="relative z-10 p-3 sm:p-4 flex items-center justify-between pointer-events-none">
+                              <div className="flex items-center gap-2">
+                                <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-md text-earth-gold border border-earth-gold/40 text-xs sm:text-sm font-bold uppercase tracking-wider shadow-lg">
+                                  Track {(currentUnlockedItem?.albumIdx ?? 0) + 1} / {currentAlbumTracks.length}
+                                </span>
+                              </div>
+
+                              {/* Play or Equalizer Pulse Badge */}
+                              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/70 backdrop-blur-md border border-earth-gold/60 text-earth-gold flex items-center justify-center shadow-2xl group-hover:scale-110 group-hover:bg-earth-gold group-hover:text-black transition-all">
+                                {isTrackActiveAndPlaying ? (
+                                  <div className="flex items-end gap-1 h-5">
+                                    <span className="w-1 bg-current animate-bounce h-full" style={{ animationDelay: '0ms' }} />
+                                    <span className="w-1 bg-current animate-bounce h-full" style={{ animationDelay: '150ms' }} />
+                                    <span className="w-1 bg-current animate-bounce h-full" style={{ animationDelay: '300ms' }} />
+                                  </div>
+                                ) : (
+                                  <Play className="w-5 h-5 fill-current ml-0.5" />
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Bottom Row Overlay: Track Title and Artist */}
+                            <div className="relative z-10 p-3 sm:p-5 flex flex-col items-start gap-1 pointer-events-none">
+                              <h3 className="font-serif text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-wide drop-shadow-md">
+                                {currentTrackInList.title}
+                              </h3>
+                              <div className="flex items-center gap-2.5 flex-wrap">
+                                <p className="text-xs sm:text-sm text-earth-light font-medium drop-shadow-sm">
+                                  {matchingAlbum?.artist || 'Paul van Geenen'}
+                                </p>
+                                <span className="px-2 py-0.5 rounded-md bg-earth-gold/20 text-earth-gold border border-earth-gold/30 text-[10px] font-medium flex items-center gap-1 backdrop-blur-sm">
+                                  <Music2 className="w-3 h-3" />
+                                  <span>Muziek</span>
+                                </span>
+                                {currentTrackInList.audiobook && (
+                                  <span className="px-2 py-0.5 rounded-md bg-blue-500/30 text-blue-200 border border-blue-400/30 text-[10px] font-medium flex items-center gap-1 backdrop-blur-sm">
+                                    <Headphones className="w-3 h-3" />
+                                    <span>Audiobook</span>
+                                  </span>
+                                )}
+                                {currentTrackInList.reflection && (
+                                  <span className="px-2 py-0.5 rounded-md bg-amber-500/30 text-amber-200 border border-amber-400/30 text-[10px] font-medium flex items-center gap-1 backdrop-blur-sm">
+                                    <BookOpen className="w-3 h-3" />
+                                    <span>Reflectie</span>
+                                  </span>
+                                )}
+                                {currentTrackInList.videoMov && (
+                                  <span className="px-2 py-0.5 rounded-md bg-purple-500/30 text-purple-200 border border-purple-400/30 text-[10px] font-medium flex items-center gap-1 backdrop-blur-sm">
+                                    <Film className="w-3 h-3" />
+                                    <span>Video</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -3537,17 +3753,24 @@ export function Music() {
                     </div>
                   </div>
 
-                  {/* Track List: Responsive Grid in Portrait Mode (1 col on mobile, 2 col on tablet, 3 col on large screens) */}
+                  {/* Track List: Responsive Grid in Portrait Mode (Unlocked Covers + Single Vault Card with Remaining Locks) */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 flex-1 pb-4">
                     <div className="flex items-center justify-between mb-1 px-1 col-span-full">
                       <h4 className="text-xs font-bold uppercase tracking-widest text-white/50">
                         {t.tracklist.tracksHeader(currentAlbumTracks.length)}
                       </h4>
+                      {lockedAlbumTracks.length > 0 && (
+                        <span className="text-[11px] font-mono text-earth-gold/80 flex items-center gap-1">
+                          <Lock className="w-3 h-3" />
+                          <span>{unlockedAlbumTracks.length} open • {lockedAlbumTracks.length} op slot</span>
+                        </span>
+                      )}
                     </div>
                     
-                    {currentAlbumTracks.map((track, trackIdx) => {
+                    {/* 1. Render all unlocked tracks with their full art covers */}
+                    {unlockedAlbumTracks.map(({ track, albumIdx }) => {
                       const masterIdx = tracks.findIndex(t => t.id === track.id);
-                      const playIdx = masterIdx !== -1 ? masterIdx : trackIdx;
+                      const playIdx = masterIdx !== -1 ? masterIdx : albumIdx;
                       const isSelected = currentTrackIndex === playIdx;
                       const trackArtwork = getTrackCoverJpg(track) || track.portraitJpg || track.thumbnailJpg || track.landscapeJpg || albumCover;
 
@@ -3596,6 +3819,86 @@ export function Music() {
                         </div>
                       );
                     })}
+
+                    {/* 2. Single Vault Template Card (same size as a soundtrack art cover) holding all remaining locks */}
+                    {lockedAlbumTracks.length > 0 && (
+                      <div
+                        key="portrait-vault-card"
+                        onClick={(e) => handleRattleLock('portrait-vault-all', e)}
+                        className="relative w-full max-w-sm mx-auto aspect-square rounded-2xl overflow-hidden border-2 border-earth-gold/35 hover:border-earth-gold/60 transition-all duration-300 shadow-2xl bg-gradient-to-br from-[#17120e] via-[#0e0b09] to-[#060504] flex flex-col justify-between p-3.5 sm:p-4 select-none cursor-pointer"
+                      >
+                        {/* Subtle ambient blur of album cover without revealing track art */}
+                        <img
+                          src={albumCover}
+                          alt=""
+                          aria-hidden="true"
+                          className="absolute inset-0 w-full h-full object-cover blur-3xl scale-125 opacity-15 pointer-events-none"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/75 pointer-events-none" />
+
+                        {/* Top Bar inside Vault Template */}
+                        <div className="relative z-10 flex items-center justify-between gap-2">
+                          <span className="px-2.5 py-1 rounded-full bg-black/80 border border-earth-gold/40 text-earth-gold text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md">
+                            <Lock className="w-3 h-3 text-earth-gold" />
+                            <span>{lockedAlbumTracks.length} op slot</span>
+                          </span>
+                          <span className="text-[10px] font-mono text-white/60 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">
+                            {unlockedAlbumTracks.length}/{currentAlbumTracks.length}
+                          </span>
+                        </div>
+
+                        {/* Center Grid of All Remaining Locks */}
+                        <div className="relative z-10 flex-1 min-h-0 flex items-center justify-center my-2 overflow-y-auto custom-scrollbar pr-0.5">
+                          <div
+                            className={`grid gap-1.5 w-full my-auto ${
+                              lockedAlbumTracks.length <= 9
+                                ? 'grid-cols-3'
+                                : lockedAlbumTracks.length <= 16
+                                ? 'grid-cols-4'
+                                : lockedAlbumTracks.length <= 30
+                                ? 'grid-cols-5'
+                                : lockedAlbumTracks.length <= 42
+                                ? 'grid-cols-6'
+                                : 'grid-cols-7'
+                            }`}
+                          >
+                            {lockedAlbumTracks.map(({ track: lockedTr, albumIdx }) => {
+                              const lockKey = `port-lock-${lockedTr.id || albumIdx}`;
+                              const isRattling = rattlingLockKey === lockKey || rattlingLockKey === 'portrait-vault-all';
+                              return (
+                                <motion.button
+                                  key={lockKey}
+                                  type="button"
+                                  onClick={(e) => handleRattleLock(lockKey, e)}
+                                  animate={
+                                    isRattling
+                                      ? {
+                                          rotate: [0, -18, 18, -14, 14, -9, 9, -4, 4, 0],
+                                          x: [0, -4, 4, -3, 3, -1.5, 1.5, 0],
+                                          scale: [1, 1.12, 1.08, 1.1, 1]
+                                        }
+                                      : { rotate: 0, x: 0, scale: 1 }
+                                  }
+                                  transition={{ duration: 0.48, ease: 'easeInOut' }}
+                                  className="aspect-square rounded-lg bg-gradient-to-b from-earth-gold/15 via-black/75 to-black/95 border border-earth-gold/30 hover:border-earth-gold hover:bg-earth-gold/25 flex flex-col items-center justify-center gap-0.5 shadow-md transition-colors cursor-pointer group/lock"
+                                  title={`Track ${albumIdx + 1} (Op slot)`}
+                                >
+                                  <Lock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-earth-gold group-hover/lock:text-amber-200 transition-colors" />
+                                  <span className="text-[8px] sm:text-[9px] font-mono font-bold text-earth-gold/80 group-hover/lock:text-white leading-none">
+                                    {String(albumIdx + 1).padStart(2, '0')}
+                                  </span>
+                                </motion.button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Subtle bottom caption */}
+                        <div className="relative z-10 text-center text-[10px] text-white/45 font-serif italic truncate">
+                          Ontgrendel met de QR-codes in het boek
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               );
@@ -3621,6 +3924,60 @@ export function Music() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
           >
+            {/* Cinematic Track Unlock Ceremony: Lock appears -> Rattles with sound -> Fades out while Audio Cover fades in */}
+            <AnimatePresence>
+              {unlockCeremonyPhase !== 'idle' && (
+                <motion.div
+                  key="unlock-ceremony-overlay"
+                  initial={{ opacity: 1 }}
+                  animate={{ opacity: unlockCeremonyPhase === 'fading-out' ? 0 : 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{
+                    duration: unlockCeremonyPhase === 'fading-out' ? 1.35 : 0.25,
+                    ease: [0.4, 0, 0.2, 1]
+                  }}
+                  className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center pointer-events-auto select-none"
+                >
+                  {/* Warm Ambient Golden Glow behind the Lock */}
+                  <motion.div
+                    animate={{
+                      scale: unlockCeremonyPhase === 'opening' || unlockCeremonyPhase === 'fading-out' ? 1.6 : 1,
+                      opacity: unlockCeremonyPhase === 'fading-out' ? 0 : unlockCeremonyPhase === 'opening' ? 0.55 : 0.25
+                    }}
+                    transition={{ duration: 0.7 }}
+                    className="absolute w-56 h-56 sm:w-72 sm:h-72 rounded-full bg-earth-gold/30 blur-3xl pointer-events-none"
+                  />
+
+                  {/* Ornate Metallic Lock Emblem */}
+                  <motion.div
+                    animate={
+                      unlockCeremonyPhase === 'rattling'
+                        ? {
+                            rotate: [0, -18, 18, -15, 15, -10, 10, -6, 6, 0],
+                            x: [0, -8, 8, -6, 6, -4, 4, -2, 2, 0],
+                            scale: [1, 1.08, 1.05, 1.1, 1.04, 1]
+                          }
+                        : unlockCeremonyPhase === 'opening'
+                        ? { scale: 1.14, rotate: 0, x: 0 }
+                        : unlockCeremonyPhase === 'fading-out'
+                        ? { scale: 1.25, opacity: 0 }
+                        : { scale: 1, rotate: 0, x: 0 }
+                    }
+                    transition={{
+                      duration: unlockCeremonyPhase === 'rattling' ? 0.58 : 0.8,
+                      ease: 'easeInOut'
+                    }}
+                    className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-3xl bg-gradient-to-b from-[#2a2118] via-[#15100c] to-[#080604] border-2 border-earth-gold/60 shadow-[0_0_60px_rgba(212,175,55,0.35)] flex items-center justify-center"
+                  >
+                    {unlockCeremonyPhase === 'opening' || unlockCeremonyPhase === 'fading-out' ? (
+                      <LockOpen className="w-14 h-14 sm:w-16 sm:h-16 text-amber-300 drop-shadow-[0_0_20px_rgba(252,211,77,0.8)]" />
+                    ) : (
+                      <Lock className="w-14 h-14 sm:w-16 sm:h-16 text-earth-gold drop-shadow-[0_0_15px_rgba(212,175,55,0.5)]" />
+                    )}
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             {/* Background Image Layer: Ribbon Filmstrip of previous, current, and next track (Pure physical slide, ZERO opacity fade) */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none bg-black">
               {/* Left Panel: Previous Track Image */}

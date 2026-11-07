@@ -3,68 +3,73 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { BOOKS } from '../data/books';
 import type { Book as BookType } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Music, AlertCircle, Loader2, Sparkles, Volume2, BookOpen } from 'lucide-react';
+import { Music, AlertCircle, Loader2, Sparkles, Volume2, BookOpen, LockOpen } from 'lucide-react';
 import { transipPost, getQrCodeByCode } from '../lib/transip';
+import { unlockTrackByRawIdentifier } from '../lib/trackLocks';
 
-// Visual branding and theme overrides matching the physical hardcovers
+// Visual branding and theme overrides matching the physical hardcovers (100% Book Atmosphere, no Spotify green)
 function getBookTheme(bookId: string) {
   switch (bookId) {
     case '1': // Proloog - Warm Clay / Charcoal Earth
       return {
         bgClass: 'from-[#19110e] via-[#2a1b14] to-[#120d0b]',
-        accent: 'text-earth-clay', 
+        accent: 'text-earth-gold',
         badgeBg: 'bg-earth-clay/20 text-earth-light border-earth-clay/35',
-        glow: 'bg-earth-clay/15',
-        progressBar: 'from-earth-clay to-earth-gold',
-        cardBorder: 'border-earth-clay/20',
-        label: 'Proloog'
+        glow: 'bg-earth-clay/25',
+        progressBar: 'from-earth-clay via-earth-gold to-amber-300',
+        cardBorder: 'border-earth-clay/30',
+        buttonClass: 'from-earth-gold via-amber-500 to-earth-clay text-black border-earth-gold/50',
+        label: 'Koester het Leven'
       };
     case '2': // Vorming - Rust / Dark Amber
       return {
         bgClass: 'from-[#1a120b] via-[#301c0c] to-[#110b06]',
-        accent: 'text-orange-400', 
-        badgeBg: 'bg-orange-500/20 text-orange-200 border-orange-500/35',
-        glow: 'bg-orange-500/15',
-        progressBar: 'from-orange-500 to-yellow-500',
-        cardBorder: 'border-orange-500/20',
-        label: 'Vorming'
+        accent: 'text-amber-400',
+        badgeBg: 'bg-amber-500/20 text-amber-200 border-amber-500/35',
+        glow: 'bg-amber-500/20',
+        progressBar: 'from-amber-600 via-amber-400 to-yellow-300',
+        cardBorder: 'border-amber-500/30',
+        buttonClass: 'from-amber-400 via-amber-500 to-orange-500 text-black border-amber-300/50',
+        label: 'Mijn eerste 21 jaar'
       };
-    case '3': // De Echo - Emerald Deep / Antique Gold
+    case '3': // De Echo - Deep Velvet / Antique Gold
       return {
-        bgClass: 'from-[#030f0b] via-[#071f14] to-[#010705]',
-        accent: 'text-[#cfa153]', 
+        bgClass: 'from-[#120d07] via-[#24190c] to-[#090604]',
+        accent: 'text-[#cfa153]',
         badgeBg: 'bg-[#cfa153]/20 text-[#ffe5b8] border-[#cfa153]/35',
-        glow: 'bg-[#cfa153]/20',
-        progressBar: 'from-[#cfa153] to-[#1DB954]',
-        cardBorder: 'border-[#cfa153]/25',
+        glow: 'bg-[#cfa153]/25',
+        progressBar: 'from-[#9e7329] via-[#cfa153] to-[#ffe5b8]',
+        cardBorder: 'border-[#cfa153]/35',
+        buttonClass: 'from-[#cfa153] via-[#e2b86b] to-[#b5893d] text-black border-[#ffe5b8]/50',
         label: 'De Echo'
       };
-    case '4': // De Bestemming - Steel Dark Blue / Silver Slate
+    case '4': // De Bestemming - Cathedral Slate / Warm Gold
       return {
-        bgClass: 'from-[#060810] via-[#101424] to-[#020306]',
-        accent: 'text-[#8fa3db]', 
-        badgeBg: 'bg-[#8fa3db]/20 text-indigo-100 border-[#8fa3db]/35',
-        glow: 'bg-indigo-500/15',
-        progressBar: 'from-indigo-400 to-[#1DB954]',
-        cardBorder: 'border-indigo-400/20',
+        bgClass: 'from-[#0a0c14] via-[#161b2e] to-[#05060a]',
+        accent: 'text-[#d4af37]',
+        badgeBg: 'bg-[#d4af37]/20 text-amber-100 border-[#d4af37]/35',
+        glow: 'bg-[#d4af37]/20',
+        progressBar: 'from-[#8fa3db] via-[#d4af37] to-amber-200',
+        cardBorder: 'border-[#d4af37]/30',
+        buttonClass: 'from-[#d4af37] via-amber-400 to-[#b5893d] text-black border-amber-200/50',
         label: 'De Bestemming'
       };
     default:
       return {
-        bgClass: 'from-earth-dark/95 via-earth-clay/5 to-earth-dark/95',
+        bgClass: 'from-[#140f0a] via-[#241a10] to-[#0a0705]',
         accent: 'text-earth-gold',
-        badgeBg: 'bg-earth-clay/10 text-earth-light/80 border-white/10',
-        glow: 'bg-earth-gold/15',
-        progressBar: 'from-earth-gold to-emerald-400',
-        cardBorder: 'border-white/10',
-        label: 'Muziekfragment'
+        badgeBg: 'bg-earth-gold/15 text-earth-light border-earth-gold/30',
+        glow: 'bg-earth-gold/25',
+        progressBar: 'from-earth-clay via-earth-gold to-amber-200',
+        cardBorder: 'border-earth-gold/30',
+        buttonClass: 'from-earth-gold via-amber-400 to-amber-600 text-black border-earth-gold/50',
+        label: 'Boeksoundtrack'
       };
   }
 }
 
 async function recordScan(redirectCode: string, data: any, book: BookType | null) {
   try {
-    // 1. Client-side IP Geolocation for high precision (free lookup)
     let city = 'Onbekend';
     let country = 'Onbekend';
     try {
@@ -78,7 +83,6 @@ async function recordScan(redirectCode: string, data: any, book: BookType | null
       console.warn('[Analytics] Geolocation lookup failed:', e);
     }
 
-    // 2. Identify human device type from userAgent
     const ua = navigator.userAgent;
     let deviceType = 'Onbekend';
     if (/iphone/i.test(ua)) {
@@ -107,15 +111,12 @@ async function recordScan(redirectCode: string, data: any, book: BookType | null
       artist: data.artist || ''
     };
 
-    // 3. Post event registration directly to TransIP MySQL database
     try {
       await transipPost('qr_scan', scanPayload);
-      console.log('[Analytics] QR Scan successfully registered in TransIP MySQL database.');
     } catch (transipErr) {
       console.warn('[Analytics] Direct TransIP scan logging warning:', transipErr);
     }
 
-    // 4. Also notify Express backend if running in fullstack dev
     try {
       fetch('/api/scans', {
         method: 'POST',
@@ -128,79 +129,62 @@ async function recordScan(redirectCode: string, data: any, book: BookType | null
   }
 }
 
-// Converts standard Spotify URLs to app-launching native URI links
-function convertToSpotifyUri(url: string): string | null {
-  try {
-    const cleanUrl = url.trim();
-    // Match track format
-    const trackMatch = cleanUrl.match(/\/track\/([a-zA-Z0-9]+)/);
-    if (trackMatch) {
-      const trackId = trackMatch[1];
-      // Get context parameter (like playlist backlink) if present
-      const contextMatch = cleanUrl.match(/[?&]context=([^&]+)/);
-      const context = contextMatch ? decodeURIComponent(contextMatch[1]) : '';
-      return `spotify:track:${trackId}${context ? `?context=${context}` : ''}`;
-    }
-    
-    // Match playlist format
-    const playlistMatch = cleanUrl.match(/\/playlist\/([a-zA-Z0-9]+)/);
-    if (playlistMatch) {
-      const playlistId = playlistMatch[1];
-      return `spotify:playlist:${playlistId}`;
-    }
+/**
+ * Resolve the target URL on our own music player and append ?unlock=1
+ * so the player triggers the cinematic lock-rattle-unlock-fade sequence!
+ */
+function resolvePlayerTargetUrl(rawLink: string, songTitle: string): string {
+  const cleanLink = (rawLink || '').trim();
 
-    // Match album format
-    const albumMatch = cleanUrl.match(/\/album\/([a-zA-Z0-9]+)/);
-    if (albumMatch) {
-      const albumId = albumMatch[1];
-      return `spotify:album:${albumId}`;
-    }
-  } catch (e) {
-    console.warn('[Spotify Uri Conversion] Error:', e);
-  }
-  return null;
-}
-
-// Helper to enrich a track link with the books' playlist context if context is missing
-function enrichSpotifyLink(url: string, bookId: string): string {
+  // Check if the link points to our website's music player (e.g. https://paulvangeenen.nl/music?v=... or /music/...)
   try {
-    const cleanUrl = url.trim();
-    // Only enrich standard track links that don't already have a context parameter
-    if (cleanUrl.includes('/track/') && !cleanUrl.includes('context=')) {
-      // Books 3 (De Echo) and 4 (De Bestemming) use the same primary book soundtrack playlist on Spotify
-      const playlistId = '3hHvf4bx4V0vFpKhmdXloJ';
-      const separator = cleanUrl.includes('?') ? '&' : '?';
-      const enriched = `${cleanUrl}${separator}context=spotify:playlist:${playlistId}`;
-      console.log('[Spotify Enricher] Inline linked track to playlist context:', enriched);
-      return enriched;
+    if (cleanLink) {
+      const isInternalMusic =
+        cleanLink.startsWith('/music') ||
+        cleanLink.startsWith('/@music') ||
+        cleanLink.includes('paulvangeenen.nl/music') ||
+        cleanLink.includes('lionbooks.nl/music');
+
+      if (isInternalMusic) {
+        const urlObj = new URL(cleanLink, window.location.origin);
+        urlObj.searchParams.set('unlock', '1');
+        return `${urlObj.pathname}${urlObj.search}`;
+      }
     }
-  } catch (err) {
-    console.warn('[Spotify Enricher] Error enrich:', err);
+  } catch {}
+
+  // If link was a legacy Spotify URL or empty, route directly to the track in our internal Music player!
+  if (songTitle && songTitle !== 'Onbekend nummer') {
+    return `/music?track=${encodeURIComponent(songTitle.trim())}&unlock=1`;
   }
-  return url;
+
+  if (cleanLink) {
+    return cleanLink;
+  }
+
+  return '/music';
 }
 
 export function QRRedirect() {
   const { qrCode } = useParams<{ qrCode: string }>();
   const navigate = useNavigate();
-  const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(7); // 7 seconds screen allows looking at the beautiful cover
-  
+  const TOTAL_SECONDS = 4;
+  const [countdown, setCountdown] = useState(TOTAL_SECONDS);
+
   const [songInfo, setSongInfo] = useState<{
     song: string;
     artist: string;
-    spotifyLink: string;
+    targetUrl: string;
     hoofdstuk?: string;
     boekId?: string;
     boekTitel?: string;
   } | null>(null);
-  
+
   const [matchedBook, setMatchedBook] = useState<BookType | null>(null);
 
-  // Fetch mapping details from Firestore
   useEffect(() => {
     let active = true;
 
@@ -215,7 +199,6 @@ export function QRRedirect() {
 
       const cleanCode = qrCode.trim().toUpperCase();
 
-      // Instantly dismiss any static system/asset file paths
       if (cleanCode.includes('.') || cleanCode === '') {
         if (active) navigate('/', { replace: true });
         return;
@@ -234,47 +217,50 @@ export function QRRedirect() {
         }
 
         if (data) {
-          if (data.spotifyLink) {
-            // Locate target book details to extract physical cover and style theme
-            let foundBook: BookType | null = null;
-            if (data.boekId) {
-              foundBook = BOOKS.find(b => b.id === String(data.boekId)) || null;
-            }
-            if (!foundBook && data.boekTitel) {
-              const searchTitle = data.boekTitel.toLowerCase().trim();
-              foundBook = BOOKS.find(b => 
-                b.title.toLowerCase().trim().includes(searchTitle) || 
-                searchTitle.includes(b.title.toLowerCase().trim())
-              ) || null;
-            }
+          let foundBook: BookType | null = null;
+          if (data.boekId) {
+            foundBook = BOOKS.find(b => b.id === String(data.boekId)) || null;
+          }
+          if (!foundBook && data.boekTitel) {
+            const searchTitle = data.boekTitel.toLowerCase().trim();
+            foundBook = BOOKS.find(b =>
+              b.title.toLowerCase().trim().includes(searchTitle) ||
+              searchTitle.includes(b.title.toLowerCase().trim())
+            ) || null;
+          }
+          // Default fallback to Book 3 (De Echo) or Book 1 so a physical hardcover photo is always shown
+          if (!foundBook) {
+            foundBook = BOOKS[2] || BOOKS[0] || null;
+          }
 
-            if (active) {
-              setMatchedBook(foundBook);
-              const bookIdStr = String(data.boekId || foundBook?.id || '');
-              const enrichedLink = enrichSpotifyLink(data.spotifyLink || '', bookIdStr);
+          const songTitle = data.song || 'Onbekend nummer';
+          // Immediately unlock this track in localStorage on the reader's device!
+          if (data.song) {
+            unlockTrackByRawIdentifier(data.song);
+          }
+          if (data.hoofdstuk) {
+            unlockTrackByRawIdentifier(data.hoofdstuk);
+          }
 
-              setSongInfo({
-                song: data.song || 'Onbekend nummer',
-                artist: data.artist || 'Onbekende artiest',
-                spotifyLink: enrichedLink,
-                hoofdstuk: data.hoofdstuk || 'Onbekend fragment',
-                boekId: data.boekId,
-                boekTitel: data.boekTitel
-              });
-              setLoading(false);
-              
-              // Record scan details
-              recordScan(cleanCode, data, foundBook);
-            }
-          } else {
-            if (active) {
-              setError('Deze QR-code is geregistreerd, maar bevat momenteel geen gekoppelde Spotify link.');
-              setLoading(false);
-            }
+          const targetUrl = resolvePlayerTargetUrl(data.spotifyLink || '', songTitle);
+
+          if (active) {
+            setMatchedBook(foundBook);
+            setSongInfo({
+              song: songTitle,
+              artist: data.artist || 'Paul van Geenen',
+              targetUrl,
+              hoofdstuk: data.hoofdstuk || 'Boekfragment',
+              boekId: data.boekId,
+              boekTitel: data.boekTitel || foundBook?.title
+            });
+            setLoading(false);
+
+            recordScan(cleanCode, data, foundBook);
           }
         } else {
           if (active) {
-            setError(`Deze fragmentlink "${cleanCode}" bestaat niet of is gewijzigd.`);
+            setError(`Deze boekcode "${cleanCode}" bestaat niet of is gewijzigd.`);
             setLoading(false);
           }
         }
@@ -294,35 +280,14 @@ export function QRRedirect() {
     };
   }, [qrCode, navigate]);
 
-  // Helper to trigger deep link or web fallback
-  const triggerSpotifyRedirect = (spotifyWebUrl: string) => {
-    const nativeUri = convertToSpotifyUri(spotifyWebUrl);
-    if (isMobile) {
-      if (nativeUri) {
-        console.log('[Spotify Redirect] Mobile auto redirection directly to native URI:', nativeUri);
-        // By setting location.href directly to the native URI (spotify:track:...), the OS trigger prompt to open Spotify
-        // is issued instantly. We do NOT replace standard location automatically to prevent force-loading the unlogged browser player.
-        window.location.href = nativeUri;
-      } else {
-        console.log('[Spotify Redirect] Mobile auto redirection fallback to safe HTTPS URL:', spotifyWebUrl);
-        window.location.replace(spotifyWebUrl);
-      }
+  const triggerPlayerRedirect = (targetUrl: string) => {
+    if (targetUrl.startsWith('/')) {
+      navigate(targetUrl, { replace: true });
     } else {
-      if (nativeUri) {
-        console.log('[Spotify Redirect] Opening native Spotify App link on desktop:', nativeUri);
-        window.location.href = nativeUri;
-        
-        setTimeout(() => {
-          window.location.replace(spotifyWebUrl);
-        }, 4000);
-      } else {
-        console.log('[Spotify Redirect] Falling back to standard web redirect:', spotifyWebUrl);
-        window.location.replace(spotifyWebUrl);
-      }
+      window.location.replace(targetUrl);
     }
   };
 
-  // Handle countdown and seamless silent redirect
   useEffect(() => {
     if (loading || error || !songInfo) return;
 
@@ -333,40 +298,40 @@ export function QRRedirect() {
         setCountdown((prev) => prev - 1);
       }, 1000);
     } else {
-      console.log('[QR Redirect] Triggering seamless automatic redirection:', songInfo.spotifyLink);
-      triggerSpotifyRedirect(songInfo.spotifyLink);
+      triggerPlayerRedirect(songInfo.targetUrl);
     }
 
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [countdown, loading, error, songInfo, isMobile]);
+  }, [countdown, loading, error, songInfo]);
 
-  // Handle immediate forward when clicked by the user
   const handleProceedImmediately = () => {
     if (songInfo) {
-      triggerSpotifyRedirect(songInfo.spotifyLink);
+      triggerPlayerRedirect(songInfo.targetUrl);
     }
   };
 
   const theme = getBookTheme(matchedBook?.id || '');
+  const displayBookCover = matchedBook?.coverUrl || BOOKS[2]?.coverUrl || BOOKS[0]?.coverUrl;
+  const displayBookTitle = songInfo?.boekTitel || matchedBook?.title || 'De Geboorte van de Leeuw';
 
   return (
-    <div className={`min-h-screen bg-gradient-to-b ${theme.bgClass} text-white flex flex-col justify-center items-center px-4 py-8 md:py-12 transition-all duration-1000 select-none`}>
-      {/* Top running progress bar requested by user */}
+    <div className={`min-h-screen bg-gradient-to-b ${theme.bgClass} text-white flex flex-col justify-center items-center px-4 py-8 md:py-12 transition-all duration-1000 select-none relative overflow-hidden`}>
+      {/* Top running golden progress bar */}
       {!loading && !error && songInfo && (
-        <div className="fixed top-0 left-0 w-full h-[6px] bg-white/5 z-50">
+        <div className="fixed top-0 left-0 w-full h-[5px] bg-white/5 z-50">
           <motion.div
-            className={`bg-gradient-to-r ${theme.progressBar} h-full`}
-            initial={{ width: "0%" }}
-            animate={{ width: `${((7 - countdown) / 7) * 100}%` }}
+            className={`bg-gradient-to-r ${theme.progressBar} h-full shadow-[0_0_15px_rgba(212,175,55,0.6)]`}
+            initial={{ width: '0%' }}
+            animate={{ width: `${((TOTAL_SECONDS - countdown) / TOTAL_SECONDS) * 100}%` }}
             transition={{ duration: 1, ease: 'linear' }}
           />
         </div>
       )}
 
-      {/* Immersive Background Blur Visual */}
-      <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full blur-[100px] sm:blur-[140px] opacity-20 mix-blend-screen transition-all duration-1000 animate-pulse ${theme.glow}`} />
+      {/* Immersive Book Atmosphere Background Glow */}
+      <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] sm:w-[520px] h-[320px] sm:h-[520px] rounded-full blur-[110px] sm:blur-[150px] opacity-30 mix-blend-screen transition-all duration-1000 animate-pulse ${theme.glow}`} />
 
       <div className="w-full max-w-lg z-10">
         <AnimatePresence mode="wait">
@@ -376,21 +341,21 @@ export function QRRedirect() {
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              className="bg-black/45 border border-white/5 p-8 rounded-[28px] shadow-2xl backdrop-blur-md text-center space-y-6"
+              className="bg-black/55 border border-earth-gold/20 p-8 rounded-[28px] shadow-2xl backdrop-blur-md text-center space-y-6"
             >
               <div className="relative flex justify-center">
                 <div className="absolute inset-0 bg-earth-gold/20 rounded-full blur-xl w-20 h-20 mx-auto animate-pulse" />
-                <div className="relative w-14 h-14 bg-gradient-to-tr from-earth-gold to-yellow-300 rounded-full flex items-center justify-center text-earth-dark shadow-lg">
-                  <Music className="w-7 h-7 animate-bounce" />
+                <div className="relative w-14 h-14 bg-gradient-to-tr from-earth-gold to-amber-300 rounded-full flex items-center justify-center text-earth-dark shadow-lg">
+                  <BookOpen className="w-7 h-7 animate-pulse" />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <h3 className="text-xl font-serif font-medium text-white tracking-wide">Paginacontext ophalen...</h3>
-                <p className="text-earth-light/50 text-xs">Muziekfragment wordt ingeladen</p>
+                <h3 className="text-xl font-serif font-medium text-white tracking-wide">Hoofdstuk ontgrendelen...</h3>
+                <p className="text-earth-light/60 text-xs">Soundtrack van het boek wordt voorbereid</p>
               </div>
-              <div className="flex items-center justify-center gap-2 text-earth-light/30 text-[11px] font-mono">
+              <div className="flex items-center justify-center gap-2 text-earth-gold/60 text-[11px] font-mono">
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-earth-gold" />
-                <span>Synchroniseren...</span>
+                <span>Moment geduld...</span>
               </div>
             </motion.div>
           ) : error ? (
@@ -399,7 +364,7 @@ export function QRRedirect() {
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0 }}
-              className="bg-black/55 border border-red-500/10 p-8 rounded-[28px] shadow-2xl backdrop-blur-md text-center space-y-6"
+              className="bg-black/55 border border-red-500/20 p-8 rounded-[28px] shadow-2xl backdrop-blur-md text-center space-y-6"
             >
               <div className="w-14 h-14 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center text-red-400 mx-auto shadow-inner">
                 <AlertCircle className="w-7 h-7" />
@@ -412,129 +377,90 @@ export function QRRedirect() {
               </div>
               <div className="pt-2">
                 <button
-                  onClick={() => navigate('/')}
-                  className="px-6 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-full font-medium text-xs tracking-wider uppercase transition-all"
+                  onClick={() => navigate('/music')}
+                  className="px-6 py-2.5 bg-earth-gold/15 border border-earth-gold/30 hover:bg-earth-gold/25 text-earth-gold rounded-full font-medium text-xs tracking-wider uppercase transition-all cursor-pointer"
                 >
-                  Terug naar website
+                  Naar de Muziekspeler
                 </button>
               </div>
             </motion.div>
           ) : (
             <motion.div
               key="companion"
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-              className={`bg-black/45 border ${theme.cardBorder} p-6 sm:p-8 rounded-[36px] shadow-[0_30px_70px_rgba(0,0,0,0.8)] backdrop-blur-xl text-center space-y-6 relative overflow-hidden`}
+              transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+              className={`bg-black/60 border ${theme.cardBorder} p-6 sm:p-8 rounded-[36px] shadow-[0_30px_80px_rgba(0,0,0,0.9)] backdrop-blur-xl text-center space-y-6 relative overflow-hidden`}
             >
-              {/* Cover block styled strictly for book readers */}
-              <div className="pt-4 flex justify-center">
+              {/* Book Badge */}
+              <div className="flex justify-center">
+                <span className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] uppercase tracking-[0.2em] font-bold border ${theme.badgeBg}`}>
+                  <LockOpen className="w-3 h-3 text-earth-gold" />
+                  <span>{displayBookTitle}</span>
+                </span>
+              </div>
+
+              {/* Physical Book Cover Showcase */}
+              <div className="pt-1 flex justify-center">
                 <motion.div
-                  initial={{ scale: 0.92, opacity: 0, rotate: -2 }}
-                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                  transition={{ delay: 0.1, duration: 0.6 }}
+                  initial={{ scale: 0.9, opacity: 0, y: 10 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  transition={{ delay: 0.08, duration: 0.6 }}
                   className="relative group"
                 >
-                  <div className={`absolute -inset-2.5 rounded-xl blur-xl opacity-40 ${theme.glow}`} />
-                  {matchedBook ? (
-                    <img
-                      src={matchedBook.coverUrl}
-                      alt={matchedBook.title}
-                      className="relative w-40 sm:w-44 h-auto object-cover rounded-lg shadow-[0_20px_45px_rgba(0,0,0,0.7)] border border-white/5"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="w-36 h-48 bg-white/5 border border-white/5 rounded-lg flex flex-col items-center justify-center text-earth-light/35">
-                      <BookOpen className="w-10 h-10 mb-1" />
-                      <span className="text-[10px]">Muziek fragment</span>
-                    </div>
-                  )}
+                  <div className={`absolute -inset-4 rounded-2xl blur-2xl opacity-55 ${theme.glow}`} />
+                  <img
+                    src={displayBookCover}
+                    alt={displayBookTitle}
+                    className="relative w-44 sm:w-52 h-auto object-cover rounded-xl shadow-[0_25px_55px_rgba(0,0,0,0.85)] border border-earth-gold/30"
+                    referrerPolicy="no-referrer"
+                  />
                 </motion.div>
               </div>
 
-              {/* Creative Copy framing the visual space */}
-              <div className="space-y-1">
-                <span className="text-earth-gold/60 text-[10px] tracking-widest uppercase font-mono flex items-center justify-center gap-1">
-                  <Sparkles className="w-3 h-3 animate-pulse" />
-                  Boeksoundtrack activeert...
+              {/* Chapter & Unlock Announcement */}
+              <div className="space-y-1.5">
+                <span className="text-earth-gold/80 text-[10px] tracking-[0.2em] uppercase font-mono flex items-center justify-center gap-1.5">
+                  <Sparkles className="w-3 h-3 animate-pulse text-earth-gold" />
+                  Hoofdstuk Soundtrack Ontgrendeld
                 </span>
-                
+
                 <h2 className="text-xl sm:text-2xl font-serif font-bold text-white tracking-wide leading-tight max-w-sm mx-auto">
                   {songInfo?.hoofdstuk}
                 </h2>
-                
-                <p className="text-[#ffe5b8]/80 text-xs max-w-xs mx-auto animate-pulse font-semibold">
-                  {isMobile ? (
-                    countdown > 0 
-                      ? "De Spotify-app start over enkele seconden..." 
-                      : "Verbindingsverzoek verstuurd naar de Spotify-app! ⚡"
-                  ) : (
-                    "De Spotify-app start over enkele seconden..."
-                  )}
-                </p>
               </div>
 
-              {/* Seamless, minimal record strip */}
-              <div className="bg-black/20 border border-white/5 rounded-2xl p-4 flex items-center gap-4 text-left">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#1DB954] to-[#1ed760] flex items-center justify-center text-black shrink-0 relative overflow-hidden">
-                  <Music className="w-5 h-5 fill-current animate-pulse text-white" />
+              {/* Soundtrack Card in Pure Book Style */}
+              <div className="bg-gradient-to-r from-white/[0.04] via-earth-gold/[0.08] to-white/[0.04] border border-earth-gold/25 rounded-2xl p-4 flex items-center gap-4 text-left shadow-inner">
+                <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-earth-clay via-earth-gold to-amber-200 flex items-center justify-center text-black shrink-0 relative overflow-hidden shadow-lg shadow-earth-gold/20">
+                  <Music className="w-5 h-5 fill-current animate-pulse text-black" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h4 className="text-sm font-bold text-white truncate font-serif">{songInfo?.song}</h4>
-                  <p className={`text-xs font-semibold truncate ${theme.accent}`}>{songInfo?.artist}</p>
+                  <h4 className="text-sm sm:text-base font-bold text-white truncate font-serif">{songInfo?.song}</h4>
+                  <p className={`text-xs font-medium truncate ${theme.accent}`}>{songInfo?.artist}</p>
                 </div>
               </div>
 
-              {/* Progress status layout with countdown */}
-              <div className="space-y-1 pt-1">
-                <div className="flex justify-between items-center text-[10px] text-earth-light/55 font-mono">
+              {/* Countdown & Action Button */}
+              <div className="space-y-3 pt-1">
+                <div className="flex justify-between items-center text-[10px] text-earth-light/60 font-mono px-1">
                   <span className="flex items-center gap-1.5 uppercase tracking-wider">
                     <Volume2 className="w-3.5 h-3.5 text-earth-gold animate-pulse" />
-                    App-koppeling gereed
+                    Muziekspeler wordt geopend
                   </span>
-                  <span className="font-bold text-white bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                    {countdown > 0 ? `0:0${countdown}s` : 'App wordt geopend'}
+                  <span className="font-bold text-earth-gold bg-earth-gold/10 px-2.5 py-0.5 rounded-full border border-earth-gold/25">
+                    {countdown > 0 ? `0:0${countdown}s` : 'Nu starten...'}
                   </span>
                 </div>
-              </div>
 
-              {/* Non-intrusive action buttons & instructions */}
-              <div className="pt-2 space-y-3">
-                {isMobile ? (
-                  <a
-                    href={songInfo ? (convertToSpotifyUri(songInfo.spotifyLink) || songInfo.spotifyLink) : undefined}
-                    className="w-full py-3 bg-[#1DB954] active:bg-[#1ed760] text-black font-bold rounded-full text-xs sm:text-sm transition-all transform active:scale-98 uppercase tracking-wider shadow-lg shadow-[#1DB954]/10 hover:shadow-[#1DB954]/25 inline-flex items-center justify-center gap-2 cursor-pointer border border-[#1b9a47]"
-                  >
-                    <Music className="w-4 h-4" />
-                    Open direct in Spotify App
-                  </a>
-                ) : (
-                  <button
-                    onClick={handleProceedImmediately}
-                    className="w-full py-3 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full text-xs sm:text-sm transition-all transform active:scale-98 uppercase tracking-wider shadow-lg shadow-[#1DB954]/10 hover:shadow-[#1DB954]/25 inline-flex items-center justify-center gap-2 cursor-pointer border border-[#1b9a47]"
-                  >
-                    <Music className="w-4 h-4" />
-                    Direct doorgaan naar Spotify
-                  </button>
-                )}
-
-                {isMobile && (
-                  <div className="text-center pt-0.5">
-                    <a
-                      href={songInfo?.spotifyLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-earth-gold/80 hover:text-earth-gold underline text-[11px] transition-colors inline-block font-sans font-medium"
-                    >
-                      Geen Spotify app geïnstalleerd? Luister via de website &rarr;
-                    </a>
-                  </div>
-                )}
-
-                {/* Autoplay restriction disclaimer phrased beautifully */}
-                <p className="text-earth-light/45 text-[11px] leading-relaxed max-w-sm mx-auto">
-                  💡 <strong className="text-earth-gold">Belangrijke tip:</strong> Klik zometeen gerust op <strong className="text-white">"Openen"</strong> of <strong className="text-white">"Toestaan"</strong> als uw telefoon om toestemming vraagt. Zo opent en speelt het geluidsfragment meteen in uw eigen, ingelogde app!
-                </p>
+                <button
+                  type="button"
+                  onClick={handleProceedImmediately}
+                  className={`w-full py-3.5 bg-gradient-to-r ${theme.buttonClass} font-bold rounded-full text-xs sm:text-sm transition-all transform active:scale-98 uppercase tracking-wider shadow-xl shadow-earth-gold/15 hover:shadow-earth-gold/30 inline-flex items-center justify-center gap-2 cursor-pointer border`}
+                >
+                  <LockOpen className="w-4 h-4" />
+                  <span>Ontgrendel & Luister Direct</span>
+                </button>
               </div>
             </motion.div>
           )}

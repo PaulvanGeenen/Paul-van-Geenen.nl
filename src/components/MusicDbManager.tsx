@@ -4,9 +4,17 @@ import {
   Database, RefreshCw, Plus, Trash2, Edit3, CheckCircle2, AlertCircle, 
   Music, Folder, FileAudio, FileVideo, Image, Subtitles, ExternalLink,
   Sparkles, Layers, Shield, Check, X, Eye, HelpCircle, ChevronRight,
-  FolderSync
+  FolderSync, Lock, LockOpen, RotateCcw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import {
+  isLockSystemEnabled,
+  setLockSystemEnabled,
+  resetUnlockedTracks,
+  getUnlockedTrackKeys,
+  playLockRattleSound,
+  playLockUnlockSound
+} from '../lib/trackLocks';
 
 interface DbAlbum {
   id: number;
@@ -84,6 +92,44 @@ export function MusicDbManager() {
   });
 
   const [previewMediaTrack, setPreviewMediaTrack] = useState<DbTrack | null>(null);
+
+  // Track Lock System Admin Controls
+  const [locksEnabled, setLocksEnabledState] = useState<boolean>(() => isLockSystemEnabled());
+  const [unlockedKeysCount, setUnlockedKeysCount] = useState<number>(() => getUnlockedTrackKeys().length);
+  const [lockResetFeedback, setLockResetFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    const syncLockStatus = () => {
+      setLocksEnabledState(isLockSystemEnabled());
+      setUnlockedKeysCount(getUnlockedTrackKeys().length);
+    };
+    window.addEventListener('pvg-locks-changed', syncLockStatus);
+    window.addEventListener('storage', syncLockStatus);
+    return () => {
+      window.removeEventListener('pvg-locks-changed', syncLockStatus);
+      window.removeEventListener('storage', syncLockStatus);
+    };
+  }, []);
+
+  const handleToggleLockSystem = () => {
+    const next = !locksEnabled;
+    setLockSystemEnabled(next);
+    setLocksEnabledState(next);
+    if (next) {
+      playLockRattleSound();
+    } else {
+      playLockUnlockSound();
+    }
+  };
+
+  const handleResetUnlockedTracks = () => {
+    resetUnlockedTracks();
+    setUnlockedKeysCount(0);
+    playLockRattleSound();
+    setLockResetFeedback('Alle lokaal ontgrendelde test-nummers zijn weer op slot gezet!');
+    setTimeout(() => setLockResetFeedback(null), 4000);
+  };
+
 
   // Save config changes
   const saveConfig = (url: string, key: string) => {
@@ -392,6 +438,75 @@ export function MusicDbManager() {
 
   return (
     <div className="space-y-8 animate-fadeIn">
+      {/* SECTION 0: Sloten-Systeem Beheer & Testmodus (Admin Control) */}
+      <div className="bg-gradient-to-r from-[#1c1610] via-[#181410] to-[#14110d] border border-earth-gold/35 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "p-2.5 rounded-xl border transition-colors",
+                locksEnabled
+                  ? "bg-earth-gold/15 border-earth-gold/40 text-earth-gold"
+                  : "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+              )}>
+                {locksEnabled ? <Lock className="w-6 h-6" /> : <LockOpen className="w-6 h-6" />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="text-xl font-serif text-white font-bold">Muziekspeler Sloten-Systeem (Test &amp; Beheer)</h3>
+                  <span className={cn(
+                    "font-mono text-xs px-2.5 py-0.5 rounded-full border font-bold",
+                    locksEnabled
+                      ? "bg-earth-gold/15 text-earth-gold border-earth-gold/40"
+                      : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                  )}>
+                    {locksEnabled ? '🔒 Sloten ACTIEF (Lezers-modus)' : '🔓 Sloten UIT (Alles vrij afspeelbaar)'}
+                  </span>
+                </div>
+                <p className="text-xs text-earth-light/65 mt-1">
+                  Wanneer actief zijn alleen de eerste 2 nummers per album open en staan de overige nummers op de kluiskaart tot de lezer een QR-code scant.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Toggle Lock System ON/OFF */}
+            <button
+              type="button"
+              onClick={handleToggleLockSystem}
+              className={cn(
+                "px-4 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-lg",
+                locksEnabled
+                  ? "bg-earth-gold text-black border-earth-gold hover:bg-amber-400"
+                  : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30"
+              )}
+            >
+              {locksEnabled ? <LockOpen className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+              <span>{locksEnabled ? 'Zet Sloten UIT (Admin Vrij)' : 'Zet Sloten AAN (Lezers-modus)'}</span>
+            </button>
+
+            {/* Reset Local Unlocked Tracks */}
+            <button
+              type="button"
+              onClick={handleResetUnlockedTracks}
+              className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-xs font-mono text-white transition-all flex items-center gap-2 cursor-pointer"
+              title="Zet alle via QR ontgrendelde tracks in deze browser weer op slot"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-earth-gold" />
+              <span>Reset Mijn Ontgrendelde Tracks ({unlockedKeysCount > 0 ? 'Actief' : '0'})</span>
+            </button>
+          </div>
+        </div>
+
+        {lockResetFeedback && (
+          <div className="mt-4 pt-3 border-t border-earth-gold/20 text-xs font-mono text-earth-gold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>{lockResetFeedback}</span>
+          </div>
+        )}
+      </div>
+
       {/* SECTION 1: TransIP Database Bridge Header & Controls */}
       <div className="bg-[#181818] border border-white/10 rounded-2xl p-6 shadow-xl relative overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">

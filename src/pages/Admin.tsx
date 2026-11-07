@@ -1,9 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter } from 'lucide-react';
+import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { cn } from '../lib/utils';
 import { isOwnAnalyticsIgnored, setAdminCookie, markDeviceAsAdmin } from '../lib/analytics';
+import {
+  isLockSystemEnabled,
+  setLockSystemEnabled,
+  resetUnlockedTracks,
+  playLockRattleSound,
+  playLockUnlockSound
+} from '../lib/trackLocks';
 import { 
   transipGet, 
   transipPost, 
@@ -31,6 +38,7 @@ interface QRCodeData {
   artist: string;
   spotifyLink: string;
   qrImage?: string;
+  album?: string;
 }
 
 interface BookAdminData {
@@ -299,6 +307,18 @@ export function Admin() {
   const [selectedBookAnalyticsFilter, setSelectedBookAnalyticsFilter] = useState<string>('');
   const [initializingDb, setInitializingDb] = useState(false);
   const [showConfirmIdChange, setShowConfirmIdChange] = useState<boolean>(false);
+
+  // Muziekspeler Sloten-systeem state (Admin toggle)
+  const [adminLocksEnabled, setAdminLocksEnabled] = useState<boolean>(() => isLockSystemEnabled());
+  useEffect(() => {
+    const syncAdminLocks = () => setAdminLocksEnabled(isLockSystemEnabled());
+    window.addEventListener('pvg-locks-changed', syncAdminLocks);
+    window.addEventListener('storage', syncAdminLocks);
+    return () => {
+      window.removeEventListener('pvg-locks-changed', syncAdminLocks);
+      window.removeEventListener('storage', syncAdminLocks);
+    };
+  }, []);
 
   //QRCode Add/Edit state
   const [isAdding, setIsAdding] = useState(false);
@@ -1208,6 +1228,49 @@ export function Admin() {
                   title="Nu handmatig vernieuwen"
                 >
                   <RefreshCw className={cn("w-3.5 h-3.5", (loading || isAutoRefreshing) && "animate-spin text-earth-gold")} />
+                </button>
+              </div>
+
+              {/* MUZIEKSPELER SLOTEN-SYSTEEM PILL */}
+              <div className="flex items-center gap-2 bg-white/5 border border-earth-gold/30 px-3 py-1.5 rounded-full text-xs font-medium">
+                {adminLocksEnabled ? (
+                  <Lock className="w-3.5 h-3.5 text-earth-gold" />
+                ) : (
+                  <LockOpen className="w-3.5 h-3.5 text-emerald-400" />
+                )}
+                <span className="text-white/85 select-none">
+                  Muzieksloten:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !adminLocksEnabled;
+                    setLockSystemEnabled(next);
+                    setAdminLocksEnabled(next);
+                    if (next) playLockRattleSound();
+                    else playLockUnlockSound();
+                  }}
+                  className={cn(
+                    "text-[10px] uppercase tracking-widest font-bold px-2.5 py-0.5 rounded-md transition-all cursor-pointer",
+                    adminLocksEnabled
+                      ? "bg-earth-gold/20 text-earth-gold border border-earth-gold/40 hover:bg-earth-gold/30"
+                      : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25"
+                  )}
+                >
+                  {adminLocksEnabled ? 'AAN (Lezer)' : 'UIT (Alles Vrij)'}
+                </button>
+                <div className="w-[1px] h-3 bg-white/10" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetUnlockedTracks();
+                    playLockRattleSound();
+                  }}
+                  className="p-1 text-earth-light/70 hover:text-earth-gold transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-mono"
+                  title="Reset alle lokaal ontgrendelde test-nummers naar op slot"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset</span>
                 </button>
               </div>
             </div>
