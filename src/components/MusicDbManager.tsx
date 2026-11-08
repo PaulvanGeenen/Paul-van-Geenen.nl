@@ -12,6 +12,8 @@ import {
   setLockSystemEnabled,
   resetUnlockedTracks,
   getUnlockedTrackKeys,
+  isAlbumLocksEnabled,
+  doesTrackMatchAlbumFreeSlot,
   playLockRattleSound,
   playLockUnlockSound
 } from '../lib/trackLocks';
@@ -23,6 +25,9 @@ interface DbAlbum {
   description: string;
   order_num: number;
   cover?: string;
+  locks_enabled?: number | boolean;
+  free_track_1?: string | null;
+  free_track_2?: string | null;
 }
 
 interface DbTrack {
@@ -79,7 +84,10 @@ export function MusicDbManager() {
     artist: 'Paul van Geenen',
     description: '',
     order_num: 1,
-    cover: ''
+    cover: '',
+    locks_enabled: 1,
+    free_track_1: '',
+    free_track_2: ''
   });
 
   const [isAddingTrack, setIsAddingTrack] = useState(false);
@@ -328,6 +336,35 @@ export function MusicDbManager() {
         await loadData();
       } else {
         alert('Fout bij opslaan album: ' + res.error);
+      }
+    } catch (err: any) {
+      alert('Fout: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Direct inline update of an album's SQL lock settings (locks_enabled, free_track_1, free_track_2)
+  const handleQuickUpdateAlbumLocks = async (alb: DbAlbum, updates: Partial<DbAlbum>) => {
+    setLoading(true);
+    try {
+      const payload = {
+        id: alb.id,
+        title: alb.title,
+        artist: alb.artist || 'Paul van Geenen',
+        description: alb.description || '',
+        order_num: alb.order_num || 1,
+        cover: alb.cover || '',
+        locks_enabled: updates.locks_enabled !== undefined ? updates.locks_enabled : (isAlbumLocksEnabled(alb) ? 1 : 0),
+        free_track_1: updates.free_track_1 !== undefined ? updates.free_track_1 : (alb.free_track_1 ?? ''),
+        free_track_2: updates.free_track_2 !== undefined ? updates.free_track_2 : (alb.free_track_2 ?? '')
+      };
+      const res = await fetchBridge('save_album', 'POST', payload);
+      if (res.success) {
+        setStatusMessage(`SQL bijgewerkt voor album "${alb.title}"!`);
+        await loadData();
+      } else {
+        alert('Fout bij opslaan slot-instelling: ' + res.error);
       }
     } catch (err: any) {
       alert('Fout: ' + err.message);
@@ -750,7 +787,9 @@ export function MusicDbManager() {
               <Layers className="w-4 h-4 text-earth-gold" />
               Albums ({albums.length})
             </h3>
-            <p className="text-xs text-earth-light/50">Tabel: <code>albums</code> (id, title, artist, description, order_num)</p>
+            <p className="text-xs text-earth-light/50">
+              Tabel: <code>albums</code> (id, title, artist, description, order_num, <span className="text-earth-gold">locks_enabled, free_track_1, free_track_2</span>)
+            </p>
           </div>
 
           <button
@@ -761,7 +800,10 @@ export function MusicDbManager() {
                 artist: 'Paul van Geenen',
                 description: '',
                 order_num: albums.length + 1,
-                cover: ''
+                cover: '',
+                locks_enabled: 1,
+                free_track_1: '',
+                free_track_2: ''
               });
               setIsAddingAlbum(true);
             }}
@@ -784,10 +826,19 @@ export function MusicDbManager() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {albums.map((alb) => {
-              const albumTrackCount = tracks.filter(t => t.album_id === alb.id).length;
+              const albTracks = tracks
+                .filter(t => t.album_id === alb.id)
+                .sort((a, b) => a.track_order - b.track_order);
+              const albumTrackCount = albTracks.length;
               const isSelected = selectedAlbumId === alb.id;
+              const albLocksOn = isAlbumLocksEnabled(alb);
+              const defaultFree1 = albTracks[0]?.foldername || '';
+              const defaultFree2 = albTracks[1]?.foldername || '';
+              const currentFree1 = alb.free_track_1 ?? defaultFree1;
+              const currentFree2 = alb.free_track_2 ?? defaultFree2;
+
               const albumCover = alb.cover || (
                 (alb.title.toLowerCase().includes('geboorte') || alb.title.toLowerCase().includes('leeuw')) ? '/@music/_albums/De%20Geboorte%20van%20de%20Leeuw%20Album.jpg' :
                 alb.title.toLowerCase().includes('echo') ? '/@music/_albums/De%20Echo%20Album.jpg' :
@@ -808,7 +859,23 @@ export function MusicDbManager() {
                       <span className="text-[10px] font-mono text-earth-gold bg-earth-gold/10 px-2 py-0.5 rounded border border-earth-gold/20 font-bold">
                         ID: {alb.id} · Volgorde: {alb.order_num}
                       </span>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                        {/* Direct SQL Toggle for locks_enabled per album */}
+                        <button
+                          type="button"
+                          onClick={() => handleQuickUpdateAlbumLocks(alb, { locks_enabled: albLocksOn ? 0 : 1 })}
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer",
+                            albLocksOn
+                              ? "bg-earth-gold/15 border-earth-gold/40 text-earth-gold hover:bg-earth-gold/25"
+                              : "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25"
+                          )}
+                          title="Schakel slotjes voor dit album direct AAN of UIT in de SQL tabel 'albums'"
+                        >
+                          {albLocksOn ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
+                          <span>{albLocksOn ? 'Slotjes: JA (1)' : 'Slotjes: NEE (0)'}</span>
+                        </button>
+
                         <button
                           onClick={() => {
                             setEditingAlbum(alb);
@@ -817,18 +884,21 @@ export function MusicDbManager() {
                               artist: alb.artist,
                               description: alb.description || '',
                               order_num: alb.order_num,
-                              cover: alb.cover || ''
+                              cover: alb.cover || '',
+                              locks_enabled: albLocksOn ? 1 : 0,
+                              free_track_1: alb.free_track_1 ?? defaultFree1,
+                              free_track_2: alb.free_track_2 ?? defaultFree2
                             });
                             setIsAddingAlbum(true);
                           }}
-                          className="p-1 text-earth-light/60 hover:text-white bg-white/5 hover:bg-white/10 rounded"
+                          className="p-1.5 text-earth-light/60 hover:text-white bg-white/5 hover:bg-white/10 rounded"
                           title="Album bewerken"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDeleteAlbum(alb)}
-                          className="p-1 text-rose-400/60 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 rounded"
+                          className="p-1.5 text-rose-400/60 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 rounded"
                           title="Album verwijderen"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -864,6 +934,63 @@ export function MusicDbManager() {
                     {alb.description && (
                       <p className="text-[11px] text-earth-light/40 line-clamp-2 italic">{alb.description}</p>
                     )}
+
+                    {/* SQL Vrije Nummers Kiezer per Album */}
+                    <div
+                      className="p-3 rounded-xl bg-black/45 border border-white/10 space-y-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between text-[10px] font-mono">
+                        <span className="text-earth-light/60 uppercase tracking-wider font-bold">
+                          {albLocksOn ? 'SQL: 2 Vrij Zichtbare Nummers' : 'SQL: Alle nummers vrij zichtbaar'}
+                        </span>
+                        <span className="text-earth-gold/70">
+                          <code>locks_enabled={albLocksOn ? 1 : 0}</code>
+                        </span>
+                      </div>
+
+                      {albLocksOn ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[9px] font-mono text-earth-light/50 mb-0.5">
+                              1e Open Nummer (<code>free_track_1</code>):
+                            </label>
+                            <select
+                              value={currentFree1}
+                              onChange={(e) => handleQuickUpdateAlbumLocks(alb, { free_track_1: e.target.value })}
+                              className="w-full bg-black/70 border border-earth-gold/30 rounded-lg px-2 py-1.5 text-[11px] text-white font-mono focus:border-earth-gold outline-none"
+                            >
+                              {albTracks.map((t) => (
+                                <option key={t.id} value={t.foldername} className="bg-[#181818]">
+                                  {String(t.track_order).padStart(2, '0')}. {t.title} ({t.foldername})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-mono text-earth-light/50 mb-0.5">
+                              2e Open Nummer (<code>free_track_2</code>):
+                            </label>
+                            <select
+                              value={currentFree2}
+                              onChange={(e) => handleQuickUpdateAlbumLocks(alb, { free_track_2: e.target.value })}
+                              className="w-full bg-black/70 border border-earth-gold/30 rounded-lg px-2 py-1.5 text-[11px] text-white font-mono focus:border-earth-gold outline-none"
+                            >
+                              <option value="" className="bg-[#181818]">— Geen 2e nummer —</option>
+                              {albTracks.map((t) => (
+                                <option key={t.id} value={t.foldername} className="bg-[#181818]">
+                                  {String(t.track_order).padStart(2, '0')}. {t.title} ({t.foldername})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-emerald-400/90 font-mono">
+                          🔓 Voor dit album staan slotjes UIT in SQL — alle {albumTrackCount} nummers zijn voor iedereen direct zichtbaar en afspeelbaar.
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px] font-mono text-earth-light/50">
@@ -950,6 +1077,7 @@ export function MusicDbManager() {
                   <th className="py-3 px-4">#</th>
                   <th className="py-3 px-4">Titel</th>
                   <th className="py-3 px-4">Album</th>
+                  <th className="py-3 px-4 text-center">SQL Slot-status</th>
                   <th className="py-3 px-4">Mapnaam op TransIP</th>
                   <th className="py-3 px-4 text-center">Gedetecteerde Bestanden</th>
                   <th className="py-3 px-4 text-right">Acties</th>
@@ -959,6 +1087,10 @@ export function MusicDbManager() {
                 {filteredTracks.map((trk) => {
                   const parentAlbum = albums.find(a => a.id === trk.album_id);
                   const media = trk.media_detected;
+                  const albLocksOn = isAlbumLocksEnabled(parentAlbum);
+                  const lockableTrk = { id: String(trk.id), title: trk.title, folderName: trk.foldername };
+                  const isFree1 = parentAlbum && doesTrackMatchAlbumFreeSlot(lockableTrk, parentAlbum.free_track_1);
+                  const isFree2 = parentAlbum && doesTrackMatchAlbumFreeSlot(lockableTrk, parentAlbum.free_track_2);
 
                   return (
                     <tr key={trk.id} className="hover:bg-white/[0.02] transition-colors">
@@ -970,6 +1102,47 @@ export function MusicDbManager() {
                       </td>
                       <td className="py-3.5 px-4 text-earth-light/70 font-serif">
                         {parentAlbum?.title || `Album ID: ${trk.album_id}`}
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        {!albLocksOn ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-mono text-[10px] font-bold">
+                            🔓 Album Vrij
+                          </span>
+                        ) : isFree1 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 font-mono text-[10px] font-bold">
+                            🔓 Vrij #1 (SQL)
+                          </span>
+                        ) : isFree2 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 font-mono text-[10px] font-bold">
+                            🔓 Vrij #2 (SQL)
+                          </span>
+                        ) : (
+                          <div className="inline-flex items-center gap-1">
+                            <span className="px-2 py-0.5 rounded-full bg-earth-gold/10 text-earth-gold/90 border border-earth-gold/30 font-mono text-[10px]">
+                              🔒 Op Slot (QR)
+                            </span>
+                            {parentAlbum && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickUpdateAlbumLocks(parentAlbum, { free_track_1: trk.foldername })}
+                                  className="px-1.5 py-0.5 rounded bg-white/5 hover:bg-earth-gold/20 text-earth-light/60 hover:text-earth-gold font-mono text-[9px] transition-colors cursor-pointer"
+                                  title="Stel dit nummer in als 1e vrij zichtbare nummer voor dit album in SQL"
+                                >
+                                  Maak #1
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickUpdateAlbumLocks(parentAlbum, { free_track_2: trk.foldername })}
+                                  className="px-1.5 py-0.5 rounded bg-white/5 hover:bg-earth-gold/20 text-earth-light/60 hover:text-earth-gold font-mono text-[9px] transition-colors cursor-pointer"
+                                  title="Stel dit nummer in als 2e vrij zichtbare nummer voor dit album in SQL"
+                                >
+                                  Maak #2
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-earth-light/60 flex items-center gap-1.5">
                         <Folder className="w-3.5 h-3.5 text-earth-gold shrink-0" />
@@ -1183,12 +1356,104 @@ export function MusicDbManager() {
                     Omschrijving (optioneel)
                   </label>
                   <textarea
-                    rows={3}
+                    rows={2}
                     value={albumForm.description}
                     onChange={(e) => setAlbumForm({ ...albumForm, description: e.target.value })}
                     className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-earth-gold outline-none resize-none"
                     placeholder="Korte toelichting over dit album..."
                   />
+                </div>
+
+                {/* SQL Slotjes-configuratie voor dit Album */}
+                <div className="p-4 rounded-xl bg-black/40 border border-earth-gold/30 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-white flex items-center gap-1.5">
+                        {albumForm.locks_enabled ? <Lock className="w-3.5 h-3.5 text-earth-gold" /> : <LockOpen className="w-3.5 h-3.5 text-emerald-400" />}
+                        <span>Slotjes van toepassing op dit album (<code>locks_enabled</code>)</span>
+                      </div>
+                      <p className="text-[11px] text-earth-light/50 mt-0.5">
+                        Bepaal of dit album achter slotjes zit of dat alle nummers van dit album direct vrij afspeelbaar zijn.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAlbumForm({ ...albumForm, locks_enabled: albumForm.locks_enabled ? 0 : 1 })}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg border font-mono text-xs font-bold transition-all cursor-pointer shrink-0",
+                        albumForm.locks_enabled
+                          ? "bg-earth-gold text-black border-earth-gold"
+                          : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                      )}
+                    >
+                      {albumForm.locks_enabled ? '🔒 JA (Slotjes AAN)' : '🔓 NEE (Alles Vrij)'}
+                    </button>
+                  </div>
+
+                  {Boolean(albumForm.locks_enabled) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/10">
+                      <div>
+                        <label className="block text-[10px] font-mono text-earth-light/60 uppercase mb-1">
+                          1e Zichtbare Nummer (<code>free_track_1</code>)
+                        </label>
+                        {editingAlbum && tracks.filter(t => t.album_id === editingAlbum.id).length > 0 ? (
+                          <select
+                            value={albumForm.free_track_1}
+                            onChange={(e) => setAlbumForm({ ...albumForm, free_track_1: e.target.value })}
+                            className="w-full bg-black/60 border border-white/15 rounded-lg px-3 py-2 text-white font-mono text-xs focus:border-earth-gold outline-none"
+                          >
+                            {tracks
+                              .filter(t => t.album_id === editingAlbum.id)
+                              .sort((a, b) => a.track_order - b.track_order)
+                              .map(t => (
+                                <option key={t.id} value={t.foldername} className="bg-[#1C1C1C]">
+                                  {String(t.track_order).padStart(2, '0')}. {t.title} ({t.foldername})
+                                </option>
+                              ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={albumForm.free_track_1}
+                            onChange={(e) => setAlbumForm({ ...albumForm, free_track_1: e.target.value })}
+                            placeholder="bijv. 001 Leeuw"
+                            className="w-full bg-black/60 border border-white/15 rounded-lg px-3 py-2 text-white font-mono text-xs focus:border-earth-gold outline-none"
+                          />
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono text-earth-light/60 uppercase mb-1">
+                          2e Zichtbare Nummer (<code>free_track_2</code>)
+                        </label>
+                        {editingAlbum && tracks.filter(t => t.album_id === editingAlbum.id).length > 0 ? (
+                          <select
+                            value={albumForm.free_track_2}
+                            onChange={(e) => setAlbumForm({ ...albumForm, free_track_2: e.target.value })}
+                            className="w-full bg-black/60 border border-white/15 rounded-lg px-3 py-2 text-white font-mono text-xs focus:border-earth-gold outline-none"
+                          >
+                            <option value="" className="bg-[#1C1C1C]">— Geen 2e nummer —</option>
+                            {tracks
+                              .filter(t => t.album_id === editingAlbum.id)
+                              .sort((a, b) => a.track_order - b.track_order)
+                              .map(t => (
+                                <option key={t.id} value={t.foldername} className="bg-[#1C1C1C]">
+                                  {String(t.track_order).padStart(2, '0')}. {t.title} ({t.foldername})
+                                </option>
+                              ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={albumForm.free_track_2}
+                            onChange={(e) => setAlbumForm({ ...albumForm, free_track_2: e.target.value })}
+                            placeholder="bijv. 002 de Passant"
+                            className="w-full bg-black/60 border border-white/15 rounded-lg px-3 py-2 text-white font-mono text-xs focus:border-earth-gold outline-none"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-4 flex items-center justify-end gap-3">

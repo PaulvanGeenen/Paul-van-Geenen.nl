@@ -608,20 +608,51 @@ if ($action === 'scan_server_folders' || $action === 'sync_all_server_folders') 
     exit;
 }
 
-// Zorg dat de tabel albums een 'cover' kolom heeft indien nog niet aanwezig
+// Zorg dat de tabel albums de kolommen 'cover', 'locks_enabled', 'free_track_1', 'free_track_2' heeft indien nog niet aanwezig
 try {
     $pdo->exec("ALTER TABLE albums ADD COLUMN cover VARCHAR(500) NULL DEFAULT NULL;");
-} catch (Exception $e) {
-    // Reeds aanwezig of geen permissie nodig
-}
+} catch (Exception $e) {}
+
+try {
+    $pdo->exec("ALTER TABLE albums ADD COLUMN locks_enabled TINYINT(1) NOT NULL DEFAULT 1;");
+} catch (Exception $e) {}
+
+$freeColsNewlyAdded = false;
+try {
+    $pdo->exec("ALTER TABLE albums ADD COLUMN free_track_1 VARCHAR(255) NULL DEFAULT NULL;");
+    $freeColsNewlyAdded = true;
+} catch (Exception $e) {}
+
+try {
+    $pdo->exec("ALTER TABLE albums ADD COLUMN free_track_2 VARCHAR(255) NULL DEFAULT NULL;");
+    $freeColsNewlyAdded = true;
+} catch (Exception $e) {}
+
+// Vul standaard de eerste 2 nummers per album in als free_track_1 en free_track_2 nog allebei NULL zijn
+try {
+    $emptyAlbums = $pdo->query("SELECT id FROM albums WHERE free_track_1 IS NULL AND free_track_2 IS NULL")->fetchAll();
+    if (!empty($emptyAlbums)) {
+        $stmtFirstTwo = $pdo->prepare("SELECT foldername, title FROM tracks WHERE album_id = ? ORDER BY track_order ASC, id ASC LIMIT 2");
+        $stmtUpdFree = $pdo->prepare("UPDATE albums SET free_track_1 = ?, free_track_2 = ? WHERE id = ?");
+        foreach ($emptyAlbums as $ea) {
+            $stmtFirstTwo->execute([$ea['id']]);
+            $firstTwo = $stmtFirstTwo->fetchAll();
+            $ft1 = isset($firstTwo[0]) ? $firstTwo[0]['foldername'] : null;
+            $ft2 = isset($firstTwo[1]) ? $firstTwo[1]['foldername'] : null;
+            if ($ft1 || $ft2) {
+                $stmtUpdFree->execute([$ft1, $ft2, $ea['id']]);
+            }
+        }
+    }
+} catch (Exception $e) {}
 
 // ==============================================================================
 // ACTIE: GET_CATALOG (VOOR DE MUZIEKSPELER)
 // ==============================================================================
 if ($action === 'get_catalog') {
     try {
-        // Haal albums op
-        $stmtAlb = $pdo->query("SELECT id, title, artist, description, order_num, cover FROM albums ORDER BY order_num ASC, id ASC");
+        // Haal albums op inclusief slot-instellingen en de 2 vrij zichtbare nummers
+        $stmtAlb = $pdo->query("SELECT id, title, artist, description, order_num, cover, locks_enabled, free_track_1, free_track_2 FROM albums ORDER BY order_num ASC, id ASC");
         $albums = $stmtAlb->fetchAll();
 
         // Haal tracks op
@@ -661,10 +692,11 @@ if ($action === 'get_catalog') {
             $appTracks[] = $trackObj;
         }
 
-        // Bepaal album covers
+        // Bepaal album covers & slot-configuratie per album
         $formattedAlbums = [];
         foreach ($albums as $alb) {
             $albumCover = resolveAlbumCover($alb, $appTracks);
+            $locksEnabledBool = isset($alb['locks_enabled']) ? ((int)$alb['locks_enabled'] === 1) : true;
 
             $formattedAlbums[] = [
                 "id" => (string)$alb['id'],
@@ -672,7 +704,13 @@ if ($action === 'get_catalog') {
                 "artist" => $alb['artist'] ?? 'Paul van Geenen',
                 "cover" => $albumCover,
                 "description" => $alb['description'] ?? '',
-                "order" => (int)($alb['order_num'] ?? 1)
+                "order" => (int)($alb['order_num'] ?? 1),
+                "locksEnabled" => $locksEnabledBool,
+                "locks_enabled" => $locksEnabledBool ? 1 : 0,
+                "freeTrack1" => $alb['free_track_1'] ?? null,
+                "free_track_1" => $alb['free_track_1'] ?? null,
+                "freeTrack2" => $alb['free_track_2'] ?? null,
+                "free_track_2" => $alb['free_track_2'] ?? null
             ];
         }
 
@@ -727,6 +765,24 @@ if ($action === 'save_album') {
     $cover = trim($input['cover'] ?? '');
     $order_num = (int)($input['order_num'] ?? 1);
 
+    // Slotjes configuratie per album
+    $locks_enabled = 1;
+    if (array_key_exists('locks_enabled', $input)) {
+        $locks_enabled = ((int)$input['locks_enabled'] || $input['locks_enabled'] === true || $input['locks_enabled'] === 'true') ? 1 : 0;
+    } elseif (array_key_exists('locksEnabled', $input)) {
+        $locks_enabled = ($input['locksEnabled'] === true || $input['locksEnabled'] === 1 || $input['locksEnabled'] === '1' || $input['locksEnabled'] === 'true') ? 1 : 0;
+    }
+
+    $free_track_1 = array_key_exists('free_track_1', $input)
+        ? trim((string)($input['free_track_1'] ?? ''))
+        : (array_key_exists('freeTrack1', $input) ? trim((string)($input['freeTrack1'] ?? '')) : null);
+    if ($free_track_1 === '') $free_track_1 = null;
+
+    $free_track_2 = array_key_exists('free_track_2', $input)
+        ? trim((string)($input['free_track_2'] ?? ''))
+        : (array_key_exists('freeTrack2', $input) ? trim((string)($input['freeTrack2'] ?? '')) : null);
+    if ($free_track_2 === '') $free_track_2 = null;
+
     if (empty($title)) {
         http_response_code(400);
         echo json_encode(["success" => false, "error" => "Album titel is verplicht."]);
@@ -735,12 +791,12 @@ if ($action === 'save_album') {
 
     try {
         if ($id) {
-            $stmt = $pdo->prepare("UPDATE albums SET title = ?, artist = ?, description = ?, order_num = ?, cover = ? WHERE id = ?");
-            $stmt->execute([$title, $artist, $description, $order_num, $cover, $id]);
-            echo json_encode(["success" => true, "id" => $id, "message" => "Album bijgewerkt."]);
+            $stmt = $pdo->prepare("UPDATE albums SET title = ?, artist = ?, description = ?, order_num = ?, cover = ?, locks_enabled = ?, free_track_1 = ?, free_track_2 = ? WHERE id = ?");
+            $stmt->execute([$title, $artist, $description, $order_num, $cover, $locks_enabled, $free_track_1, $free_track_2, $id]);
+            echo json_encode(["success" => true, "id" => $id, "message" => "Album en slot-instellingen bijgewerkt."]);
         } else {
-            $stmt = $pdo->prepare("INSERT INTO albums (title, artist, description, order_num, cover) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$title, $artist, $description, $order_num, $cover]);
+            $stmt = $pdo->prepare("INSERT INTO albums (title, artist, description, order_num, cover, locks_enabled, free_track_1, free_track_2) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$title, $artist, $description, $order_num, $cover, $locks_enabled, $free_track_1, $free_track_2]);
             echo json_encode(["success" => true, "id" => $pdo->lastInsertId(), "message" => "Album toegevoegd."]);
         }
     } catch (PDOException $e) {

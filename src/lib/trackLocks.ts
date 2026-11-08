@@ -10,6 +10,73 @@ export interface LockableTrack {
   title: string;
   folderName?: string;
   album?: string;
+  order?: string;
+  albumOrder?: number | string;
+}
+
+export interface AlbumLockConfig {
+  id?: string | number;
+  title?: string;
+  locksEnabled?: boolean;
+  locks_enabled?: number | boolean;
+  freeTrack1?: string | null;
+  free_track_1?: string | null;
+  freeTrack2?: string | null;
+  free_track_2?: string | null;
+}
+
+/**
+ * Helper to check if a track matches a configured free_track_1 or free_track_2 value from the SQL albums table.
+ * Supports matching by foldername (e.g. '001 Leeuw'), title (e.g. 'Leeuw'), track id (e.g. '12'), or track_order (e.g. '1' or '001').
+ */
+export function doesTrackMatchAlbumFreeSlot(track: LockableTrack | undefined | null, slotVal?: string | number | null): boolean {
+  if (!track || slotVal === undefined || slotVal === null) return false;
+  const raw = String(slotVal).trim();
+  if (!raw) return false;
+
+  const rawLower = raw.toLowerCase();
+
+  // 1. Exact match on track id, folderName, or title
+  if (track.id && String(track.id).toLowerCase() === rawLower) return true;
+  if (track.folderName && track.folderName.toLowerCase() === rawLower) return true;
+  if (track.title && track.title.toLowerCase() === rawLower) return true;
+
+  // 2. Normalized key match on id, folderName, or title
+  const normSlot = normalizeTrackKey(raw);
+  if (normSlot) {
+    if (track.id && normalizeTrackKey(String(track.id)) === normSlot) return true;
+    if (track.folderName && normalizeTrackKey(track.folderName) === normSlot) return true;
+    if (track.title && normalizeTrackKey(track.title) === normSlot) return true;
+    const strippedTitle = (track.title || '').replace(/^\d{1,3}[\s.-]+/, '').trim();
+    const strippedSlot = raw.replace(/^\d{1,3}[\s.-]+/, '').trim();
+    if (strippedTitle && strippedSlot && normalizeTrackKey(strippedTitle) === normalizeTrackKey(strippedSlot)) {
+      return true;
+    }
+  }
+
+  // 3. Match on 3-digit prefix (e.g. '001 Leeuw' vs '001')
+  const slotPrefix = extractTrackNumberPrefix(raw);
+  if (slotPrefix) {
+    if (track.folderName && extractTrackNumberPrefix(track.folderName) === slotPrefix) return true;
+    if (track.id && extractTrackNumberPrefix(String(track.id)) === slotPrefix) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if locks are enabled for a specific album according to its SQL database row.
+ */
+export function isAlbumLocksEnabled(albumConfig?: AlbumLockConfig | null): boolean {
+  if (!albumConfig) return true;
+  if (albumConfig.locksEnabled !== undefined) {
+    return Boolean(albumConfig.locksEnabled);
+  }
+  if (albumConfig.locks_enabled !== undefined && albumConfig.locks_enabled !== null) {
+    if (typeof albumConfig.locks_enabled === 'boolean') return albumConfig.locks_enabled;
+    return Number(albumConfig.locks_enabled) !== 0;
+  }
+  return true;
 }
 
 /**
@@ -82,22 +149,39 @@ export function getUnlockedTrackKeys(): string[] {
 /**
  * Check if a specific track is unlocked.
  * @param track The track object
- * @param indexInAlbum The 0-based index of the track within its album (0 and 1 are always free!)
- * @param forceLockSystem Optional override for lock system state
+ * @param indexInAlbum The 0-based index of the track within its album (fallback if no free_track_1/2 configured)
+ * @param forceLockSystem Optional override for global lock system state
+ * @param albumConfig Optional per-album SQL configuration (locks_enabled, free_track_1, free_track_2)
  */
 export function isTrackUnlocked(
   track: LockableTrack | undefined | null,
   indexInAlbum: number,
-  forceLockSystem?: boolean
+  forceLockSystem?: boolean,
+  albumConfig?: AlbumLockConfig | null
 ): boolean {
   if (!track) return false;
 
   const systemActive = forceLockSystem !== undefined ? forceLockSystem : isLockSystemEnabled();
   if (!systemActive) return true;
 
-  // Rule: First 2 tracks of every album (index 0 and 1) are always freely playable
-  if (indexInAlbum === 0 || indexInAlbum === 1) {
+  // Rule 1: If locks are disabled for this specific album in SQL (locks_enabled = 0), all tracks in this album are open
+  if (albumConfig && !isAlbumLocksEnabled(albumConfig)) {
     return true;
+  }
+
+  // Rule 2: Check which 2 tracks are configured as freely visible for this album in SQL (free_track_1 & free_track_2)
+  const free1 = (albumConfig?.freeTrack1 ?? albumConfig?.free_track_1 ?? '').toString().trim();
+  const free2 = (albumConfig?.freeTrack2 ?? albumConfig?.free_track_2 ?? '').toString().trim();
+
+  if (free1 || free2) {
+    if (doesTrackMatchAlbumFreeSlot(track, free1) || doesTrackMatchAlbumFreeSlot(track, free2)) {
+      return true;
+    }
+  } else {
+    // Fallback if neither free_track_1 nor free_track_2 is specified in SQL: first 2 tracks (index 0 and 1) are open
+    if (indexInAlbum === 0 || indexInAlbum === 1) {
+      return true;
+    }
   }
 
   const unlockedKeys = getUnlockedTrackKeys();

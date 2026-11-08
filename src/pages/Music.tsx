@@ -18,6 +18,7 @@ import {
   isLockSystemEnabled,
   setLockSystemEnabled,
   isTrackUnlocked,
+  isAlbumLocksEnabled,
   unlockTrack,
   resetUnlockedTracks,
   playLockRattleSound,
@@ -38,6 +39,7 @@ interface Track {
   albumOrder?: number | string;
   title: string;
   album?: string;
+  albumId?: number;
   folderName: string;
   mp3?: string;
   audiobook?: string;
@@ -62,6 +64,12 @@ interface Album {
   description?: string;
   year?: string;
   order?: number | string;
+  locksEnabled?: boolean;
+  locks_enabled?: number | boolean;
+  freeTrack1?: string | null;
+  free_track_1?: string | null;
+  freeTrack2?: string | null;
+  free_track_2?: string | null;
 }
 
 interface SubtitleCue {
@@ -1285,18 +1293,25 @@ export function Music() {
           setSelectedAlbum(matchedTrack.album);
         }
 
-        // Check album index of this track to see if it's track 3+ (locked by default)
+        // Check album lock config and whether this track was already unlocked
+        const matchedAlbumCfg = albums.find(
+          a => (matchedTrack.albumId && String(a.id) === String(matchedTrack.albumId)) ||
+               a.title.toLowerCase() === (matchedTrack.album || 'Muzikale Krabbels').toLowerCase()
+        ) || null;
         const albumTracksForMatch = tracks.filter(
           t => (t.album || 'Muzikale Krabbels').toLowerCase() === (matchedTrack.album || 'Muzikale Krabbels').toLowerCase()
         );
         const idxInAlb = albumTracksForMatch.findIndex(t => t.id === matchedTrack.id);
-        const wasAlreadyUnlocked = isTrackUnlocked(matchedTrack, idxInAlb !== -1 ? idxInAlb : 99);
+        const wasAlreadyUnlocked = isTrackUnlocked(matchedTrack, idxInAlb !== -1 ? idxInAlb : 99, undefined, matchedAlbumCfg);
+        const albumHasLocks = isAlbumLocksEnabled(matchedAlbumCfg);
 
         // Permanently unlock this track in the reader's browser localStorage
         unlockTrack(matchedTrack);
 
-        if (isLockSystemEnabled() && (hasUnlockParam || !wasAlreadyUnlocked || idxInAlb >= 2)) {
+        if (isLockSystemEnabled() && albumHasLocks && (hasUnlockParam || !wasAlreadyUnlocked)) {
           shouldRunUnlockCeremony = true;
+        } else {
+          shouldRunUnlockCeremony = false;
         }
 
         if (window.history && window.history.replaceState) {
@@ -1576,19 +1591,23 @@ export function Music() {
     });
   }, [tracks, selectedAlbum]);
 
-  // Split currentAlbumTracks into unlocked and locked tracks (first 2 tracks free + QR unlocked in localStorage)
+  // Split currentAlbumTracks into unlocked and locked tracks based on SQL album lock config (locks_enabled, free_track_1, free_track_2) + QR localStorage
   const { unlockedAlbumTracks, lockedAlbumTracks } = React.useMemo(() => {
     const unlocked: { track: Track; albumIdx: number }[] = [];
     const locked: { track: Track; albumIdx: number }[] = [];
     currentAlbumTracks.forEach((tr, idx) => {
-      if (isTrackUnlocked(tr, idx, lockSystemActive)) {
+      const albCfg = albums.find(
+        a => (tr.albumId && String(a.id) === String(tr.albumId)) ||
+             a.title.toLowerCase() === (tr.album || selectedAlbum || 'Muzikale Krabbels').toLowerCase()
+      ) || null;
+      if (isTrackUnlocked(tr, idx, lockSystemActive, albCfg)) {
         unlocked.push({ track: tr, albumIdx: idx });
       } else {
         locked.push({ track: tr, albumIdx: idx });
       }
     });
     return { unlockedAlbumTracks: unlocked, lockedAlbumTracks: locked };
-  }, [currentAlbumTracks, lockSystemActive, unlockedRevision]);
+  }, [currentAlbumTracks, albums, selectedAlbum, lockSystemActive, unlockedRevision]);
 
   // Keep landscapeTrackInListIndex synchronized when album or playing track changes
   useEffect(() => {
