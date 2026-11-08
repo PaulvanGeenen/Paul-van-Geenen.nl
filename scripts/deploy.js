@@ -54,8 +54,8 @@ async function deploy() {
       }
     }
 
-    // 2b. Synchroniseer teksten en ondertitels (.srt, .txt, .json) in public/@music/
-    console.log('\n2b. Synchroniseren van ondertitels (.srt) en songteksten (.txt) in @music...');
+    // 2b. Synchroniseer nieuwe/gewijzigde bestanden (.srt, .txt, .json, .mp3, .jpg, .png) in public/@music/
+    console.log('\n2b. Synchroniseren van ondertitels (.srt), teksten (.txt) en gewijzigde media in @music...');
     const localMusicDir = path.join(process.cwd(), 'public', '@music');
     const remoteMusicDir = `${REMOTE_ROOT}/@music`;
     if (fs.existsSync(localMusicDir)) {
@@ -70,7 +70,7 @@ async function deploy() {
             results = results.concat(getFilesRecursive(filePath));
           } else {
             const ext = path.extname(file).toLowerCase();
-            if (['.srt', '.txt', '.json'].includes(ext)) {
+            if (['.srt', '.txt', '.json', '.mp3', '.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
               results.push(filePath);
             }
           }
@@ -78,19 +78,21 @@ async function deploy() {
         return results;
       }
 
-      const textFiles = getFilesRecursive(localMusicDir);
-      console.log(`📡 Controleren van ${textFiles.length} ondertitels/teksten op server...`);
+      const musicFiles = getFilesRecursive(localMusicDir);
+      console.log(`📡 Controleren van ${musicFiles.length} bestanden in @music op wijzigingen...`);
 
-      for (const localPath of textFiles) {
+      for (const localPath of musicFiles) {
         const relativePath = path.relative(localMusicDir, localPath).replace(/\\/g, '/');
         const remotePath = `${remoteMusicDir}/${relativePath}`;
         const remoteSubdir = path.posix.dirname(remotePath);
+        const localStat = fs.statSync(localPath);
 
         let needUpload = true;
         try {
           const stat = await sftp.stat(remotePath);
-          const localStat = fs.statSync(localPath);
-          if (stat.size === localStat.size && Math.abs(stat.modifyTime - Math.floor(localStat.mtimeMs / 1000)) < 2) {
+          const localMtimeSec = Math.floor(localStat.mtimeMs / 1000);
+          // Alleen uploaden als de bestandsgrootte verschilt of het lokale bestand nieuwer is dan op de server
+          if (stat.size === localStat.size && localMtimeSec <= stat.modifyTime + 2) {
             needUpload = false;
           }
         } catch (e) {
@@ -106,7 +108,7 @@ async function deploy() {
           console.log(`  ✔ Geüpload: @music/${relativePath}`);
         }
       }
-      console.log(`✅ ${uploadedCount} ondertitels/teksten gesynchroniseerd naar server!`);
+      console.log(`✅ ${uploadedCount} nieuwe/gewijzigde @music bestanden gesynchroniseerd naar server!`);
     }
 
     // 3. Upload assets
