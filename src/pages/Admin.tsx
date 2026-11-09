@@ -9,7 +9,8 @@ import {
   setLockSystemEnabled,
   resetUnlockedTracks,
   playLockRattleSound,
-  playLockUnlockSound
+  playLockUnlockSound,
+  setIsAdminUser
 } from '../lib/trackLocks';
 import { 
   transipGet, 
@@ -27,6 +28,7 @@ import {
 import jsQR from 'jsqr';
 import { MapModal } from '../components/MapModal';
 import { MusicDbManager } from '../components/MusicDbManager';
+import { TrackLocksManager } from '../components/TrackLocksManager';
 
 interface QRCodeData {
   id: string;
@@ -244,7 +246,7 @@ const isListenInAlbumOrBook = (
 export function Admin() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db'>('qrcodes');
+  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks'>('qrcodes');
   
   // Data lists
   const [qrcodes, setQrcodes] = useState<QRCodeData[]>([]);
@@ -293,6 +295,7 @@ export function Admin() {
   // Mark device as admin and auto-restore admin session if token saved
   useEffect(() => {
     markDeviceAsAdmin();
+    setIsAdminUser(true);
     const token = localStorage.getItem('krabbels_admin_token');
     if (token === 'GONDA1984') {
       setPassword('GONDA1984');
@@ -802,6 +805,7 @@ export function Admin() {
     e.preventDefault();
     if (password === 'GONDA1984') {
       markDeviceAsAdmin();
+      setIsAdminUser(true);
       setIgnoreOwnAnalytics(true);
       setIsAuthorized(true);
     } else {
@@ -1231,48 +1235,21 @@ export function Admin() {
                 </button>
               </div>
 
-              {/* MUZIEKSPELER SLOTEN-SYSTEEM PILL */}
-              <div className="flex items-center gap-2 bg-white/5 border border-earth-gold/30 px-3 py-1.5 rounded-full text-xs font-medium">
-                {adminLocksEnabled ? (
-                  <Lock className="w-3.5 h-3.5 text-earth-gold" />
-                ) : (
-                  <LockOpen className="w-3.5 h-3.5 text-emerald-400" />
+              {/* MUZIEKSPELER SLOTEN-SYSTEEM SHORTCUT PILL */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('track_locks')}
+                className={cn(
+                  "flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer",
+                  activeTab === 'track_locks'
+                    ? "bg-earth-gold text-black border-earth-gold font-bold shadow-lg shadow-earth-gold/20"
+                    : "bg-white/5 border-earth-gold/30 text-white/90 hover:border-earth-gold hover:bg-earth-gold/10"
                 )}
-                <span className="text-white/85 select-none">
-                  Muzieksloten:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !adminLocksEnabled;
-                    setLockSystemEnabled(next);
-                    setAdminLocksEnabled(next);
-                    if (next) playLockRattleSound();
-                    else playLockUnlockSound();
-                  }}
-                  className={cn(
-                    "text-[10px] uppercase tracking-widest font-bold px-2.5 py-0.5 rounded-md transition-all cursor-pointer",
-                    adminLocksEnabled
-                      ? "bg-earth-gold/20 text-earth-gold border border-earth-gold/40 hover:bg-earth-gold/30"
-                      : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25"
-                  )}
-                >
-                  {adminLocksEnabled ? 'AAN (Lezer)' : 'UIT (Alles Vrij)'}
-                </button>
-                <div className="w-[1px] h-3 bg-white/10" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    resetUnlockedTracks();
-                    playLockRattleSound();
-                  }}
-                  className="p-1 text-earth-light/70 hover:text-earth-gold transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-mono"
-                  title="Reset alle lokaal ontgrendelde test-nummers naar op slot"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reset</span>
-                </button>
-              </div>
+                title="Open het aparte Sloten & SoundTracks beheerscherm"
+              >
+                <Lock className={cn("w-3.5 h-3.5", activeTab === 'track_locks' ? "text-black" : "text-earth-gold")} />
+                <span>Sloten & SoundTracks Beheer</span>
+              </button>
             </div>
             <p className="text-earth-light/60 italic">Onderhoud de boeken, hoofdstukken en redirects.</p>
           </div>
@@ -1429,6 +1406,19 @@ export function Admin() {
           >
             <Database className="w-4 h-4 text-emerald-400" />
             Muziek Database (TransIP)
+          </button>
+
+          <button
+            onClick={() => setActiveTab('track_locks')}
+            className={cn(
+              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
+              activeTab === 'track_locks' 
+                ? "border-earth-gold text-white" 
+                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
+            )}
+          >
+            <Lock className="w-4 h-4 text-earth-gold" />
+            Sloten & SoundTracks
           </button>
         </div>
 
@@ -3616,6 +3606,11 @@ export function Admin() {
         {/* TAB 7: MUZIEK DATABASE (TransIP MySQL) */}
         {activeTab === 'music_db' && !loading && (
           <MusicDbManager />
+        )}
+
+        {/* TAB 8: APARTE BEHEERPAGINA VOOR SLOTEN & SOUNDTRACKS */}
+        {activeTab === 'track_locks' && !loading && (
+          <TrackLocksManager />
         )}
 
         <p className="mt-8 text-center text-earth-light/20 text-xs">

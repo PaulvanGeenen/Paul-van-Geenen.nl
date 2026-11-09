@@ -7,7 +7,7 @@ import {
   MessageCircle, Video, RotateCw, X, Sparkles, ChevronRight, ChevronLeft,
   Maximize2, Minimize2, Check, ArrowLeft, Repeat, Repeat1, FlaskConical,
   Share2, Copy, ThumbsUp, ThumbsDown, Subtitles, Languages, Disc3, Layers,
-  Music2, Headphones, Film, Type, SlidersHorizontal, Home, Lock, LockOpen
+  Music2, Headphones, Film, Type, SlidersHorizontal, Home, Lock, LockOpen, KeyRound, Clock
 } from 'lucide-react';
 import { useAudio } from '../context/AudioContext';
 import { IvoryHeartPendant } from '../components/ui/IvoryHeartPendant';
@@ -19,6 +19,10 @@ import {
   setLockSystemEnabled,
   isTrackUnlocked,
   isAlbumLocksEnabled,
+  isBook24hGuidActive,
+  getBook24hGuidRemainingMs,
+  isBookUnlimitedGuidActive,
+  applyBookGuidCode,
   unlockTrack,
   resetUnlockedTracks,
   playLockRattleSound,
@@ -41,6 +45,8 @@ interface Track {
   album?: string;
   albumId?: number;
   folderName: string;
+  alwaysUnlocked?: boolean;
+  always_unlocked?: number | boolean;
   mp3?: string;
   audiobook?: string;
   reflection?: string;
@@ -66,6 +72,12 @@ interface Album {
   order?: number | string;
   locksEnabled?: boolean;
   locks_enabled?: number | boolean;
+  adminLocksEnabled?: boolean;
+  admin_locks_enabled?: number | boolean;
+  guid24h?: string | null;
+  guid_24h?: string | null;
+  guidUnlimited?: string | null;
+  guid_unlimited?: string | null;
   freeTrack1?: string | null;
   free_track_1?: string | null;
   freeTrack2?: string | null;
@@ -697,7 +709,13 @@ export function Music() {
   const [unlockedRevision, setUnlockedRevision] = useState<number>(0);
   const [rattlingLockKey, setRattlingLockKey] = useState<string | null>(null);
   const rattleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [unlockCeremonyPhase, setUnlockCeremonyPhase] = useState<'idle' | 'locked' | 'rattling' | 'opening' | 'fading-out'>('idle');
+  const [unlockCeremonyPhase, setUnlockCeremonyPhase] = useState<'idle' | 'locked' | 'rattling' | 'opening' | 'cover-in' | 'fading-out'>('idle');
+  const [unlockCeremonyWasAlreadyUnlocked, setUnlockCeremonyWasAlreadyUnlocked] = useState<boolean>(false);
+
+  // GUID Code Entry Modal state (per book 24h or unlimited unlock & toggle-to-lock)
+  const [showGuidModal, setShowGuidModal] = useState<boolean>(false);
+  const [guidCodeInput, setGuidCodeInput] = useState<string>('');
+  const [guidFeedback, setGuidFeedback] = useState<{ status: 'success' | 'relocked' | 'error'; message: string } | null>(null);
   const unlockCeremonyTimersRef = useRef<NodeJS.Timeout[]>([]);
   const isUnlockCeremonyActiveRef = useRef<boolean>(false);
 
@@ -878,7 +896,10 @@ export function Music() {
   const ratingButtonsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Loop modes ('all' | 'one' | 'off')
-  const [loopMode, setLoopMode] = useState<'all' | 'one' | 'off'>(() => checkHasDirectVideoRequest() ? 'off' : 'all');
+  // Default to 'off' (single mode: 1x afspelen en daarna stopt de speler) when arriving via QR code or direct track/video link
+  const [loopMode, setLoopMode] = useState<'all' | 'one' | 'off'>(() =>
+    (checkHasDirectVideoRequest() || checkHasDirectTrackRequest()) ? 'off' : 'all'
+  );
   const [loopToast, setLoopToast] = useState<string | null>(null);
 
   // Share link state
@@ -1281,12 +1302,15 @@ export function Music() {
       initialSharedHandledRef.current = true;
       setCurrentTrackIndex(matchedIdx);
       setSelectedFormat(matchedFormat);
+      // QR scans and direct track links always play in single mode (1x afspelen, daarna niets meer doen)
+      setLoopMode('off');
 
       const hasUnlockParam = urlParams.get('unlock') === '1' || urlParams.get('unlock') === 'true';
+      const hasCeremonyDone = urlParams.get('ceremony') === 'done';
 
       // Replace ugly URL parameters in the browser address bar with clean route URL
       const matchedTrack = tracks[matchedIdx];
-      let shouldRunUnlockCeremony = hasUnlockParam;
+      let shouldRunUnlockCeremony = hasUnlockParam && !hasCeremonyDone;
 
       if (matchedTrack) {
         if (matchedTrack.album) {
@@ -1303,12 +1327,13 @@ export function Music() {
         );
         const idxInAlb = albumTracksForMatch.findIndex(t => t.id === matchedTrack.id);
         const wasAlreadyUnlocked = isTrackUnlocked(matchedTrack, idxInAlb !== -1 ? idxInAlb : 99, undefined, matchedAlbumCfg);
+        setUnlockCeremonyWasAlreadyUnlocked(wasAlreadyUnlocked);
         const albumHasLocks = isAlbumLocksEnabled(matchedAlbumCfg);
 
         // Permanently unlock this track in the reader's browser localStorage
         unlockTrack(matchedTrack);
 
-        if (isLockSystemEnabled() && albumHasLocks && (hasUnlockParam || !wasAlreadyUnlocked)) {
+        if (!hasCeremonyDone && isLockSystemEnabled() && albumHasLocks && (hasUnlockParam || !wasAlreadyUnlocked)) {
           shouldRunUnlockCeremony = true;
         } else {
           shouldRunUnlockCeremony = false;
@@ -1326,10 +1351,10 @@ export function Music() {
 
       if (shouldRunUnlockCeremony) {
         // Filmische Unlock-ervaring:
-        // 1. Slot verschijnt op zwart scherm
+        // 1. Slot verschijnt op zwart scherm (indien nog niet unlocked)
         // 2. Slot rammelt en klikt open met geluid
-        // 3. Slot fade uit & audiocover van het nummer fade in
-        // 4. Muziek begint te spelen
+        // 3. Album-cover van de SoundTrack fade in en blijft 5 seconden staan
+        // 4. Cover fade uit & muziekspeler start het nummer in single mode (1x)
         unlockCeremonyTimersRef.current.forEach(t => clearTimeout(t));
         unlockCeremonyTimersRef.current = [];
         isUnlockCeremonyActiveRef.current = true;
@@ -1342,19 +1367,23 @@ export function Music() {
 
         const t2 = setTimeout(() => {
           setUnlockCeremonyPhase('opening');
-        }, 920);
+        }, 950);
 
         const t3 = setTimeout(() => {
-          setUnlockCeremonyPhase('fading-out');
-        }, 1480);
+          setUnlockCeremonyPhase('cover-in');
+        }, 1600);
 
         const t4 = setTimeout(() => {
+          setUnlockCeremonyPhase('fading-out');
+        }, 6600); // 5 seconds hold of soundtrack cover
+
+        const t5 = setTimeout(() => {
           isUnlockCeremonyActiveRef.current = false;
           setUnlockCeremonyPhase('idle');
           playTrack(matchedIdx, matchedFormat);
-        }, 2850);
+        }, 7650);
 
-        unlockCeremonyTimersRef.current = [t1, t2, t3, t4];
+        unlockCeremonyTimersRef.current = [t1, t2, t3, t4, t5];
       } else {
         playTrack(matchedIdx, matchedFormat);
       }
@@ -1372,8 +1401,23 @@ export function Music() {
         setOrientation('landscape');
       }
     } else {
-      // Check if direct album URL parameter was specified (?album=...)
+      // Check if direct album URL parameter was specified (?album=...) or GUID parameter (?guid=...)
       const albumParam = urlParams.get('album');
+      const guidParam = urlParams.get('guid') || urlParams.get('code');
+      if (guidParam && albums.length > 0) {
+        const res = applyBookGuidCode(guidParam, albums);
+        if (res.action !== 'invalid') {
+          if (res.albumTitle) {
+            setSelectedAlbum(res.albumTitle);
+          }
+          setGuidFeedback({
+            status: res.action === 'relocked' ? 'relocked' : 'success',
+            message: res.message
+          });
+          setShowGuidModal(true);
+          setPhase('list');
+        }
+      }
       if (albumParam) {
         initialSharedHandledRef.current = true;
         const decodedAlb = decodeURIComponent(albumParam).trim();
@@ -2100,30 +2144,33 @@ export function Music() {
 
     if (playPromise !== undefined) {
       playPromise.then(runRamp).catch(e => {
-        // Ignore AbortError: this occurs naturally when switching tracks/formats or pausing while loading
+        // If playback was aborted because the audio element is still loading its src, keep shouldAutoPlayRef = true so onCanPlay/onLoadedData starts it!
         if (!e || e.name === 'AbortError') {
+          shouldAutoPlayRef.current = true;
           return;
         }
-        // Only fall back to muted autoplay when the browser explicitly blocks unmuted autoplay (NotAllowedError)
+        // Only fall back to muted autoplay / gesture prompt when the browser explicitly blocks unmuted autoplay (NotAllowedError)
         if (e.name !== 'NotAllowedError') {
           console.warn('Media playback error:', e);
+          shouldAutoPlayRef.current = true;
           return;
         }
 
         console.warn('Playback with audio blocked by browser policy:', e);
-        el.muted = true;
         setIsAutoplayMuted(true);
-        const retryMuted = el.play();
-        if (retryMuted !== undefined) {
-          retryMuted.then(() => {
-            setIsPlaying(true);
-            shouldAutoPlayRef.current = false;
-          }).catch(err2 => {
-            if (err2 && err2.name !== 'AbortError') {
-              console.warn('Muted autoplay also blocked:', err2);
+        if (el === videoRef.current) {
+          el.muted = true;
+          const retryMuted = el.play();
+          if (retryMuted !== undefined) {
+            retryMuted.then(() => {
+              setIsPlaying(true);
+              shouldAutoPlayRef.current = false;
+            }).catch(() => {
               shouldAutoPlayRef.current = true;
-            }
-          });
+            });
+          }
+        } else {
+          shouldAutoPlayRef.current = true;
         }
 
         if (autoplayGestureCleanupRef.current) {
@@ -2145,7 +2192,11 @@ export function Music() {
             el.muted = isMuted;
             setIsAutoplayMuted(false);
             if (el.paused) {
-              el.play().catch(() => {});
+              el.play().then(() => {
+                setIsPlaying(true);
+              }).catch(() => {});
+            } else {
+              setIsPlaying(true);
             }
             fadeToVolume(el, targetVol, durationMs);
           }
@@ -3400,6 +3451,31 @@ export function Music() {
               </div>
 
               <div className="flex items-center gap-1.5">
+                {(() => {
+                  const matchingAlb = albums.find(a => a.title.toLowerCase() === (selectedAlbum || '').toLowerCase());
+                  const has24h = isBook24hGuidActive(matchingAlb);
+                  const hasUnlim = isBookUnlimitedGuidActive(matchingAlb);
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGuidCodeInput('');
+                        setGuidFeedback(null);
+                        setShowGuidModal(true);
+                      }}
+                      className={`p-2 rounded-full border transition-all cursor-pointer shadow-md flex items-center gap-1 ${
+                        hasUnlim
+                          ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
+                          : has24h
+                          ? 'border-amber-400/60 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                          : 'border-earth-gold/30 bg-earth-gold/10 hover:bg-earth-gold/20 text-earth-gold'
+                      }`}
+                      title="Boekcode / GUID invoeren om SoundTracks te ontgrendelen of op slot te zetten"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                    </button>
+                  );
+                })()}
                 {areSubtitlesAvailableInCurrentView && (
                   <button
                     type="button"
@@ -3647,9 +3723,21 @@ export function Music() {
                             </div>
 
                             {/* Bottom Row */}
-                            <div className="relative z-10 flex items-center justify-between text-[10px] sm:text-xs text-white/50 font-serif italic">
-                              <span>{selectedAlbum || 'Boeksoundtrack'}</span>
+                            <div className="relative z-10 flex items-center justify-between gap-2 text-[10px] sm:text-xs text-white/50 font-serif italic">
                               <span>Scan de QR-code in het boek om een nummer vrij te spelen</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setGuidCodeInput('');
+                                  setGuidFeedback(null);
+                                  setShowGuidModal(true);
+                                }}
+                                className="not-italic font-sans font-bold text-[10px] px-2.5 py-1 rounded-full bg-earth-gold/15 hover:bg-earth-gold/30 text-earth-gold border border-earth-gold/40 flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                              >
+                                <KeyRound className="w-3 h-3" />
+                                <span>Code invoeren</span>
+                              </button>
                             </div>
                           </motion.div>
                         ) : currentTrackInList ? (
@@ -3759,16 +3847,47 @@ export function Music() {
                     </div>
 
                     {/* Album Details */}
-                    <div className="mt-3.5 space-y-1">
+                    <div className="mt-3.5 space-y-1.5 flex flex-col items-center">
                       <h3 className="font-serif text-xl sm:text-2xl font-bold text-white tracking-wide">
                         {selectedAlbum || 'Muzikale Krabbels'}
                       </h3>
                       <p className="text-xs sm:text-sm text-earth-light/80 font-medium">
                         {matchingAlbum?.artist || 'Paul van Geenen'}
                       </p>
-                      <span className="inline-block px-3 py-0.5 rounded-full bg-earth-gold/15 text-earth-gold border border-earth-gold/30 text-[11px] font-bold mt-1">
-                        {currentAlbumTracks.length} {t.tracklist.tracksCount(currentAlbumTracks.length)}
-                      </span>
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5">
+                        <span className="inline-block px-3 py-0.5 rounded-full bg-earth-gold/15 text-earth-gold border border-earth-gold/30 text-[11px] font-bold">
+                          {currentAlbumTracks.length} {t.tracklist.tracksCount(currentAlbumTracks.length)}
+                        </span>
+                        {isBookUnlimitedGuidActive(matchingAlbum) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setGuidCodeInput('');
+                              setGuidFeedback(null);
+                              setShowGuidModal(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold cursor-pointer hover:bg-emerald-500/30 transition-all"
+                            title="Onbeperkte vrijgave actief — klik om de code nogmaals in te voeren en weer op slot te zetten"
+                          >
+                            <LockOpen className="w-3 h-3" />
+                            <span>Onbeperkt open (Code)</span>
+                          </button>
+                        )}
+                        {!isBookUnlimitedGuidActive(matchingAlbum) && isBook24hGuidActive(matchingAlbum) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setGuidCodeInput('');
+                              setGuidFeedback(null);
+                              setShowGuidModal(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold cursor-pointer hover:bg-amber-500/30 transition-all"
+                          >
+                            <Clock className="w-3 h-3" />
+                            <span>24u Vrijgave Actief</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -3912,9 +4031,22 @@ export function Music() {
                           </div>
                         </div>
 
-                        {/* Subtle bottom caption */}
-                        <div className="relative z-10 text-center text-[10px] text-white/45 font-serif italic truncate">
-                          Ontgrendel met de QR-codes in het boek
+                        {/* Subtle bottom caption + Code Entry Button */}
+                        <div className="relative z-10 flex items-center justify-between gap-2 text-[10px] text-white/50 font-serif italic">
+                          <span className="truncate">Ontgrendel met QR-code in het boek</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setGuidCodeInput('');
+                              setGuidFeedback(null);
+                              setShowGuidModal(true);
+                            }}
+                            className="not-italic font-sans font-bold text-[10px] px-2.5 py-1 rounded-full bg-earth-gold/15 hover:bg-earth-gold/30 text-earth-gold border border-earth-gold/40 flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                          >
+                            <KeyRound className="w-3 h-3" />
+                            <span>Code</span>
+                          </button>
                         </div>
                       </div>
                     )}
@@ -3943,7 +4075,7 @@ export function Music() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
           >
-            {/* Cinematic Track Unlock Ceremony: Lock appears -> Rattles with sound -> Fades out while Audio Cover fades in */}
+            {/* Cinematic Track Unlock Ceremony: Lock appears -> Rattles with sound -> SoundTrack Cover Fades in for 5s -> Fades out to Player */}
             <AnimatePresence>
               {unlockCeremonyPhase !== 'idle' && (
                 <motion.div
@@ -3952,48 +4084,82 @@ export function Music() {
                   animate={{ opacity: unlockCeremonyPhase === 'fading-out' ? 0 : 1 }}
                   exit={{ opacity: 0 }}
                   transition={{
-                    duration: unlockCeremonyPhase === 'fading-out' ? 1.35 : 0.25,
+                    duration: unlockCeremonyPhase === 'fading-out' ? 1.05 : 0.35,
                     ease: [0.4, 0, 0.2, 1]
                   }}
-                  className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center pointer-events-auto select-none"
+                  className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center p-6 pointer-events-auto select-none"
                 >
-                  {/* Warm Ambient Golden Glow behind the Lock */}
+                  {/* Warm Ambient Golden Glow */}
                   <motion.div
                     animate={{
-                      scale: unlockCeremonyPhase === 'opening' || unlockCeremonyPhase === 'fading-out' ? 1.6 : 1,
-                      opacity: unlockCeremonyPhase === 'fading-out' ? 0 : unlockCeremonyPhase === 'opening' ? 0.55 : 0.25
+                      scale: unlockCeremonyPhase === 'opening' || unlockCeremonyPhase === 'cover-in' || unlockCeremonyPhase === 'fading-out' ? 1.6 : 1,
+                      opacity: unlockCeremonyPhase === 'fading-out' ? 0 : unlockCeremonyPhase === 'opening' || unlockCeremonyPhase === 'cover-in' ? 0.55 : 0.25
                     }}
                     transition={{ duration: 0.7 }}
-                    className="absolute w-56 h-56 sm:w-72 sm:h-72 rounded-full bg-earth-gold/30 blur-3xl pointer-events-none"
+                    className="absolute w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-earth-gold/30 blur-3xl pointer-events-none"
                   />
 
-                  {/* Ornate Metallic Lock Emblem */}
-                  <motion.div
-                    animate={
-                      unlockCeremonyPhase === 'rattling'
-                        ? {
-                            rotate: [0, -18, 18, -15, 15, -10, 10, -6, 6, 0],
-                            x: [0, -8, 8, -6, 6, -4, 4, -2, 2, 0],
-                            scale: [1, 1.08, 1.05, 1.1, 1.04, 1]
-                          }
-                        : unlockCeremonyPhase === 'opening'
-                        ? { scale: 1.14, rotate: 0, x: 0 }
-                        : unlockCeremonyPhase === 'fading-out'
-                        ? { scale: 1.25, opacity: 0 }
-                        : { scale: 1, rotate: 0, x: 0 }
-                    }
-                    transition={{
-                      duration: unlockCeremonyPhase === 'rattling' ? 0.58 : 0.8,
-                      ease: 'easeInOut'
-                    }}
-                    className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-3xl bg-gradient-to-b from-[#2a2118] via-[#15100c] to-[#080604] border-2 border-earth-gold/60 shadow-[0_0_60px_rgba(212,175,55,0.35)] flex items-center justify-center"
-                  >
-                    {unlockCeremonyPhase === 'opening' || unlockCeremonyPhase === 'fading-out' ? (
-                      <LockOpen className="w-14 h-14 sm:w-16 sm:h-16 text-amber-300 drop-shadow-[0_0_20px_rgba(252,211,77,0.8)]" />
-                    ) : (
-                      <Lock className="w-14 h-14 sm:w-16 sm:h-16 text-earth-gold drop-shadow-[0_0_15px_rgba(212,175,55,0.5)]" />
-                    )}
-                  </motion.div>
+                  {unlockCeremonyPhase === 'cover-in' || unlockCeremonyPhase === 'fading-out' ? (
+                    <motion.div
+                      key="ceremony-cover"
+                      initial={{ opacity: 0, scale: 0.94 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+                      className="relative z-10 flex flex-col items-center text-center space-y-5 max-w-sm"
+                    >
+                      <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-2xl overflow-hidden border-2 border-earth-gold/60 shadow-[0_25px_70px_rgba(0,0,0,0.95)] bg-black">
+                        <img
+                          src={getTrackCoverJpg(currentTrack) || currentTrack?.portraitJpg || currentTrack?.thumbnailJpg || '/@music/_albums/De%20Geboorte%20van%20de%20Leeuw%20Album.jpg'}
+                          alt={currentTrack?.title || 'SoundTrack'}
+                          className="w-full h-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        {!unlockCeremonyWasAlreadyUnlocked && (
+                          <span className="text-[11px] uppercase tracking-[0.2em] text-earth-gold font-mono font-bold block">
+                            SoundTrack Ontgrendeld
+                          </span>
+                        )}
+                        <h3 className="text-2xl sm:text-3xl font-serif font-bold text-white">
+                          {currentTrack?.title}
+                        </h3>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="relative z-10 flex flex-col items-center space-y-5 text-center">
+                      {/* Ornate Metallic Lock Emblem */}
+                      <motion.div
+                        animate={
+                          unlockCeremonyPhase === 'rattling'
+                            ? {
+                                rotate: [0, -18, 18, -15, 15, -10, 10, -6, 6, 0],
+                                x: [0, -8, 8, -6, 6, -4, 4, -2, 2, 0],
+                                scale: [1, 1.08, 1.05, 1.1, 1.04, 1]
+                              }
+                            : unlockCeremonyPhase === 'opening'
+                            ? { scale: 1.14, rotate: 0, x: 0 }
+                            : { scale: 1, rotate: 0, x: 0 }
+                        }
+                        transition={{
+                          duration: unlockCeremonyPhase === 'rattling' ? 0.58 : 0.8,
+                          ease: 'easeInOut'
+                        }}
+                        className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-3xl bg-gradient-to-b from-[#2a2118] via-[#15100c] to-[#080604] border-2 border-earth-gold/60 shadow-[0_0_60px_rgba(212,175,55,0.35)] flex items-center justify-center"
+                      >
+                        {unlockCeremonyPhase === 'opening' ? (
+                          <LockOpen className="w-14 h-14 sm:w-16 sm:h-16 text-amber-300 drop-shadow-[0_0_20px_rgba(252,211,77,0.8)]" />
+                        ) : (
+                          <Lock className="w-14 h-14 sm:w-16 sm:h-16 text-earth-gold drop-shadow-[0_0_15px_rgba(212,175,55,0.5)]" />
+                        )}
+                      </motion.div>
+                      {!unlockCeremonyWasAlreadyUnlocked && (
+                        <span className="text-xs uppercase tracking-[0.2em] text-earth-gold font-mono font-bold">
+                          SoundTrack Ontgrendeld
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -4552,33 +4718,39 @@ export function Music() {
               })()}
             </AnimatePresence>
 
-            {/* Autoplay Muted Floating Unmute Prompt */}
+            {/* Autoplay Muted / Blocked Floating Unmute & Start Prompt */}
             <AnimatePresence>
-              {isAutoplayMuted && effectiveFormat === 'video' && isPlaying && (
+              {isAutoplayMuted && (
                 <motion.div
                   initial={{ opacity: 0, y: 15, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 15, scale: 0.95 }}
                   transition={{ duration: 0.25 }}
-                  className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-auto"
+                  className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50 pointer-events-auto"
                 >
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (videoRef.current) {
+                      const activeEl = effectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
+                      if (activeEl) {
                         try {
                           equalizerEngine.resume();
                         } catch (err) {}
-                        videoRef.current.muted = false;
+                        activeEl.muted = false;
                         setIsAutoplayMuted(false);
-                        fadeToVolume(videoRef.current, volume, 400);
+                        if (activeEl.paused) {
+                          activeEl.play().then(() => setIsPlaying(true)).catch(() => {});
+                        } else {
+                          setIsPlaying(true);
+                        }
+                        fadeToVolume(activeEl, volume, 400);
                       }
                     }}
-                    className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/85 hover:bg-black text-earth-gold text-xs sm:text-sm font-semibold border border-earth-gold/60 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.85)] cursor-pointer transition-all hover:scale-105 active:scale-95"
+                    className="flex items-center gap-2.5 px-5 py-3 rounded-full bg-earth-gold hover:bg-amber-400 text-black text-xs sm:text-sm font-bold border border-white/30 shadow-[0_10px_40px_rgba(212,175,55,0.6)] cursor-pointer transition-all hover:scale-105 active:scale-95 animate-bounce"
                   >
-                    <VolumeX className="w-4 h-4 text-earth-gold animate-pulse" />
-                    <span>{musicLang === 'nl' ? 'Geluid aanzetten' : 'Unmute video'}</span>
+                    <Volume2 className="w-4 h-4 text-black" />
+                    <span>{musicLang === 'nl' ? 'Tik om SoundTrack te starten' : 'Tap to start SoundTrack'}</span>
                   </button>
                 </motion.div>
               )}
@@ -5629,6 +5801,153 @@ export function Music() {
         isPlaying={isPlaying}
         lang={musicLang}
       />
+
+      {/* Boekcode / GUID Invoeren Modal (24-uurs of Onbeperkte Vrijgave & Toggle-to-Lock) */}
+      <AnimatePresence>
+        {showGuidModal && (
+          <div
+            className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
+            onClick={() => setShowGuidModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 15 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#181512] border border-earth-gold/40 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-[0_25px_70px_rgba(0,0,0,0.95)] text-earth-light space-y-4"
+            >
+              {(() => {
+                const targetAlbum =
+                  albums.find(a => a.title.toLowerCase() === (selectedAlbum || '').toLowerCase()) ||
+                  albums[0] ||
+                  null;
+                const is24hActive = isBook24hGuidActive(targetAlbum);
+                const rem24hMs = getBook24hGuidRemainingMs(targetAlbum);
+                const remHours = Math.floor(rem24hMs / (60 * 60 * 1000));
+                const remMins = Math.floor((rem24hMs % (60 * 60 * 1000)) / (60 * 1000));
+                const isUnlimActive = isBookUnlimitedGuidActive(targetAlbum);
+
+                const handleSubmitGuid = (e: React.FormEvent) => {
+                  e.preventDefault();
+                  if (!guidCodeInput.trim()) return;
+
+                  const candidateAlbums = targetAlbum ? [targetAlbum, ...albums.filter(a => a.id !== targetAlbum.id)] : albums;
+                  const result = applyBookGuidCode(guidCodeInput, candidateAlbums);
+
+                  if (result.action === 'unlocked_24h' || result.action === 'unlocked_unlimited') {
+                    if (result.albumTitle) setSelectedAlbum(result.albumTitle);
+                    setUnlockedRevision(r => r + 1);
+                    setGuidFeedback({ status: 'success', message: result.message });
+                    setGuidCodeInput('');
+                  } else if (result.action === 'relocked') {
+                    if (result.albumTitle) setSelectedAlbum(result.albumTitle);
+                    setUnlockedRevision(r => r + 1);
+                    setGuidFeedback({ status: 'relocked', message: result.message });
+                    setGuidCodeInput('');
+                  } else {
+                    playLockRattleSound();
+                    setGuidFeedback({ status: 'error', message: result.message });
+                  }
+                };
+
+                return (
+                  <>
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-earth-gold/15 text-earth-gold border border-earth-gold/30">
+                          <KeyRound className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-serif font-bold text-white">
+                            SoundTrack Vrijgavecode (GUID)
+                          </h3>
+                          <p className="text-[11px] text-earth-light/60">
+                            Boek: <strong className="text-earth-gold">{targetAlbum?.title || selectedAlbum || 'Boek'}</strong>
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowGuidModal(false)}
+                        className="p-1.5 rounded-full hover:bg-white/10 text-earth-light/60 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Current Status Indicator */}
+                    {(isUnlimActive || is24hActive) && (
+                      <div
+                        className={`p-3 rounded-2xl border text-xs flex items-center justify-between gap-2 ${
+                          isUnlimActive
+                            ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
+                            : 'bg-amber-500/15 border-amber-500/35 text-amber-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <LockOpen className="w-4 h-4 shrink-0" />
+                          <span>
+                            {isUnlimActive
+                              ? 'Onbeperkte vrijgave is actief (voer dezelfde code nogmaals in om weer op slot te zetten).'
+                              : `24-uurs vrijgave actief (nog ${remHours}u ${remMins}m geldig).`}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSubmitGuid} className="space-y-3">
+                      <div>
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-earth-light/70 block mb-1.5">
+                          Voer uw GUID / Vrijgavecode in:
+                        </label>
+                        <input
+                          type="text"
+                          value={guidCodeInput}
+                          onChange={(e) => setGuidCodeInput(e.target.value.toUpperCase())}
+                          placeholder="Bijv. A1B2C3D4-E5F6-4789-ABCD-1234567890AB"
+                          className="w-full bg-black/60 border border-earth-gold/40 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-mono text-earth-gold placeholder:text-white/25 focus:outline-none focus:border-earth-gold uppercase"
+                          autoFocus
+                        />
+                      </div>
+
+                      {guidFeedback && (
+                        <div
+                          className={`p-3 rounded-xl border text-xs leading-relaxed ${
+                            guidFeedback.status === 'success'
+                              ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
+                              : guidFeedback.status === 'relocked'
+                              ? 'bg-amber-500/15 border-amber-500/35 text-amber-200'
+                              : 'bg-red-500/15 border-red-500/35 text-red-300'
+                          }`}
+                        >
+                          {guidFeedback.message}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowGuidModal(false)}
+                          className="flex-1 py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-all cursor-pointer"
+                        >
+                          Sluiten
+                        </button>
+                        <button
+                          type="submit"
+                          className="flex-1 py-2.5 px-4 rounded-xl bg-earth-gold hover:bg-amber-400 text-black text-xs font-bold transition-all shadow-lg cursor-pointer"
+                        >
+                          Code Toepassen
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                );
+              })()}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
