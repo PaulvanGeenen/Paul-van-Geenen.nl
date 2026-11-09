@@ -2611,9 +2611,9 @@ export function Music() {
   const isLeftZoneRef = useRef<boolean>(false);
   const containerHeightRef = useRef<number>(400);
   const gestureTypeRef = useRef<'undecided' | 'volume' | 'track' | 'none'>('none');
+  const lastTouchEndTimeRef = useRef<number>(0);
 
   const startGesture = (clientX: number, clientY: number, container: HTMLElement) => {
-    resetNavBarTimer();
     resetRatingButtonsTimer();
     if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
     setIsSwipingRelease(false);
@@ -2628,8 +2628,7 @@ export function Music() {
     const relativeX = clientX - rect.left;
     isLeftZoneRef.current = relativeX < rect.width * 0.4;
     gestureTypeRef.current = 'undecided';
-
-    setIsSwiping(true);
+    // Only set isSwiping = true once an actual swipe movement > 12px is detected in updateGesture
   };
 
   const updateGesture = (clientX: number, clientY: number) => {
@@ -2640,16 +2639,18 @@ export function Music() {
     if (gestureTypeRef.current === 'undecided') {
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
-      if (absX > 8 || absY > 8) {
+      if (absX > 12 || absY > 12) {
         if (isLeftZoneRef.current && absY > absX * 1.1) {
           // Mobile phones have hardware volume buttons; disable touch volume gesture on mobile to prevent accidental hijacking
           if (!isIOS && !isMobileDevice) {
             gestureTypeRef.current = 'volume';
+            setIsSwiping(true);
           } else {
             gestureTypeRef.current = 'none';
           }
         } else if (absX > absY * 1.1) {
           gestureTypeRef.current = 'track';
+          setIsSwiping(true);
         } else {
           gestureTypeRef.current = 'none';
         }
@@ -2697,12 +2698,15 @@ export function Music() {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Ignore emulated mouse events fired right after touch events on mobile browsers
+    if (Date.now() - lastTouchEndTimeRef.current < 650) return;
     const target = e.target as HTMLElement;
     if (target.closest('input, button, a')) return;
     startGesture(e.clientX, e.clientY, e.currentTarget as HTMLElement);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (Date.now() - lastTouchEndTimeRef.current < 650) return;
     updateGesture(e.clientX, e.clientY);
   };
 
@@ -2759,8 +2763,8 @@ export function Music() {
       return;
     }
 
-    // Tap detection: simple finger tap toggles overlay buttons
-    if (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) {
+    // Tap / Click detection: any single tap or click that is not a swipe toggles the control bar
+    if (Math.abs(deltaX) < 30 && Math.abs(deltaY) < 30) {
       setIsSwiping(false);
       setDragX(0);
       gestureTypeRef.current = 'none';
@@ -2777,12 +2781,23 @@ export function Music() {
         }
         activeEl.muted = false;
         setIsAutoplayMuted(false);
+        if (activeEl.paused) {
+          activeEl.play().then(() => setIsPlaying(true)).catch(() => {});
+        }
         fadeToVolume(activeEl, volume, 400);
       }
 
       setShowNavBar(prev => {
         const next = !prev;
-        if (next) resetNavBarTimer();
+        if (next) {
+          if (navBarTimeoutRef.current) clearTimeout(navBarTimeoutRef.current);
+          const timeoutDuration = isPlaying ? 4000 : 5 * 60 * 1000;
+          navBarTimeoutRef.current = setTimeout(() => {
+            setShowNavBar(false);
+          }, timeoutDuration);
+        } else {
+          if (navBarTimeoutRef.current) clearTimeout(navBarTimeoutRef.current);
+        }
         return next;
       });
       return;
@@ -2826,12 +2841,15 @@ export function Music() {
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    lastTouchEndTimeRef.current = Date.now();
     const endX = e.changedTouches[0]?.clientX ?? 0;
     const endY = e.changedTouches[0]?.clientY ?? 0;
     finishGesture(endX, endY);
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
+    // Ignore emulated mouseup fired right after touchend on mobile browsers
+    if (Date.now() - lastTouchEndTimeRef.current < 650) return;
     finishGesture(e.clientX, e.clientY);
   };
 
