@@ -478,33 +478,44 @@ export function TrackLocksManager() {
           {/* STAP 2: SLOTJES AAN/UIT VOOR LEZERS EN VOOR ADMINS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* A. Slootjes voor Niet-Admin Lezers */}
-            <div className="bg-[#181818] border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col justify-between gap-5">
+            <div className={cn(
+              "border rounded-2xl p-6 shadow-xl flex flex-col justify-between gap-5 transition-all duration-300",
+              !isAlbumLocksEnabled(selectedBook)
+                ? "bg-emerald-950/60 border-emerald-500/50 shadow-emerald-950/40"
+                : "bg-[#181818] border-white/10"
+            )}>
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-earth-gold font-bold">
+                  <span className={cn(
+                    "text-[11px] font-mono uppercase tracking-wider font-bold",
+                    !isAlbumLocksEnabled(selectedBook) ? "text-emerald-300" : "text-earth-gold"
+                  )}>
                     2A. Reguliere Bezoekers (Niet-Admin Lezers)
                   </span>
                   <span className={cn(
                     "text-xs font-mono px-2.5 py-0.5 rounded-full border font-bold",
                     isAlbumLocksEnabled(selectedBook)
                       ? "bg-earth-gold/15 text-earth-gold border-earth-gold/40"
-                      : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                      : "bg-emerald-500/25 text-emerald-200 border-emerald-400/50"
                   )}>
-                    {isAlbumLocksEnabled(selectedBook) ? '🔒 Slootjes AAN' : '🔓 Slootjes UIT'}
+                    {isAlbumLocksEnabled(selectedBook) ? '🔒 Slootjes AAN' : '🔓 Alles Open'}
                   </span>
                 </div>
                 <h3 className="text-lg font-serif font-bold text-white">
                   Slootjes voor Niet-Admin Lezers — "{selectedBook.title}"
                 </h3>
-                <p className="text-xs text-earth-light/65 leading-relaxed">
+                <p className={cn(
+                  "text-xs leading-relaxed",
+                  !isAlbumLocksEnabled(selectedBook) ? "text-emerald-100/80" : "text-earth-light/65"
+                )}>
                   Schakel de slootjes aan of uit voor alle reguliere lezers van dit boek. Wanneer dit <strong>AAN</strong> staat, zien lezers alleen de SoundTracks die op <em>"Nooit op slot"</em> staan plus de SoundTracks die zij zelf via een QR-code (of GUID) hebben ontgrendeld.
                 </p>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                <span className="text-xs font-mono text-earth-light/50">
-                  SQL kolom: <code>albums.locks_enabled = {isAlbumLocksEnabled(selectedBook) ? 1 : 0}</code>
-                </span>
+              <div className={cn(
+                "flex items-center justify-end pt-4 border-t",
+                !isAlbumLocksEnabled(selectedBook) ? "border-emerald-500/30" : "border-white/10"
+              )}>
                 <button
                   type="button"
                   disabled={savingId === `book-${selectedBook.id}`}
@@ -522,7 +533,7 @@ export function TrackLocksManager() {
                     "px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg border",
                     isAlbumLocksEnabled(selectedBook)
                       ? "bg-earth-gold text-black border-earth-gold hover:bg-amber-400"
-                      : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30"
+                      : "bg-emerald-500 text-black border-emerald-400 hover:bg-emerald-400"
                   )}
                 >
                   {isAlbumLocksEnabled(selectedBook) ? (
@@ -541,17 +552,25 @@ export function TrackLocksManager() {
             </div>
 
             {/* B. Slootjes voor Admin-Lezers (Testmodus vs. Alles Open voor Admins) */}
-            <div className="bg-[#181818] border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col justify-between gap-5">
+            <div className={cn(
+              "border rounded-2xl p-6 shadow-xl flex flex-col justify-between gap-5 transition-all duration-300",
+              !isAlbumAdminLocksEnabled(selectedBook)
+                ? "bg-emerald-950/60 border-emerald-500/50 shadow-emerald-950/40"
+                : "bg-[#181818] border-white/10"
+            )}>
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+                  <span className={cn(
+                    "text-[11px] font-mono uppercase tracking-wider font-bold",
+                    !isAlbumAdminLocksEnabled(selectedBook) ? "text-emerald-300" : "text-amber-400"
+                  )}>
                     2B. Alleen voor Admin-Lezers (Testmodus)
                   </span>
                   <span className={cn(
                     "text-xs font-mono px-2.5 py-0.5 rounded-full border font-bold",
                     isAlbumAdminLocksEnabled(selectedBook)
                       ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
-                      : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                      : "bg-emerald-500/25 text-emerald-200 border-emerald-400/50"
                   )}>
                     {isAlbumAdminLocksEnabled(selectedBook) ? '🔒 Slootjes AAN voor Admin' : '🔓 Alles Open voor Admin'}
                   </span>
@@ -559,15 +578,18 @@ export function TrackLocksManager() {
                 <h3 className="text-lg font-serif font-bold text-white">
                   Slootjes voor Admin-Lezers — "{selectedBook.title}"
                 </h3>
-                <p className="text-xs text-earth-light/65 leading-relaxed">
+                <p className={cn(
+                  "text-xs leading-relaxed",
+                  !isAlbumAdminLocksEnabled(selectedBook) ? "text-emerald-100/80" : "text-earth-light/65"
+                )}>
                   Hiermee zet je de slootjes aan of uit voor <strong>alleen admin-lezers</strong>. Zet dit <strong>UIT</strong> om voor admins alle songs van dit boek open te zetten (terwijl gewone lezers gewoon de slootjes zien), of zet dit <strong>AAN</strong> zodat een admin de slootjes-functionaliteit zelf kan testen.
                 </p>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                <span className="text-xs font-mono text-earth-light/50">
-                  SQL kolom: <code>albums.admin_locks_enabled = {isAlbumAdminLocksEnabled(selectedBook) ? 1 : 0}</code>
-                </span>
+              <div className={cn(
+                "flex items-center justify-end pt-4 border-t",
+                !isAlbumAdminLocksEnabled(selectedBook) ? "border-emerald-500/30" : "border-white/10"
+              )}>
                 <button
                   type="button"
                   disabled={savingId === `book-${selectedBook.id}`}
@@ -585,7 +607,7 @@ export function TrackLocksManager() {
                     "px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg border",
                     isAlbumAdminLocksEnabled(selectedBook)
                       ? "bg-amber-400 text-black border-amber-400 hover:bg-amber-300"
-                      : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30"
+                      : "bg-emerald-500 text-black border-emerald-400 hover:bg-emerald-400"
                   )}
                 >
                   {isAlbumAdminLocksEnabled(selectedBook) ? (
