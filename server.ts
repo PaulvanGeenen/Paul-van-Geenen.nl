@@ -722,6 +722,24 @@ async function startServer() {
     }
   });
 
+  // Route to delete all tracking data for an IP address (admin device cleanup)
+  app.post('/api/analytics/clean-admin-ip', async (req, res) => {
+    try {
+      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
+      const { ip, sessionId } = req.body || {};
+      const targetIp = ip || clientIp;
+
+      const result = await fetchTransipAnalytics('delete_by_ip', {
+        method: 'POST',
+        body: { ip: targetIp, sessionId }
+      });
+      res.json(result || { success: true, cleaned_ip: targetIp });
+    } catch (err: any) {
+      console.error('[Admin IP Clean] Error:', err);
+      res.status(500).json({ error: 'Fout bij opschonen van admin IP data.' });
+    }
+  });
+
   // Route to delete a single visitor session
   app.delete('/api/analytics/session/:id', checkAdminAuth, async (req, res) => {
     const { id } = req.params;

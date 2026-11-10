@@ -14,3 +14,13 @@ export const isLionBooksDomain = (): boolean => {
     return false;
   }
 };
+
+export const getCurrentDomainLabel = (): string => {
+  if (typeof window === 'undefined') return 'paulvangeenen.nl';
+  return isLionBooksDomain() ? 'lionbooks.nl' : 'paulvangeenen.nl';
+};
+
+export const getCurrentDomainUrl = (): string => {
+  if (typeof window === 'undefined') return 'https://paulvangeenen.nl';
+  return isLionBooksDomain() ? 'https://lionbooks.nl' : 'https://paulvangeenen.nl';
+};

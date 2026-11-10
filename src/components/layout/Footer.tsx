@@ -45,20 +45,16 @@ export function Footer() {
 
         <div>
           <h4 className="font-bold border-b border-earth-warm pb-2 mb-4">Inspiratie</h4>
-          <p className="text-xs text-earth-light opacity-60 mb-4 italic leading-relaxed">
+          <p className="text-xs text-earth-light opacity-60 italic leading-relaxed">
             "De muren luisterden mee naar wat ik nooit durfde te zeggen."
           </p>
-          <div className="text-xs text-earth-light opacity-50">
-            <p>KvK: 12345678 (Placeholder)</p>
-            <p className="mt-2"><Link to="/privacy" className="underline hover:text-white">Privacyverklaring</Link></p>
-          </div>
         </div>
       </div>
 
-      {/* Official Lion Books Publishing Imprint Bar */}
+      {/* Official Copyright Bar */}
       <div className="max-w-7xl mx-auto mt-12 pt-8 border-t border-earth-clay/20 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-earth-light/70">
         <p className="font-medium text-white/85 text-center sm:text-left">
-          &copy; 2026 Lion Books Publishing | Officiële imprint voor De Geboorte van de Leeuw, De Echo en Koester het Leven
+          &copy; 2026 Paul van Geenen / Lion Books. Alle rechten voorbehouden.
         </p>
         <div className="shrink-0">
           <Link to="/privacy" className="underline hover:text-white transition-colors">Privacyverklaring</Link>

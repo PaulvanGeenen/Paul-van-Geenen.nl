@@ -74,6 +74,118 @@ foreach ($hostCandidates as $candidateHost) {
 $input = json_decode(file_get_contents("php://input"), true) ?? [];
 $action = $_GET['action'] ?? ($input['action'] ?? '');
 
+// Helper om accuraat het IP-adres van de client te achterhalen (ook achter proxies/Cloudflare)
+function get_client_ip_clean() {
+    $keys = [
+        'HTTP_CF_CONNECTING_IP',
+        'HTTP_CLIENT_IP',
+        'HTTP_X_FORWARDED_FOR',
+        'HTTP_X_FORWARDED',
+        'HTTP_X_CLUSTER_CLIENT_IP',
+        'HTTP_FORWARDED_FOR',
+        'HTTP_FORWARDED',
+        'REMOTE_ADDR'
+    ];
+    foreach ($keys as $k) {
+        if (!empty($_SERVER[$k])) {
+            $ipList = explode(',', $_SERVER[$k]);
+            $ip = trim($ipList[0]);
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
+            }
+        }
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? '';
+}
+
+// Helper om een IP-adres volledig AVG-proof te anonimiseren
+// IPv4: laatste octet op 0 zetten (bijv. 192.168.1.123 -> 192.168.1.0)
+// IPv6: laatste 80 bits op 0 zetten (bijv. 2001:db8:85a3:8d3:1319:8a2e:370:7348 -> 2001:db8:85a3::)
+function anonymize_ip($ip) {
+    if (empty($ip) || $ip === 'Onbekend') return null;
+    $ip = trim($ip);
+    // Controleer IPv4
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        $parts = explode('.', $ip);
+        if (count($parts) === 4) {
+            $parts[3] = '0';
+            return implode('.', $parts);
+        }
+    }
+    // Controleer IPv6
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        $packed = inet_pton($ip);
+        if ($packed !== false) {
+            // Maskeer laatste 10 bytes (80 bits) van de 16 bytes
+            $mask = str_repeat("\xFF", 6) . str_repeat("\x00", 10);
+            return inet_ntop($packed & $mask);
+        }
+    }
+    return null;
+}
+
+// Zorg dat de kolommen ip_address en session_id overal bestaan en bestaande IP's geanonimiseerd worden
+function ensure_analytics_columns($pdo) {
+    static $columnsEnsured = false;
+    if ($columnsEnsured) return;
+    try {
+        // 1. music_listens
+        $cols1 = $pdo->query("SHOW COLUMNS FROM `music_listens` LIKE 'ip_address'")->fetchAll();
+        if (empty($cols1)) {
+            $pdo->exec("ALTER TABLE `music_listens` ADD COLUMN `ip_address` VARCHAR(45) NULL AFTER `session_id`");
+            $pdo->exec("ALTER TABLE `music_listens` ADD INDEX `idx_music_ip` (`ip_address`)");
+        }
+        $cols1b = $pdo->query("SHOW COLUMNS FROM `music_listens` LIKE 'session_id'")->fetchAll();
+        if (empty($cols1b)) {
+            $pdo->exec("ALTER TABLE `music_listens` ADD COLUMN `session_id` VARCHAR(64) NULL AFTER `id`");
+            $pdo->exec("ALTER TABLE `music_listens` ADD INDEX `idx_music_session_id` (`session_id`)");
+        }
+        // 2. qr_scans
+        $cols2 = $pdo->query("SHOW COLUMNS FROM `qr_scans` LIKE 'ip_address'")->fetchAll();
+        if (empty($cols2)) {
+            $pdo->exec("ALTER TABLE `qr_scans` ADD COLUMN `ip_address` VARCHAR(45) NULL AFTER `code`");
+            $pdo->exec("ALTER TABLE `qr_scans` ADD INDEX `idx_qr_ip` (`ip_address`)");
+        }
+        $cols2b = $pdo->query("SHOW COLUMNS FROM `qr_scans` LIKE 'session_id'")->fetchAll();
+        if (empty($cols2b)) {
+            $pdo->exec("ALTER TABLE `qr_scans` ADD COLUMN `session_id` VARCHAR(64) NULL AFTER `id`");
+            $pdo->exec("ALTER TABLE `qr_scans` ADD INDEX `idx_qr_session_id` (`session_id`)");
+        }
+        // 3. visitor_sessions
+        $cols3 = $pdo->query("SHOW COLUMNS FROM `visitor_sessions` LIKE 'ip_address'")->fetchAll();
+        if (empty($cols3)) {
+            $pdo->exec("ALTER TABLE `visitor_sessions` ADD COLUMN `ip_address` VARCHAR(45) NULL AFTER `session_id`");
+            $pdo->exec("ALTER TABLE `visitor_sessions` ADD INDEX `idx_visitor_ip` (`ip_address`)");
+        }
+
+        // 4. Eenmalige / automatische anonimisering van eventueel nog niet-geanonimiseerde IP's in de database:
+        // Voor IPv4: maskeer het laatste octet naar .0
+        $pdo->exec("
+            UPDATE `visitor_sessions` 
+            SET `ip_address` = CONCAT(SUBSTRING_INDEX(`ip_address`, '.', 3), '.0') 
+            WHERE `ip_address` IS NOT NULL 
+              AND `ip_address` LIKE '%.%.%.%' 
+              AND `ip_address` NOT LIKE '%.0'
+        ");
+        $pdo->exec("
+            UPDATE `music_listens` 
+            SET `ip_address` = CONCAT(SUBSTRING_INDEX(`ip_address`, '.', 3), '.0') 
+            WHERE `ip_address` IS NOT NULL 
+              AND `ip_address` LIKE '%.%.%.%' 
+              AND `ip_address` NOT LIKE '%.0'
+        ");
+        $pdo->exec("
+            UPDATE `qr_scans` 
+            SET `ip_address` = CONCAT(SUBSTRING_INDEX(`ip_address`, '.', 3), '.0') 
+            WHERE `ip_address` IS NOT NULL 
+              AND `ip_address` LIKE '%.%.%.%' 
+              AND `ip_address` NOT LIKE '%.0'
+        ");
+
+        $columnsEnsured = true;
+    } catch (Exception $e) {}
+}
+
 // Als er geen databaseverbinding is gemaakt:
 if (!$pdo) {
     http_response_code(500);
@@ -278,6 +390,7 @@ if ($action === 'init_tables') {
 // 5. ACTIE: REGISTREER SESSIE START
 // ==========================================
 if ($action === 'session_start') {
+    ensure_analytics_columns($pdo);
     $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? uniqid('sess_', true));
     $city = $input['city'] ?? 'Onbekend';
     $country = $input['country'] ?? 'Nederland';
@@ -290,7 +403,8 @@ if ($action === 'session_start') {
     $landingPage = $input['landingPage'] ?? '/';
     $referrer = $input['referrer'] ?? ($_SERVER['HTTP_REFERER'] ?? '');
     $utmSource = $input['utmSource'] ?? '';
-    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    $rawIp = get_client_ip_clean();
+    $ip = anonymize_ip($rawIp);
 
     try {
         $stmt = $pdo->prepare("
@@ -424,6 +538,8 @@ if ($action === 'session_click') {
 // 5B. ACTIE: REGISTREER QR SCAN
 // ==========================================
 if ($action === 'qr_scan') {
+    ensure_analytics_columns($pdo);
+    $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? null);
     $code = $input['redirectCode'] ?? ($input['code'] ?? 'ONBEKEND');
     $targetRoute = $input['targetRoute'] ?? '/';
     $city = $input['city'] ?? 'Onbekend';
@@ -433,14 +549,16 @@ if ($action === 'qr_scan') {
     $deviceType = $input['deviceType'] ?? 'Mobiel';
     $userAgent = $input['userAgent'] ?? ($_SERVER['HTTP_USER_AGENT'] ?? '');
     $scannedAt = $input['timestamp'] ?? ($input['scannedAt'] ?? date('Y-m-d H:i:s'));
+    $rawIp = get_client_ip_clean();
+    $ip = anonymize_ip($rawIp);
 
     try {
         $stmt = $pdo->prepare("
             INSERT INTO qr_scans 
-            (code, target_route, city, country, lat, lng, device_type, user_agent, scanned_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (session_id, ip_address, code, target_route, city, country, lat, lng, device_type, user_agent, scanned_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$code, $targetRoute, $city, $country, $lat, $lng, $deviceType, $userAgent, $scannedAt]);
+        $stmt->execute([$sessionId, $ip, $code, $targetRoute, $city, $country, $lat, $lng, $deviceType, $userAgent, $scannedAt]);
         echo json_encode(["success" => true, "id" => $pdo->lastInsertId()]);
     } catch (PDOException $e) {
         http_response_code(500);
@@ -483,6 +601,7 @@ if ($action === 'subscribe') {
 // 6. ACTIE: REGISTREER MUZIEKPLAY
 // ==========================================
 if ($action === 'music_play') {
+    ensure_analytics_columns($pdo);
     $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? null);
     $trackId = $input['trackId'] ?? 'Onbekend';
     $trackTitle = $input['trackTitle'] ?? 'Muzieknummer';
@@ -497,6 +616,8 @@ if ($action === 'music_play') {
     $lng = isset($input['lng']) ? (float)$input['lng'] : null;
     $deviceType = $input['deviceType'] ?? 'Bureaublad computer';
     $userAgent = $input['userAgent'] ?? ($_SERVER['HTTP_USER_AGENT'] ?? '');
+    $rawIp = get_client_ip_clean();
+    $ip = anonymize_ip($rawIp);
 
     $createdAt = $input['createdAt'] ?? ($input['timestamp'] ?? date('Y-m-d H:i:s'));
 
@@ -511,11 +632,11 @@ if ($action === 'music_play') {
 
         $stmt = $pdo->prepare("
             INSERT INTO music_listens 
-            (session_id, track_id, track_title, album, format, rating, duration_seconds, completed, city, country, lat, lng, device_type, user_agent, created_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (session_id, ip_address, track_id, track_title, album, format, rating, duration_seconds, completed, city, country, lat, lng, device_type, user_agent, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
-            $sessionId, $trackId, $trackTitle, $album, $format, $rating, $duration, $completed, $city, $country, $lat, $lng, $deviceType, $userAgent, $createdAt
+            $sessionId, $ip, $trackId, $trackTitle, $album, $format, $rating, $duration, $completed, $city, $country, $lat, $lng, $deviceType, $userAgent, $createdAt
         ]);
         
         echo json_encode(["success" => true, "id" => $pdo->lastInsertId()]);
@@ -564,6 +685,8 @@ if ($action === 'music_update' || $action === 'music_complete') {
 // 6C. ACTIE: BEOORDELING (THUMBS UP / DOWN)
 // ==========================================
 if ($action === 'music_rate') {
+    ensure_analytics_columns($pdo);
+    $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? null);
     $trackId = $input['trackId'] ?? ($input['track_id'] ?? 'Onbekend');
     $trackTitle = $input['trackTitle'] ?? ($input['track_title'] ?? 'Muzieknummer');
     $album = $input['album'] ?? 'De Echo';
@@ -575,16 +698,18 @@ if ($action === 'music_rate') {
     $lng = isset($input['lng']) ? (float)$input['lng'] : null;
     $deviceType = $input['deviceType'] ?? 'Mobiel';
     $userAgent = $input['userAgent'] ?? ($_SERVER['HTTP_USER_AGENT'] ?? '');
+    $rawIp = get_client_ip_clean();
+    $ip = anonymize_ip($rawIp);
     $createdAt = $input['timestamp'] ?? ($input['createdAt'] ?? date('Y-m-d H:i:s'));
 
     try {
         $stmt = $pdo->prepare("
             INSERT INTO music_listens 
-            (track_id, track_title, album, format, rating, duration_seconds, completed, city, country, lat, lng, device_type, user_agent, created_at) 
-            VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)
+            (session_id, ip_address, track_id, track_title, album, format, rating, duration_seconds, completed, city, country, lat, lng, device_type, user_agent, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
-            $trackId, $trackTitle, $album, $format, $rating, $city, $country, $lat, $lng, $deviceType, $userAgent, $createdAt
+            $sessionId, $ip, $trackId, $trackTitle, $album, $format, $rating, $city, $country, $lat, $lng, $deviceType, $userAgent, $createdAt
         ]);
         echo json_encode(["success" => true, "id" => $pdo->lastInsertId()]);
     } catch (PDOException $e) {
@@ -863,6 +988,140 @@ if ($action === 'delete_by_city') {
         }
     } else {
         echo json_encode(["success" => false, "error" => "Geen stad opgegeven."]);
+    }
+    exit;
+}
+
+// ==========================================
+// 6F. ACTIE: VERWIJDER ALLE TRACKING DATA VAN EEN IP (BIJV. BEHEERDER)
+// ==========================================
+if ($action === 'delete_by_ip') {
+    ensure_analytics_columns($pdo);
+    // Neem meegegeven IP of detecteer automatisch het IP van het verzoekende admin-device
+    $targetIp = trim($input['ip'] ?? ($input['ip_address'] ?? ($_GET['ip'] ?? '')));
+    if (empty($targetIp)) {
+        $targetIp = get_client_ip_clean();
+    }
+    $anonTargetIp = anonymize_ip($targetIp);
+    $ipCandidates = array_values(array_unique(array_filter([$targetIp, $anonTargetIp])));
+    $extraSessionId = trim($input['sessionId'] ?? ($input['session_id'] ?? ($_GET['sessionId'] ?? '')));
+
+    if (!empty($targetIp) || !empty($extraSessionId)) {
+        try {
+            $delSessions = 0;
+            $delPageviews = 0;
+            $delClicks = 0;
+            $delListens = 0;
+            $delScans = 0;
+
+            // Verzamel session IDs van dit IP (zowel raw als geanonimiseerd) om gekoppelde pageviews & clicks mee te wissen
+            $foundSessionIds = [];
+            if (!empty($ipCandidates)) {
+                $inIps = implode(',', array_fill(0, count($ipCandidates), '?'));
+                $findSessStmt = $pdo->prepare("SELECT session_id FROM visitor_sessions WHERE ip_address IN ($inIps)");
+                $findSessStmt->execute($ipCandidates);
+                $foundSessionIds = $findSessStmt->fetchAll(PDO::FETCH_COLUMN);
+
+                // Ook session_ids uit music_listens en qr_scans van dit IP
+                $findMusicSess = $pdo->prepare("SELECT DISTINCT session_id FROM music_listens WHERE ip_address IN ($inIps) AND session_id IS NOT NULL AND session_id != ''");
+                $findMusicSess->execute($ipCandidates);
+                $foundSessionIds = array_merge($foundSessionIds, $findMusicSess->fetchAll(PDO::FETCH_COLUMN));
+
+                $findQrSess = $pdo->prepare("SELECT DISTINCT session_id FROM qr_scans WHERE ip_address IN ($inIps) AND session_id IS NOT NULL AND session_id != ''");
+                $findQrSess->execute($ipCandidates);
+                $foundSessionIds = array_merge($foundSessionIds, $findQrSess->fetchAll(PDO::FETCH_COLUMN));
+            }
+            if (!empty($extraSessionId)) {
+                $foundSessionIds[] = $extraSessionId;
+            }
+            $foundSessionIds = array_values(array_unique(array_filter($foundSessionIds)));
+
+            // 1. Verwijder pageviews en clicks van deze sessies
+            if (!empty($foundSessionIds)) {
+                $inClause = implode(',', array_fill(0, count($foundSessionIds), '?'));
+                $delPv = $pdo->prepare("DELETE FROM visitor_pageviews WHERE session_id IN ($inClause)");
+                $delPv->execute($foundSessionIds);
+                $delPageviews = $delPv->rowCount();
+
+                $delCl = $pdo->prepare("DELETE FROM visitor_clicks WHERE session_id IN ($inClause)");
+                $delCl->execute($foundSessionIds);
+                $delClicks = $delCl->rowCount();
+            }
+
+            // 2. Verwijder visitor_sessions
+            $wherePartsSess = [];
+            $paramsSess = [];
+            if (!empty($ipCandidates)) {
+                $inIps = implode(',', array_fill(0, count($ipCandidates), '?'));
+                $wherePartsSess[] = "ip_address IN ($inIps)";
+                $paramsSess = array_merge($paramsSess, $ipCandidates);
+            }
+            if (!empty($foundSessionIds)) {
+                $inSess = implode(',', array_fill(0, count($foundSessionIds), '?'));
+                $wherePartsSess[] = "session_id IN ($inSess)";
+                $paramsSess = array_merge($paramsSess, $foundSessionIds);
+            }
+            if (!empty($wherePartsSess)) {
+                $delSess = $pdo->prepare("DELETE FROM visitor_sessions WHERE " . implode(" OR ", $wherePartsSess));
+                $delSess->execute($paramsSess);
+                $delSessions = $delSess->rowCount();
+            }
+
+            // 3. Verwijder music_listens
+            $wherePartsM = [];
+            $paramsM = [];
+            if (!empty($ipCandidates)) {
+                $inIps = implode(',', array_fill(0, count($ipCandidates), '?'));
+                $wherePartsM[] = "ip_address IN ($inIps)";
+                $paramsM = array_merge($paramsM, $ipCandidates);
+            }
+            if (!empty($foundSessionIds)) {
+                $inSess = implode(',', array_fill(0, count($foundSessionIds), '?'));
+                $wherePartsM[] = "session_id IN ($inSess)";
+                $paramsM = array_merge($paramsM, $foundSessionIds);
+            }
+            if (!empty($wherePartsM)) {
+                $delM = $pdo->prepare("DELETE FROM music_listens WHERE " . implode(" OR ", $wherePartsM));
+                $delM->execute($paramsM);
+                $delListens = $delM->rowCount();
+            }
+
+            // 4. Verwijder qr_scans
+            $wherePartsQ = [];
+            $paramsQ = [];
+            if (!empty($ipCandidates)) {
+                $inIps = implode(',', array_fill(0, count($ipCandidates), '?'));
+                $wherePartsQ[] = "ip_address IN ($inIps)";
+                $paramsQ = array_merge($paramsQ, $ipCandidates);
+            }
+            if (!empty($foundSessionIds)) {
+                $inSess = implode(',', array_fill(0, count($foundSessionIds), '?'));
+                $wherePartsQ[] = "session_id IN ($inSess)";
+                $paramsQ = array_merge($paramsQ, $foundSessionIds);
+            }
+            if (!empty($wherePartsQ)) {
+                $delQ = $pdo->prepare("DELETE FROM qr_scans WHERE " . implode(" OR ", $wherePartsQ));
+                $delQ->execute($paramsQ);
+                $delScans = $delQ->rowCount();
+            }
+
+            echo json_encode([
+                "success" => true,
+                "cleaned_ip" => $targetIp,
+                "deleted" => [
+                    "sessions" => $delSessions,
+                    "pageviews" => $delPageviews,
+                    "clicks" => $delClicks,
+                    "music_listens" => $delListens,
+                    "qr_scans" => $delScans
+                ]
+            ]);
+        } catch (PDOException $e) {
+            http_response_code(500);
+            echo json_encode(["success" => false, "error" => $e->getMessage()]);
+        }
+    } else {
+        echo json_encode(["success" => false, "error" => "Geen IP of sessie om te wissen."]);
     }
     exit;
 }

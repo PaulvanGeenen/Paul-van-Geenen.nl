@@ -156,6 +156,19 @@ export const MapModal: React.FC<MapModalProps> = ({
   const [activeRegion, setActiveRegion] = useState<'NL' | 'EU' | 'WORLD'>('NL');
   const mapInstanceRef = useRef<any>(null);
   const markersGroupRef = useRef<any>(null);
+  const markersByKeyRef = useRef<Record<string, any>>({});
+  const coordsCacheRef = useRef<Record<string, [number, number]>>((() => {
+    try {
+      const saved = localStorage.getItem('pvg_geocoded_coords_v1');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  })());
+  const attemptedKeysRef = useRef<Set<string>>(new Set());
+  const geocodingInProgressRef = useRef<boolean>(false);
+  const isOpenRef = useRef<boolean>(isOpen);
+  isOpenRef.current = isOpen;
   const hasInitialAutoFitRef = useRef<boolean>(false);
   const userInteractedRef = useRef<boolean>(false);
 
@@ -311,58 +324,100 @@ export const MapModal: React.FC<MapModalProps> = ({
     };
   }, [isOpen]);
 
-  // Build/Geocode coordinates
+  // Build/Geocode coordinates without restarting or wiping state on background refreshes
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      geocodingInProgressRef.current = false;
+      setLoadingCoords(false);
+      return;
+    }
 
-    let isMounted = true;
+    const uniqueKeys = Object.keys(groupedLocations);
+    const resolvedNow: Record<string, [number, number]> = {};
+    const keysToFetch: string[] = [];
 
-    const geocodeAll = async () => {
-      setLoadingCoords(true);
-      const uniqueKeys = Object.keys(groupedLocations);
-      const newCoords: Record<string, [number, number]> = {};
-      const keysToFetch: string[] = [];
-
-      // Step 1: Use direct item coordinates or popular built-in dictionary coords
-      for (const key of uniqueKeys) {
-        const { city, list } = groupedLocations[key];
-        const itemWithCoords = list.find(it => typeof it.lat === 'number' && typeof it.lng === 'number' && it.lat !== 0 && it.lng !== 0 && !isNaN(it.lat) && !isNaN(it.lng));
-        if (itemWithCoords) {
-          newCoords[key] = [itemWithCoords.lat!, itemWithCoords.lng!];
-          continue;
-        }
-
-        const normalizedCity = city.toLowerCase().trim();
-
-        if (COMMON_CITY_COORDS[normalizedCity]) {
-          newCoords[key] = COMMON_CITY_COORDS[normalizedCity];
-        } else {
-          keysToFetch.push(key);
-        }
+    // Step 1: Use cached coords, direct item coordinates, or built-in dictionary coords
+    for (const key of uniqueKeys) {
+      if (coordsCacheRef.current[key]) {
+        resolvedNow[key] = coordsCacheRef.current[key];
+        continue;
       }
 
-      if (isMounted) {
-        setCoords((prev) => ({ ...prev, ...newCoords }));
+      const { city, list } = groupedLocations[key];
+      const itemWithCoords = list.find(
+        (it) =>
+          typeof it.lat === 'number' &&
+          typeof it.lng === 'number' &&
+          it.lat !== 0 &&
+          it.lng !== 0 &&
+          !isNaN(it.lat) &&
+          !isNaN(it.lng)
+      );
+      if (itemWithCoords) {
+        const pair: [number, number] = [itemWithCoords.lat!, itemWithCoords.lng!];
+        coordsCacheRef.current[key] = pair;
+        resolvedNow[key] = pair;
+        continue;
       }
 
-      // Step 2: Query Nominatim OpenStreetMap API sequentially for others with respect to rate limiting
-      if (keysToFetch.length > 0) {
-        for (const key of keysToFetch) {
-          if (!isMounted) break;
-          const { city, country } = groupedLocations[key];
-          try {
-            const query = `${city}, ${country && country !== 'Onbekend' ? country : ''}`;
-            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
-            const headerObj = {
-              'Accept-Language': 'nl,en',
-            };
-            const response = await fetch(url, { headers: headerObj });
-            if (response.ok) {
-              const data = await response.json();
-              if (data && data.length > 0) {
-                const lat = parseFloat(data[0].lat);
-                const lon = parseFloat(data[0].lon);
-                if (isMounted) {
+      const normalizedCity = city.toLowerCase().trim();
+      if (COMMON_CITY_COORDS[normalizedCity]) {
+        const pair = COMMON_CITY_COORDS[normalizedCity];
+        coordsCacheRef.current[key] = pair;
+        resolvedNow[key] = pair;
+      } else if (!attemptedKeysRef.current.has(key)) {
+        keysToFetch.push(key);
+      }
+    }
+
+    setCoords((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [k, v] of Object.entries(resolvedNow)) {
+        if (!next[k] || next[k][0] !== v[0] || next[k][1] !== v[1]) {
+          next[k] = v;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    // Step 2: Query Nominatim OpenStreetMap API sequentially only for unattempted keys
+    if (keysToFetch.length === 0 || geocodingInProgressRef.current) {
+      return;
+    }
+
+    geocodingInProgressRef.current = true;
+    setLoadingCoords(true);
+
+    const fetchMissingCoords = async () => {
+      for (const key of keysToFetch) {
+        if (!isOpenRef.current) break;
+        if (coordsCacheRef.current[key]) continue;
+        const loc = groupedLocations[key];
+        if (!loc) continue;
+
+        attemptedKeysRef.current.add(key);
+        const { city, country } = loc;
+        try {
+          const query = `${city}, ${country && country !== 'Onbekend' ? country : ''}`;
+          const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+          const response = await fetch(url, {
+            headers: { 'Accept-Language': 'nl,en' },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.length > 0) {
+              const lat = parseFloat(data[0].lat);
+              const lon = parseFloat(data[0].lon);
+              if (!isNaN(lat) && !isNaN(lon)) {
+                coordsCacheRef.current[key] = [lat, lon];
+                try {
+                  localStorage.setItem('pvg_geocoded_coords_v1', JSON.stringify(coordsCacheRef.current));
+                } catch {
+                  // Ignore storage quota errors
+                }
+                if (isOpenRef.current) {
                   setCoords((prev) => ({
                     ...prev,
                     [key]: [lat, lon],
@@ -370,22 +425,21 @@ export const MapModal: React.FC<MapModalProps> = ({
                 }
               }
             }
-            // Wait 1 second to respect OpenStreetMap Nominatim guidelines
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-          } catch (err) {
-            console.error(`Error geocoding ${city}:`, err);
           }
+          // Wait 1 second to respect OpenStreetMap Nominatim guidelines
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        } catch (err) {
+          console.error(`Error geocoding ${city}:`, err);
         }
       }
 
-      if (isMounted) setLoadingCoords(false);
+      geocodingInProgressRef.current = false;
+      if (isOpenRef.current) {
+        setLoadingCoords(false);
+      }
     };
 
-    geocodeAll();
-
-    return () => {
-      isMounted = false;
-    };
+    fetchMissingCoords();
   }, [isOpen, groupedLocations]);
 
   // Initialize and update Leaflet map canvas
@@ -399,6 +453,7 @@ export const MapModal: React.FC<MapModalProps> = ({
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
     }
+    markersByKeyRef.current = {};
 
     // Set map tiles style and zoom levels
     const map = L.map(mapContainerRef.current, {
@@ -454,62 +509,74 @@ export const MapModal: React.FC<MapModalProps> = ({
     if (!styleTag) {
       styleTag = document.createElement('style');
       styleTag.id = cssStyleId;
-      styleTag.innerHTML = `
-        .leaflet-container {
-          background: #0f0f0f !important;
-        }
-        .leaflet-tile-pane .map-tiles-dark-luxury {
-          filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(92%) !important;
-          background: #0d0d0d !important;
-        }
-        .leaflet-popup-content-wrapper {
-          background: #111111 !important;
-          color: #ffffff !important;
-          border: 1px solid rgba(212, 175, 55, 0.35) !important;
-          border-radius: 16px !important;
-          padding: 0 !important;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.95), 0 0 25px rgba(0,0,0,0.85) !important;
-          overflow: hidden !important;
-        }
-        .leaflet-popup-content {
-          margin: 0 !important;
-          max-width: 100% !important;
-          line-height: 1.4 !important;
-        }
-        .leaflet-popup-tip {
-          background: #111111 !important;
-          border-left: 1px solid rgba(212, 175, 55, 0.35) !important;
-          border-bottom: 1px solid rgba(212, 175, 55, 0.35) !important;
-        }
-        .leaflet-container a.leaflet-popup-close-button {
-          color: rgba(255,255,255,0.7) !important;
-          padding: 10px 12px 0 0 !important;
-          font-size: 18px !important;
-          z-index: 30 !important;
-        }
-        .leaflet-container a.leaflet-popup-close-button:hover {
-          color: #d4af37 !important;
-        }
-        .custom-popup-scroll::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-popup-scroll::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 4px;
-        }
-        .custom-popup-scroll::-webkit-scrollbar-thumb {
-          background: rgba(212, 175, 55, 0.4);
-          border-radius: 4px;
-        }
-        .custom-popup-scroll::-webkit-scrollbar-thumb:hover {
-          background: rgba(212, 175, 55, 0.75);
-        }
-      `;
       document.head.appendChild(styleTag);
     }
+    styleTag.innerHTML = `
+      .leaflet-container {
+        background: #0f0f0f !important;
+      }
+      .leaflet-tile-pane .map-tiles-dark-luxury {
+        filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(92%) !important;
+        background: #0d0d0d !important;
+      }
+      .leaflet-popup-content-wrapper {
+        background: #111111 !important;
+        color: #ffffff !important;
+        border: 1px solid rgba(212, 175, 55, 0.35) !important;
+        border-radius: 16px !important;
+        padding: 0 !important;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.95), 0 0 25px rgba(0,0,0,0.85) !important;
+        overflow: hidden !important;
+      }
+      .leaflet-popup-content {
+        margin: 0 !important;
+        max-width: 100% !important;
+        line-height: 1.4 !important;
+      }
+      .leaflet-popup-tip {
+        background: #111111 !important;
+        border-left: 1px solid rgba(212, 175, 55, 0.35) !important;
+        border-bottom: 1px solid rgba(212, 175, 55, 0.35) !important;
+      }
+      .leaflet-container a.leaflet-popup-close-button {
+        color: rgba(255,255,255,0.75) !important;
+        top: 8px !important;
+        right: 8px !important;
+        width: 28px !important;
+        height: 28px !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 9999px !important;
+        font-size: 20px !important;
+        line-height: 1 !important;
+        z-index: 30 !important;
+        transition: all 0.15s ease !important;
+      }
+      .leaflet-container a.leaflet-popup-close-button:hover {
+        color: #d4af37 !important;
+        background: rgba(255,255,255,0.1) !important;
+      }
+      .custom-popup-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-popup-scroll::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+      }
+      .custom-popup-scroll::-webkit-scrollbar-thumb {
+        background: rgba(212, 175, 55, 0.4);
+        border-radius: 4px;
+      }
+      .custom-popup-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(212, 175, 55, 0.75);
+      }
+    `;
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      markersByKeyRef.current = {};
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -517,13 +584,21 @@ export const MapModal: React.FC<MapModalProps> = ({
     };
   }, [isOpen, leafletLoaded]);
 
-  // Update markers when coordinates/locations state shifts
+  // Update markers in-place when coordinates/locations state shifts (preserving open popups!)
   useEffect(() => {
     if (!isOpen || !leafletLoaded || !mapInstanceRef.current || !markersGroupRef.current) return;
 
     const L = window.L;
     const markersGroup = markersGroupRef.current;
-    markersGroup.clearLayers();
+    const existingMarkers = markersByKeyRef.current;
+
+    // Remove markers that are no longer in the filtered set
+    Object.keys(existingMarkers).forEach((key) => {
+      if (!groupedLocations[key] || !coords[key]) {
+        markersGroup.removeLayer(existingMarkers[key]);
+        delete existingMarkers[key];
+      }
+    });
 
     const activeBounds: any[] = [];
 
@@ -532,7 +607,7 @@ export const MapModal: React.FC<MapModalProps> = ({
       return L.divIcon({
         html: `
           <div class="relative flex items-center justify-center w-6 h-6">
-            <span class="absolute inline-flex h-full w-full rounded-full bg-earth-gold/30 animate-ping"></span>
+            <span class="absolute inline-flex h-full w-full rounded-full bg-earth-gold/30 animate-ping pointer-events-none"></span>
             <div class="relative rounded-full h-3.5 w-3.5 bg-earth-gold border border-black shadow-[0_0_8px_rgba(212,175,55,0.9)]"></div>
           </div>
         `,
@@ -556,7 +631,7 @@ export const MapModal: React.FC<MapModalProps> = ({
         popupHtml = `
           <div class="w-[320px] sm:w-[380px] max-w-[88vw] flex flex-col font-sans select-none">
             <!-- Sticky Header -->
-            <div class="p-3.5 bg-[#181818] border-b border-white/10 flex items-center justify-between pr-9 sticky top-0 z-10 shadow-sm">
+            <div class="p-3.5 bg-[#181818] border-b border-white/10 flex items-center justify-between pr-10 sticky top-0 z-10 shadow-sm">
               <span class="text-sm sm:text-base font-serif text-earth-gold font-bold truncate">📍 ${value.city}</span>
               <span class="text-xs font-mono font-bold bg-earth-gold/15 text-earth-gold border border-earth-gold/30 px-2 py-0.5 rounded-full shrink-0">
                 ${value.list.length} ${value.list.length === 1 ? 'luisterbeurt' : 'luisterbeurten'}
@@ -597,7 +672,7 @@ export const MapModal: React.FC<MapModalProps> = ({
         popupHtml = `
           <div class="w-[320px] sm:w-[380px] max-w-[88vw] flex flex-col font-sans select-none">
             <!-- Sticky Header -->
-            <div class="p-3.5 bg-[#181818] border-b border-white/10 flex items-center justify-between pr-9 sticky top-0 z-10 shadow-sm">
+            <div class="p-3.5 bg-[#181818] border-b border-white/10 flex items-center justify-between pr-10 sticky top-0 z-10 shadow-sm">
               <span class="text-sm sm:text-base font-serif text-earth-gold font-bold truncate">📍 ${value.city}</span>
               <span class="text-xs font-mono font-bold bg-earth-gold/15 text-earth-gold border border-earth-gold/30 px-2 py-0.5 rounded-full shrink-0">
                 ${value.list.length} ${value.list.length === 1 ? 'bezoek' : 'bezoeken'}
@@ -635,7 +710,7 @@ export const MapModal: React.FC<MapModalProps> = ({
         popupHtml = `
           <div class="w-[320px] sm:w-[380px] max-w-[88vw] flex flex-col font-sans select-none">
             <!-- Sticky Header -->
-            <div class="p-3.5 bg-[#181818] border-b border-white/10 flex items-center justify-between pr-9 sticky top-0 z-10 shadow-sm">
+            <div class="p-3.5 bg-[#181818] border-b border-white/10 flex items-center justify-between pr-10 sticky top-0 z-10 shadow-sm">
               <span class="text-sm sm:text-base font-serif text-earth-gold font-bold truncate">📍 ${value.city}</span>
               <span class="text-xs font-mono font-bold bg-earth-gold/15 text-earth-gold border border-earth-gold/30 px-2 py-0.5 rounded-full shrink-0">
                 ${value.list.length} ${value.list.length === 1 ? 'scan' : 'scans'}
@@ -666,18 +741,44 @@ export const MapModal: React.FC<MapModalProps> = ({
         `;
       }
 
-      const markerIcon = createCustomMarkupIcon();
-      L.marker([lat, lon], { icon: markerIcon })
-        .bindPopup(popupHtml, {
-          closeButton: true,
-          autoClose: false,
-          closeOnClick: false,
-          maxWidth: 440,
-          minWidth: 300,
-          autoPan: true,
-          autoPanPadding: [30, 30],
-        })
-        .addTo(markersGroup);
+      if (existingMarkers[key]) {
+        const existingMarker = existingMarkers[key];
+        const curLatLng = existingMarker.getLatLng();
+        if (curLatLng.lat !== lat || curLatLng.lng !== lon) {
+          existingMarker.setLatLng([lat, lon]);
+        }
+        existingMarker._latestPopupHtml = popupHtml;
+        // Only replace DOM content if the popup is closed, so an open popup is never disrupted
+        if (!existingMarker.isPopupOpen() && existingMarker._renderedPopupHtml !== popupHtml) {
+          existingMarker.getPopup()?.setContent(popupHtml);
+          existingMarker._renderedPopupHtml = popupHtml;
+        }
+      } else {
+        const markerIcon = createCustomMarkupIcon();
+        const marker = L.marker([lat, lon], { icon: markerIcon })
+          .bindPopup(popupHtml, {
+            closeButton: true,
+            autoClose: false,
+            closeOnClick: false,
+            closeOnEscapeKey: false,
+            maxWidth: 440,
+            minWidth: 300,
+            autoPan: true,
+            autoPanPadding: [30, 30],
+          })
+          .addTo(markersGroup);
+
+        marker._latestPopupHtml = popupHtml;
+        marker._renderedPopupHtml = popupHtml;
+        marker.on('popupclose', () => {
+          if (marker._latestPopupHtml && marker._renderedPopupHtml !== marker._latestPopupHtml) {
+            marker.getPopup()?.setContent(marker._latestPopupHtml);
+            marker._renderedPopupHtml = marker._latestPopupHtml;
+          }
+        });
+
+        existingMarkers[key] = marker;
+      }
     });
 
     // Auto-fit bounds of the map ONLY ONCE on initial load, and only if the user hasn't manually interacted.

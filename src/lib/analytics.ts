@@ -82,16 +82,30 @@ export function markDeviceAsAdmin(): void {
     }
   } catch {}
 
-  // Als er al een bezoekerssessie was gestart voordat beheer werd geopend, ruim deze direct op uit de database
+  // Wis direct alle tracking data van het IP-adres en eventuele actieve sessie van dit device
   try {
+    let currentSessionId: string | null = null;
     if (typeof sessionStorage !== 'undefined') {
-      const sessionId = sessionStorage.getItem('boeken_analytics_session_id');
-      if (sessionId) {
-        transipPost('delete_visitor_session', { sessionId }).catch(() => {});
+      currentSessionId = sessionStorage.getItem('boeken_analytics_session_id');
+      if (currentSessionId) {
         sessionStorage.removeItem('boeken_analytics_session_id');
       }
     }
-  } catch {}
+
+    // 1. Directe TransIP MySQL bridge call
+    transipPost('delete_by_ip', { sessionId: currentSessionId }).catch(() => {});
+
+    // 2. Express API route als fallback
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/analytics/clean-admin-ip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: currentSessionId })
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[Analytics] Fout bij wissen admin IP tracking:', err);
+  }
 }
 
 export function setAdminCookie(ignore: boolean): void {

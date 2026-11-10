@@ -42,6 +42,7 @@ const MRIScan = lazy(() => import('./pages/MRIScan').then(module => ({ default: 
 const Admin = lazy(() => import('./pages/Admin').then(module => ({ default: module.Admin })));
 const Music = lazy(() => import('./pages/Music').then(module => ({ default: module.Music })));
 const QRRedirect = lazy(() => import('./pages/QRRedirect').then(module => ({ default: module.QRRedirect })));
+const Privacy = lazy(() => import('./pages/Privacy').then(module => ({ default: module.Privacy })));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -78,7 +79,7 @@ function LayoutWrapper({ children }: LayoutWrapperProps) {
     pathname.startsWith('/qrcode/') || 
     pathname.startsWith('/scan/') ||
     (pathname !== '/' && 
-     !['/boeken', '/de-echo', '/fragmenten', '/over-mij', '/contact', '/mri-scan', '/beheer'].some(p => pathname.toLowerCase().startsWith(p)));
+     !['/boeken', '/de-echo', '/fragmenten', '/over-mij', '/contact', '/mri-scan', '/beheer', '/privacy'].some(p => pathname.toLowerCase().startsWith(p)));
 
   if (isRedirectPage) {
     return (
@@ -118,6 +119,7 @@ export default function App() {
                 <Route path="/over-mij" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/mri-scan" element={<MRIScan />} />
+                <Route path="/privacy" element={<Privacy />} />
                 <Route path="/beheer" element={<Admin />} />
                 <Route path="/music" element={<Music />} />
                 <Route path="/music/*" element={<Music />} />
