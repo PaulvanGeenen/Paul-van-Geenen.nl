@@ -37,9 +37,9 @@ export const BOOK_DEFAULT_QR_STYLE: Omit<QrStyleConfig, 'url' | 'image'> = {
   cornerSquareType: 'square',
   cornerDotType: 'square',
   errorCorrectionLevel: 'H',
-  imageSize: 0.35,
-  imageMarginRatio: 0.014,
-  quietZoneRatio: 0.048,
+  imageSize: 0.45,
+  imageMarginRatio: 0.004,
+  quietZoneRatio: 0.0488,
 };
 
 /**
@@ -61,7 +61,7 @@ export function buildQrStylingOptions(
 ): Partial<Options> {
   const size = Math.max(120, Math.round(config.size));
   const quietZonePx = Math.max(4, Math.round(size * config.quietZoneRatio));
-  const imageMarginPx = Math.max(2, Math.round(size * config.imageMarginRatio));
+  const imageMarginPx = Math.max(0, Math.round(size * config.imageMarginRatio));
 
   return {
     width: size,
@@ -80,6 +80,7 @@ export function buildQrStylingOptions(
     dotsOptions: {
       color: config.fgColor || '#000000',
       type: config.dotType || 'square',
+      roundSize: false,
     },
     cornersSquareOptions: {
       color: config.fgColor || '#000000',
@@ -94,7 +95,7 @@ export function buildQrStylingOptions(
           image: config.image,
           imageOptions: {
             hideBackgroundDots: true,
-            imageSize: config.imageSize || 0.35,
+            imageSize: config.imageSize || 0.45,
             margin: imageMarginPx,
             crossOrigin: 'anonymous',
           },

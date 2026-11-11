@@ -720,7 +720,7 @@ export function QRStudio() {
                         <input
                           type="range"
                           min={20}
-                          max={42}
+                          max={60}
                           step={1}
                           value={Math.round(config.imageSize * 100)}
                           onChange={(e) =>
