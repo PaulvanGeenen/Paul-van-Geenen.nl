@@ -8,6 +8,7 @@ interface AudioContextType {
   setAmbientMuted: (muted: boolean) => void;
   setVideoMuted: (muted: boolean) => void;
   setIsAmbientPlaying: (playing: boolean) => void;
+  setIsAdminRoute: (isAdmin: boolean) => void;
   setMasterVolume: (volume: number) => void;
   fadeAmbient: (direction: 'in' | 'out', duration?: number) => void;
   toggleAmbientMute: () => void;
@@ -21,6 +22,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [ambientMuted, setAmbientMuted] = useState(false);
   const [videoMuted, setVideoMuted] = useState(true);
   const [isAmbientPlaying, setIsAmbientPlaying] = useState(true);
+  const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && window.location.pathname.toLowerCase().startsWith('/beheer');
+  });
   const [masterVolume, setMasterVolume] = useState(0.4);
   const [currentAmbientVolume, setCurrentAmbientVolume] = useState(0.4);
   const [videoPlayingCount, setVideoPlayingCount] = useState(0);
@@ -40,8 +44,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [videoPlayingCount]);
 
   useEffect(() => {
+    if (isAdminRoute) return;
+
     const handleFirstInteraction = () => {
-      if (isAmbientPlaying && !ambientMuted) {
+      if (isAmbientPlaying && !ambientMuted && !isAdminRoute) {
         audio.play().catch(() => {});
       }
       window.removeEventListener('click', handleFirstInteraction);
@@ -58,18 +64,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('touchstart', handleFirstInteraction);
       window.removeEventListener('keydown', handleFirstInteraction);
     };
-  }, [audio, isAmbientPlaying, ambientMuted]);
+  }, [audio, isAmbientPlaying, ambientMuted, isAdminRoute]);
 
-  // Handle Play/Pause and Volume
+  // Handle Play/Pause and Volume (altijd stil in /beheer)
   useEffect(() => {
-    audio.volume = ambientMuted ? 0 : currentAmbientVolume;
+    audio.volume = ambientMuted || isAdminRoute ? 0 : currentAmbientVolume;
     
-    if (isAmbientPlaying && !ambientMuted) {
+    if (isAmbientPlaying && !ambientMuted && !isAdminRoute) {
       audio.play().catch(() => {});
     } else {
       audio.pause();
     }
-  }, [isAmbientPlaying, ambientMuted, currentAmbientVolume, audio]);
+  }, [isAmbientPlaying, ambientMuted, isAdminRoute, currentAmbientVolume, audio]);
 
   // Sync currentAmbientVolume with masterVolume when not fading
   useEffect(() => {
@@ -119,6 +125,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setAmbientMuted, 
       setVideoMuted,
       setIsAmbientPlaying,
+      setIsAdminRoute,
       setMasterVolume,
       fadeAmbient,
       toggleAmbientMute, 

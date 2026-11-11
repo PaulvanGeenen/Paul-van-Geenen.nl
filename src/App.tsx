@@ -53,8 +53,17 @@ function ScrollToTop() {
   return null;
 }
 
-import { AudioProvider } from './context/AudioContext';
+import { AudioProvider, useAudio } from './context/AudioContext';
 import { LionBooksIntro } from './components/ui/LionBooksIntro';
+
+function AdminAmbientSuppressor() {
+  const { pathname } = useLocation();
+  const { setIsAdminRoute } = useAudio();
+  useEffect(() => {
+    setIsAdminRoute(pathname.toLowerCase().startsWith('/beheer'));
+  }, [pathname, setIsAdminRoute]);
+  return null;
+}
 
 function LoadingScreen() {
   return (
@@ -107,6 +116,7 @@ export default function App() {
       <Router>
         <LionBooksIntro />
         <ScrollToTop />
+        <AdminAmbientSuppressor />
         <AnalyticsTracker />
         <LayoutWrapper>
           <ErrorBoundary>
