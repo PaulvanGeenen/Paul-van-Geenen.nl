@@ -3,11 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { BOOKS } from '../data/books';
 import type { Book as BookType } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Lock, LockOpen } from 'lucide-react';
 import { transipPost, getQrCodeByCode } from '../lib/transip';
 import {
   unlockTrack,
-  unlockTrackByRawIdentifier
+  unlockTrackByRawIdentifier,
+  playLockUnlockSound
 } from '../lib/trackLocks';
 import { sanitizeMediaUrl, getTrackCoverJpg } from './Music';
 
@@ -147,9 +148,11 @@ export function QRRedirect() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Pure visual fade-in / fade-out sequence (no clutter text or buttons):
-  // 'book-in' (fade in & 3s hold) -> 'cover-in' (fade in & 5s hold) -> 'cover-out' (fade to black) -> music player
-  const [visualStage, setVisualStage] = useState<'book-in' | 'cover-in' | 'cover-out'>('book-in');
+  // Pure visual fade-in / unlock / fade-out sequence (no clutter text or buttons):
+  // 'book-in' (fullpage book cover, 3s) -> 'lock-locked' -> 'lock-rattling' -> 'lock-opening' -> 'cover-in' (fullpage soundtrack cover, 5s) -> 'cover-out' -> music player
+  const [visualStage, setVisualStage] = useState<
+    'book-in' | 'lock-locked' | 'lock-rattling' | 'lock-opening' | 'cover-in' | 'cover-out'
+  >('book-in');
   const [isFadingToBlack, setIsFadingToBlack] = useState<boolean>(false);
   const isRedirectingRef = useRef<boolean>(false);
   const sequenceTimersRef = useRef<NodeJS.Timeout[]>([]);
@@ -369,10 +372,30 @@ export function QRRedirect() {
     performNavigation(targetUrl);
   };
 
+  const requestTabletFullscreenSilently = () => {
+    try {
+      if (typeof document === 'undefined' || error) return;
+      const isIPhoneOrPod = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent);
+      if (isIPhoneOrPod) return;
+      const isStandalonePwa =
+        Boolean((window.navigator as any)?.standalone) ||
+        Boolean(window.matchMedia?.('(display-mode: standalone)').matches);
+      if (isStandalonePwa) return;
+      const doc = document as any;
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) return;
+      const docEl = document.documentElement as any;
+      const reqPromise = docEl.requestFullscreen?.() ?? docEl.webkitRequestFullscreen?.();
+      if (reqPromise && typeof reqPromise.catch === 'function') {
+        reqPromise.catch(() => {});
+      }
+    } catch {}
+  };
+
   // Pure visual sequence:
-  // 1. Book cover fades in and remains visible for 3 seconds
-  // 2. Book cover fades out, SoundTrack cover fades in and remains visible for 5 seconds
-  // 3. SoundTrack cover fades out to pure black and launches the Music Player
+  // 1. Fullpage Book Cover fades in & stays 3s (requests fullscreen immediately if allowed)
+  // 2. Book cover fades out -> Golden Lock rattles with sound & opens
+  // 3. Fullpage SoundTrack Cover fades in (preserves aspect ratio) for 5s
+  // 4. SoundTrack cover fades out to pure black and launches the Music Player
   useEffect(() => {
     if (loading || error || !songInfo) return;
 
@@ -380,21 +403,35 @@ export function QRRedirect() {
     sequenceTimersRef.current = [];
 
     setVisualStage('book-in');
+    requestTabletFullscreenSilently();
+
+    const tLockIn = setTimeout(() => {
+      setVisualStage('lock-locked');
+    }, 3000);
+
+    const tRattle = setTimeout(() => {
+      setVisualStage('lock-rattling');
+      playLockUnlockSound();
+    }, 3700);
+
+    const tOpen = setTimeout(() => {
+      setVisualStage('lock-opening');
+    }, 4350);
 
     const tCoverIn = setTimeout(() => {
       setVisualStage('cover-in');
-    }, 3000);
+    }, 5300);
 
     const tCoverOut = setTimeout(() => {
       setVisualStage('cover-out');
       setIsFadingToBlack(true);
-    }, 8650);
+    }, 10700);
 
     const tRedirect = setTimeout(() => {
       triggerPlayerRedirect(songInfo.targetUrl);
-    }, 9500);
+    }, 11550);
 
-    sequenceTimersRef.current = [tCoverIn, tCoverOut, tRedirect];
+    sequenceTimersRef.current = [tLockIn, tRattle, tOpen, tCoverIn, tCoverOut, tRedirect];
 
     return () => {
       sequenceTimersRef.current.forEach(t => clearTimeout(t));
@@ -420,27 +457,17 @@ export function QRRedirect() {
     ? 'De Geboorte van de Leeuw'
     : (songInfo?.boekTitel || matchedBook?.title || 'De Geboorte van de Leeuw');
 
+  const isLockStage =
+    visualStage === 'lock-locked' ||
+    visualStage === 'lock-rattling' ||
+    visualStage === 'lock-opening';
   const isShowingSoundtrackCover = visualStage === 'cover-in' || visualStage === 'cover-out';
-
-  const requestTabletFullscreenSilently = () => {
-    try {
-      if (typeof document === 'undefined' || error) return;
-      const isIPhoneOrPod = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent);
-      if (isIPhoneOrPod) return;
-      const doc = document as any;
-      if (doc.fullscreenElement || doc.webkitFullscreenElement) return;
-      const docEl = document.documentElement as any;
-      const reqPromise = docEl.requestFullscreen?.() ?? docEl.webkitRequestFullscreen?.();
-      if (reqPromise && typeof reqPromise.catch === 'function') {
-        reqPromise.catch(() => {});
-      }
-    } catch {}
-  };
 
   return (
     <div
       onClick={requestTabletFullscreenSilently}
-      className="fixed inset-0 z-50 w-full h-[100dvh] bg-black text-white flex flex-col justify-center items-center p-4 sm:p-8 select-none overflow-hidden"
+      onTouchEnd={requestTabletFullscreenSilently}
+      className="fixed inset-0 z-50 w-full h-[100dvh] bg-black text-white flex flex-col justify-center items-center p-0 select-none overflow-hidden"
     >
       <div className="w-full h-full flex items-center justify-center z-10">
         <AnimatePresence mode="wait">
@@ -460,7 +487,7 @@ export function QRRedirect() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              className="bg-black/80 border border-red-500/20 p-8 rounded-[28px] shadow-2xl backdrop-blur-md text-center space-y-6 max-w-md"
+              className="bg-black/80 border border-red-500/20 p-8 rounded-[28px] shadow-2xl backdrop-blur-md text-center space-y-6 max-w-md mx-4"
             >
               <div className="w-14 h-14 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center text-red-400 mx-auto shadow-inner">
                 <AlertCircle className="w-7 h-7" />
@@ -480,20 +507,66 @@ export function QRRedirect() {
                 </button>
               </div>
             </motion.div>
+          ) : isLockStage ? (
+            /* STAGE 2: Golden Metallic Lock Ceremony (rattles & opens cleanly before the soundtrack cover) */
+            <motion.div
+              key="lock-stage"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              className="relative w-full h-full flex items-center justify-center"
+            >
+              {/* Warm Ambient Golden Glow */}
+              <motion.div
+                animate={{
+                  scale: visualStage === 'lock-opening' ? 1.6 : 1,
+                  opacity: visualStage === 'lock-opening' ? 0.55 : 0.25
+                }}
+                transition={{ duration: 0.7 }}
+                className="absolute w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-earth-gold/30 blur-3xl pointer-events-none"
+              />
+
+              {/* Ornate Metallic Lock Emblem */}
+              <motion.div
+                animate={
+                  visualStage === 'lock-rattling'
+                    ? {
+                        rotate: [0, -18, 18, -15, 15, -10, 10, -6, 6, 0],
+                        x: [0, -8, 8, -6, 6, -4, 4, -2, 2, 0],
+                        scale: [1, 1.08, 1.05, 1.1, 1.04, 1]
+                      }
+                    : visualStage === 'lock-opening'
+                    ? { scale: 1.14, rotate: 0, x: 0 }
+                    : { scale: 1, rotate: 0, x: 0 }
+                }
+                transition={{
+                  duration: visualStage === 'lock-rattling' ? 0.58 : 0.8,
+                  ease: 'easeInOut'
+                }}
+                className="relative z-10 w-28 h-28 sm:w-36 sm:h-36 rounded-3xl bg-gradient-to-b from-[#2a2118] via-[#15100c] to-[#080604] border-2 border-earth-gold/60 shadow-[0_0_60px_rgba(212,175,55,0.35)] flex items-center justify-center"
+              >
+                {visualStage === 'lock-opening' ? (
+                  <LockOpen className="w-14 h-14 sm:w-16 sm:h-16 text-amber-300 drop-shadow-[0_0_20px_rgba(252,211,77,0.8)]" />
+                ) : (
+                  <Lock className="w-14 h-14 sm:w-16 sm:h-16 text-earth-gold drop-shadow-[0_0_15px_rgba(212,175,55,0.5)]" />
+                )}
+              </motion.div>
+            </motion.div>
           ) : isShowingSoundtrackCover ? (
-            /* STAGE 2: Pure SoundTrack Cover Fade-in (holds 5 seconds, then fades out cleanly to player) */
+            /* STAGE 3: Fullpage SoundTrack Cover without distortion (holds 5 seconds, then fades out cleanly to player) */
             <motion.div
               key="soundtrack-cover-showcase"
               initial={{ opacity: 0 }}
               animate={{ opacity: visualStage === 'cover-out' ? 0 : 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-              className="flex items-center justify-center"
+              className="w-full h-full flex items-center justify-center"
             >
               <img
                 src={songInfo?.soundtrackCoverUrl || GEBOORTE_VAN_DE_LEEUW_ALBUM_FALLBACK}
                 alt={songInfo?.song || 'SoundTrack Cover'}
-                className="w-[min(86vw,440px)] sm:w-[min(72vh,500px)] aspect-square object-contain rounded-2xl shadow-[0_25px_85px_rgba(0,0,0,0.95)]"
+                className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   const target = e.currentTarget;
@@ -504,19 +577,19 @@ export function QRRedirect() {
               />
             </motion.div>
           ) : (
-            /* STAGE 1: Pure Book Cover Fade-in (3 seconds hold, zero text or buttons) */
+            /* STAGE 1: Fullpage Book Cover Fade-in without distortion (3 seconds hold, zero text or buttons) */
             <motion.div
               key="book-stage"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-              className="flex items-center justify-center"
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full h-full flex items-center justify-center"
             >
               <img
                 src={displayBookCover}
                 alt={displayBookTitle}
-                className="max-h-[80vh] max-w-[88vw] w-auto h-auto object-contain rounded-2xl shadow-[0_25px_85px_rgba(0,0,0,0.95)]"
+                className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   const target = e.currentTarget;
