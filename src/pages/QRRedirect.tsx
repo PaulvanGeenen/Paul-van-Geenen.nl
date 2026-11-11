@@ -215,6 +215,8 @@ export function QRRedirect() {
   const [visualStage, setVisualStage] = useState<'book-locked' | 'book-rattling' | 'book-opened' | 'cover-in' | 'cover-out'>('book-locked');
   const [wasAlreadyUnlocked, setWasAlreadyUnlocked] = useState<boolean>(false);
   const [coverRemainingSecs, setCoverRemainingSecs] = useState<number>(5);
+  const [isFadingToBlack, setIsFadingToBlack] = useState<boolean>(false);
+  const isRedirectingRef = useRef<boolean>(false);
   const sequenceTimersRef = useRef<NodeJS.Timeout[]>([]);
 
   const [songInfo, setSongInfo] = useState<{
@@ -345,11 +347,19 @@ export function QRRedirect() {
                GEBOORTE_VAN_DE_LEEUW_ALBUM_FALLBACK)
             : GEBOORTE_VAN_DE_LEEUW_ALBUM_FALLBACK;
 
-          // Preload the soundtrack cover image so the fade-in is instant and crisp
-          if (soundtrackCoverUrl) {
-            const preloadImg = new Image();
-            preloadImg.src = soundtrackCoverUrl;
+          // Preload the soundtrack cover and full player images so every fade-in is instant and crisp
+          const preloadUrls = new Set<string>();
+          if (soundtrackCoverUrl) preloadUrls.add(soundtrackCoverUrl);
+          if (matchedTrack) {
+            [matchedTrack.portraitJpg, matchedTrack.landscapeJpg, matchedTrack.thumbnailJpg]
+              .map((u) => sanitizeMediaUrl(u))
+              .filter(Boolean)
+              .forEach((u) => preloadUrls.add(u as string));
           }
+          preloadUrls.forEach((u) => {
+            const preloadImg = new Image();
+            preloadImg.src = u;
+          });
 
           const targetUrl = resolvePlayerTargetUrl(
             data.spotifyLink || '',
@@ -394,14 +404,30 @@ export function QRRedirect() {
     };
   }, [qrCode, navigate]);
 
-  const triggerPlayerRedirect = (targetUrl: string) => {
-    sequenceTimersRef.current.forEach(t => clearTimeout(t));
-    sequenceTimersRef.current = [];
+  const performNavigation = (targetUrl: string) => {
     if (targetUrl.startsWith('/')) {
       navigate(targetUrl, { replace: true });
     } else {
       window.location.replace(targetUrl);
     }
+  };
+
+  const triggerPlayerRedirect = (targetUrl: string, skipBlackFadeWait = false) => {
+    if (isRedirectingRef.current) return;
+    isRedirectingRef.current = true;
+    sequenceTimersRef.current.forEach(t => clearTimeout(t));
+    sequenceTimersRef.current = [];
+    setIsFadingToBlack(true);
+
+    if (skipBlackFadeWait) {
+      performNavigation(targetUrl);
+      return;
+    }
+
+    // Smooth fade to black before opening the player so there is never an abrupt jump
+    setTimeout(() => {
+      performNavigation(targetUrl);
+    }, 550);
   };
 
   // Orchestrate the visual unlock + 5-second soundtrack cover fade-in/out sequence
@@ -413,40 +439,41 @@ export function QRRedirect() {
 
     if (!wasAlreadyUnlocked) {
       // Newly unlocked SoundTrack:
-      // 1. Show book cover + closed lock (0ms - 400ms)
-      // 2. Rattle lock with sound (400ms - 1100ms)
-      // 3. Open lock (1100ms - 2300ms)
-      // 4. Fade in SoundTrack cover and hold for 5 seconds (2300ms - 7300ms)
-      // 5. Fade out SoundTrack cover (7300ms - 8200ms)
-      // 6. Open music player & start track in single mode (8200ms)
+      // 1. Show book cover + closed lock (0ms - 450ms)
+      // 2. Rattle lock with sound (450ms - 1150ms)
+      // 3. Open lock (1150ms - 2400ms)
+      // 4. Fade out book card smoothly & fade in SoundTrack cover (2400ms - 7900ms)
+      // 5. Fade out SoundTrack cover to pure black (7900ms - 8800ms)
+      // 6. Open music player silently on black & fade in track (8850ms)
       setVisualStage('book-locked');
 
       const tRattle = setTimeout(() => {
         setVisualStage('book-rattling');
         playLockUnlockSound();
-      }, 400);
+      }, 450);
 
       const tOpened = setTimeout(() => {
         setVisualStage('book-opened');
-      }, 1100);
+      }, 1150);
 
       const tCoverIn = setTimeout(() => {
         setVisualStage('cover-in');
         setCoverRemainingSecs(5);
-      }, 2300);
+      }, 2400);
 
-      const tSec4 = setTimeout(() => setCoverRemainingSecs(4), 3300);
-      const tSec3 = setTimeout(() => setCoverRemainingSecs(3), 4300);
-      const tSec2 = setTimeout(() => setCoverRemainingSecs(2), 5300);
-      const tSec1 = setTimeout(() => setCoverRemainingSecs(1), 6300);
+      const tSec4 = setTimeout(() => setCoverRemainingSecs(4), 3500);
+      const tSec3 = setTimeout(() => setCoverRemainingSecs(3), 4600);
+      const tSec2 = setTimeout(() => setCoverRemainingSecs(2), 5700);
+      const tSec1 = setTimeout(() => setCoverRemainingSecs(1), 6800);
 
       const tCoverOut = setTimeout(() => {
         setVisualStage('cover-out');
-      }, 7300);
+        setIsFadingToBlack(true);
+      }, 7900);
 
       const tRedirect = setTimeout(() => {
-        triggerPlayerRedirect(songInfo.targetUrl);
-      }, 8250);
+        triggerPlayerRedirect(songInfo.targetUrl, true);
+      }, 8850);
 
       sequenceTimersRef.current = [
         tRattle,
@@ -460,31 +487,28 @@ export function QRRedirect() {
         tRedirect
       ];
     } else {
-      // Already unlocked SoundTrack (Bullet 11):
-      // Same visual experience WITHOUT the lock icon and WITHOUT "SoundTrack Ontgrendeld" text:
-      // 1. Show book cover (0ms - 1800ms)
-      // 2. Fade in SoundTrack cover and hold for 5 seconds (1800ms - 6800ms)
-      // 3. Fade out SoundTrack cover (6800ms - 7700ms)
-      // 4. Open music player & start track in single mode (7700ms)
+      // Already unlocked SoundTrack:
+      // Smooth fade-in -> hold -> smooth crossfade to SoundTrack cover -> fade to black -> player fade-in
       setVisualStage('book-opened');
 
       const tCoverIn = setTimeout(() => {
         setVisualStage('cover-in');
         setCoverRemainingSecs(5);
-      }, 1800);
+      }, 1900);
 
-      const tSec4 = setTimeout(() => setCoverRemainingSecs(4), 2800);
-      const tSec3 = setTimeout(() => setCoverRemainingSecs(3), 3800);
-      const tSec2 = setTimeout(() => setCoverRemainingSecs(2), 4800);
-      const tSec1 = setTimeout(() => setCoverRemainingSecs(1), 5800);
+      const tSec4 = setTimeout(() => setCoverRemainingSecs(4), 3000);
+      const tSec3 = setTimeout(() => setCoverRemainingSecs(3), 4100);
+      const tSec2 = setTimeout(() => setCoverRemainingSecs(2), 5200);
+      const tSec1 = setTimeout(() => setCoverRemainingSecs(1), 6300);
 
       const tCoverOut = setTimeout(() => {
         setVisualStage('cover-out');
-      }, 6800);
+        setIsFadingToBlack(true);
+      }, 7400);
 
       const tRedirect = setTimeout(() => {
-        triggerPlayerRedirect(songInfo.targetUrl);
-      }, 7750);
+        triggerPlayerRedirect(songInfo.targetUrl, true);
+      }, 8350);
 
       sequenceTimersRef.current = [
         tCoverIn,
@@ -505,7 +529,7 @@ export function QRRedirect() {
 
   const handleProceedImmediately = () => {
     if (songInfo) {
-      triggerPlayerRedirect(songInfo.targetUrl);
+      triggerPlayerRedirect(songInfo.targetUrl, false);
     }
   };
 
@@ -541,9 +565,10 @@ export function QRRedirect() {
           {loading ? (
             <motion.div
               key="loader"
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
               className="bg-black/55 border border-earth-gold/20 p-8 rounded-[28px] shadow-2xl backdrop-blur-md text-center space-y-6"
             >
               <div className="relative flex justify-center">
@@ -566,9 +591,10 @@ export function QRRedirect() {
           ) : error ? (
             <motion.div
               key="error"
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
               className="bg-black/55 border border-red-500/20 p-8 rounded-[28px] shadow-2xl backdrop-blur-md text-center space-y-6"
             >
               <div className="w-14 h-14 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center text-red-400 mx-auto shadow-inner">
@@ -590,17 +616,16 @@ export function QRRedirect() {
               </div>
             </motion.div>
           ) : isShowingSoundtrackCover ? (
-            /* STAGE 2: Fade-in of the unlocked SoundTrack's Album Cover (holds for 5 seconds, then fades out) */
+            /* STAGE 2: Fade-in of the unlocked SoundTrack's Album Cover (holds for 5 seconds, then fades smoothly to black) */
             <motion.div
               key="soundtrack-cover-showcase"
-              initial={{ opacity: 0, scale: 0.94 }}
+              initial={{ opacity: 0 }}
               animate={{
-                opacity: visualStage === 'cover-out' ? 0 : 1,
-                scale: visualStage === 'cover-out' ? 1.04 : 1
+                opacity: visualStage === 'cover-out' ? 0 : 1
               }}
               exit={{ opacity: 0 }}
               transition={{
-                duration: visualStage === 'cover-out' ? 0.85 : 0.9,
+                duration: visualStage === 'cover-out' ? 0.85 : 0.85,
                 ease: [0.22, 1, 0.36, 1]
               }}
               className={`bg-black/75 border ${theme.cardBorder} p-6 sm:p-8 rounded-[36px] shadow-[0_30px_90px_rgba(0,0,0,0.95)] backdrop-blur-xl text-center space-y-6 relative overflow-hidden`}
@@ -669,10 +694,10 @@ export function QRRedirect() {
             /* STAGE 1: Book Cover of De Geboorte van de Leeuw + Lock Unlocking Animation (if not already unlocked) */
             <motion.div
               key="book-stage"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
               className={`bg-black/65 border ${theme.cardBorder} p-6 sm:p-8 rounded-[36px] shadow-[0_30px_80px_rgba(0,0,0,0.9)] backdrop-blur-xl text-center space-y-6 relative overflow-hidden`}
             >
               {/* Book Badge (without lock icon if already unlocked) */}
@@ -685,12 +710,7 @@ export function QRRedirect() {
 
               {/* Physical Book Cover Showcase + Animated Lock Overlay (ONLY when newly unlocking!) */}
               <div className="pt-1 flex justify-center">
-                <motion.div
-                  initial={{ scale: 0.92, opacity: 0, y: 10 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05, duration: 0.5 }}
-                  className="relative group"
-                >
+                <div className="relative group">
                   <div className={`absolute -inset-4 rounded-2xl blur-2xl opacity-55 ${theme.glow}`} />
                   <img
                     src={displayBookCover}
@@ -729,7 +749,7 @@ export function QRRedirect() {
                       )}
                     </motion.div>
                   )}
-                </motion.div>
+                </div>
               </div>
 
               {/* Chapter & SoundTrack Announcement (omits "SoundTrack Ontgrendeld" text & icon when already unlocked) */}
@@ -785,6 +805,14 @@ export function QRRedirect() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Smooth full-screen fade-to-black curtain so the transition into the Music Player has zero jump */}
+      <motion.div
+        initial={false}
+        animate={{ opacity: isFadingToBlack ? 1 : 0 }}
+        transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+        className="fixed inset-0 bg-black z-50 pointer-events-none"
+      />
     </div>
   );
 }

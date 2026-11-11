@@ -907,6 +907,9 @@ export function Music() {
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
   const [copiedLinkState, setCopiedLinkState] = useState<boolean>(false);
   const initialSharedHandledRef = useRef(false);
+  const [awaitingDirectTrackMatch, setAwaitingDirectTrackMatch] = useState<boolean>(() => checkHasDirectTrackRequest());
+  const [directEntryCurtainVisible, setDirectEntryCurtainVisible] = useState<boolean>(() => checkHasDirectTrackRequest());
+  const [directEntryReadyToReveal, setDirectEntryReadyToReveal] = useState<boolean>(false);
 
   useEffect(() => {
     if (!shareToast) return;
@@ -1244,7 +1247,12 @@ export function Music() {
 
   // Handle incoming share URLs (encrypted ?v=... codes, legacy ?track=...&format=..., and path parameters)
   useEffect(() => {
-    if (loadingTracks || tracks.length === 0 || initialSharedHandledRef.current) return;
+    if (loadingTracks) return;
+    if (tracks.length === 0) {
+      if (awaitingDirectTrackMatch) setAwaitingDirectTrackMatch(false);
+      return;
+    }
+    if (initialSharedHandledRef.current) return;
 
     const urlParams = new URLSearchParams(window.location.search);
     const encryptedVParam = urlParams.get('v');
@@ -1300,6 +1308,7 @@ export function Music() {
 
     if (matchedIdx !== -1) {
       initialSharedHandledRef.current = true;
+      setAwaitingDirectTrackMatch(false);
       setCurrentTrackIndex(matchedIdx);
       setSelectedFormat(matchedFormat);
       // QR scans and direct track links always play in single mode (1x afspelen, daarna niets meer doen)
@@ -1428,6 +1437,9 @@ export function Music() {
           setSelectedAlbum(decodedAlb);
         }
         setPhase('list');
+      }
+      if (awaitingDirectTrackMatch) {
+        setAwaitingDirectTrackMatch(false);
       }
     }
   }, [loadingTracks, tracks, albums]);
@@ -1588,7 +1600,8 @@ export function Music() {
   }, [isPlaying, phase]);
 
   // Handle current background image calculation with smooth crossfade
-  const currentTrack = tracks[currentTrackIndex] || tracks[0];
+  // While awaiting direct track resolution (?track=... / QR scan), never fall back to tracks[0] ("Leeuw")
+  const currentTrack = awaitingDirectTrackMatch ? undefined : (tracks[currentTrackIndex] || tracks[0]);
 
   // Memoized albums strictly respecting the order in tracks.json (or explicit album.order)
   const orderedAlbums = React.useMemo(() => {
@@ -1906,15 +1919,53 @@ export function Music() {
   // Calculate background images for current, previous, and next track (for 0-gap side-by-side swipe)
   const prevTrackIndex = getPrevTrackIndex();
   const nextTrackIndex = getNextTrackIndex();
-  const prevTrack = tracks[prevTrackIndex];
-  const nextTrack = tracks[nextTrackIndex];
+  const prevTrack = awaitingDirectTrackMatch ? undefined : tracks[prevTrackIndex];
+  const nextTrack = awaitingDirectTrackMatch ? undefined : tracks[nextTrackIndex];
   const prevBgImage = prevTrack ? getTrackBgImage(prevTrack, effectiveOrientation) : null;
   const nextBgImage = nextTrack ? getTrackBgImage(nextTrack, effectiveOrientation) : null;
 
+  // Smooth fade-in from black when opening player via direct track link / QR scan
+  useEffect(() => {
+    if (!directEntryCurtainVisible || directEntryReadyToReveal) return;
+    if (awaitingDirectTrackMatch || loadingTracks) return;
+
+    let cancelled = false;
+    let unmountedTimer: ReturnType<typeof setTimeout> | null = null;
+    const revealNow = () => {
+      if (cancelled) return;
+      setDirectEntryReadyToReveal(true);
+      unmountedTimer = setTimeout(() => {
+        if (!cancelled) setDirectEntryCurtainVisible(false);
+      }, 950);
+    };
+
+    const safetyTimer = setTimeout(revealNow, 800);
+
+    if (effectiveFormat !== 'video' && currBgImage) {
+      const img = new Image();
+      img.onload = revealNow;
+      img.onerror = revealNow;
+      img.src = currBgImage;
+      if (img.complete) {
+        revealNow();
+      }
+    } else {
+      revealNow();
+    }
+
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+      if (unmountedTimer) clearTimeout(unmountedTimer);
+    };
+  }, [directEntryCurtainVisible, directEntryReadyToReveal, awaitingDirectTrackMatch, loadingTracks, currBgImage, effectiveFormat]);
+
   // Preload all background images in memory to ensure instant seamless crossfades and swipe transitions
   useEffect(() => {
-    if (prevBgImage) { const img = new Image(); img.src = prevBgImage; }
+    if (awaitingDirectTrackMatch) return;
     if (currBgImage) { const img = new Image(); img.src = currBgImage; }
+    if (directEntryCurtainVisible) return;
+    if (prevBgImage) { const img = new Image(); img.src = prevBgImage; }
     if (nextBgImage) { const img = new Image(); img.src = nextBgImage; }
     
     // Preload entire current tracks list in background
@@ -1924,7 +1975,7 @@ export function Music() {
       if (p) { const img = new Image(); img.src = p; }
       if (l) { const img = new Image(); img.src = l; }
     });
-  }, [prevBgImage, currBgImage, nextBgImage, tracks]);
+  }, [prevBgImage, currBgImage, nextBgImage, tracks, awaitingDirectTrackMatch, directEntryCurtainVisible]);
 
   // Auto-hide navbar logic (4 seconds timeout when playing, 5 minutes when paused)
   const resetNavBarTimer = () => {
@@ -4093,6 +4144,17 @@ export function Music() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
           >
+            {/* Direct Track / QR Entry Fade-In Curtain: keeps pure black until right SoundTrack & artwork are loaded, then fades calmly in */}
+            {directEntryCurtainVisible && (
+              <motion.div
+                key="direct-entry-curtain"
+                initial={{ opacity: 1 }}
+                animate={{ opacity: directEntryReadyToReveal ? 0 : 1 }}
+                transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+                className="fixed inset-0 z-[70] bg-black pointer-events-none"
+              />
+            )}
+
             {/* Cinematic Track Unlock Ceremony: Lock appears -> Rattles with sound -> SoundTrack Cover Fades in for 5s -> Fades out to Player */}
             <AnimatePresence>
               {unlockCeremonyPhase !== 'idle' && (
@@ -4225,6 +4287,7 @@ export function Music() {
                   }}
                 >
                   <img
+                    key={currBgImage}
                     src={currBgImage}
                     alt={currentTrack?.title || 'Current track'}
                     className="w-full h-full object-cover select-none pointer-events-none"
