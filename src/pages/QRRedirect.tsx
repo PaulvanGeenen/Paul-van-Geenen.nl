@@ -91,6 +91,7 @@ function resolvePlayerTargetUrl(rawLink: string, songTitle: string, matchedTrack
         const urlObj = new URL(cleanLink, window.location.origin);
         urlObj.searchParams.set('single', '1');
         urlObj.searchParams.set('ceremony', 'done');
+        urlObj.searchParams.set('qr', '1');
         return `${urlObj.pathname}${urlObj.search}`;
       }
     }
@@ -98,7 +99,7 @@ function resolvePlayerTargetUrl(rawLink: string, songTitle: string, matchedTrack
 
   const targetIdentifier = matchedTrackId || (songTitle && songTitle !== 'Onbekend nummer' ? songTitle.trim() : '');
   if (targetIdentifier) {
-    return `/music?track=${encodeURIComponent(targetIdentifier)}&single=1&ceremony=done`;
+    return `/music?track=${encodeURIComponent(targetIdentifier)}&single=1&ceremony=done&qr=1`;
   }
 
   if (cleanLink) {
@@ -421,8 +422,26 @@ export function QRRedirect() {
 
   const isShowingSoundtrackCover = visualStage === 'cover-in' || visualStage === 'cover-out';
 
+  const requestTabletFullscreenSilently = () => {
+    try {
+      if (typeof document === 'undefined' || error) return;
+      const isIPhoneOrPod = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent);
+      if (isIPhoneOrPod) return;
+      const doc = document as any;
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) return;
+      const docEl = document.documentElement as any;
+      const reqPromise = docEl.requestFullscreen?.() ?? docEl.webkitRequestFullscreen?.();
+      if (reqPromise && typeof reqPromise.catch === 'function') {
+        reqPromise.catch(() => {});
+      }
+    } catch {}
+  };
+
   return (
-    <div className="min-h-screen w-full bg-black text-white flex flex-col justify-center items-center p-4 sm:p-8 select-none relative overflow-hidden">
+    <div
+      onClick={requestTabletFullscreenSilently}
+      className="fixed inset-0 z-50 w-full h-[100dvh] bg-black text-white flex flex-col justify-center items-center p-4 sm:p-8 select-none overflow-hidden"
+    >
       <div className="w-full h-full flex items-center justify-center z-10">
         <AnimatePresence mode="wait">
           {loading ? (

@@ -773,7 +773,10 @@ export function Music() {
     };
   }, []);
 
-  const toggleBrowserFullscreen = () => {
+  const userExplicitlyExitedFullscreenRef = useRef<boolean>(false);
+
+  const toggleBrowserFullscreen = (e?: React.MouseEvent) => {
+    e?.stopPropagation?.();
     // 1. If currently playing a video, use native iOS WebKit video fullscreen if supported
     if (phase === 'player' && effectiveFormat === 'video' && videoRef.current) {
       const vid = videoRef.current as any;
@@ -781,8 +784,8 @@ export function Music() {
         try {
           vid.webkitEnterFullscreen();
           return;
-        } catch (e) {
-          console.log('[Fullscreen] webkitEnterFullscreen note:', e);
+        } catch (err) {
+          console.log('[Fullscreen] webkitEnterFullscreen note:', err);
         }
       } else if (vid.requestFullscreen) {
         vid.requestFullscreen().catch(() => {});
@@ -802,8 +805,9 @@ export function Music() {
     );
 
     if (isFs) {
+      userExplicitlyExitedFullscreenRef.current = true;
       if (doc.exitFullscreen) {
-        doc.exitFullscreen().catch((err: any) => {
+        doc.exitFullscreen().catch(() => {
           if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
         });
       } else if (doc.webkitExitFullscreen) {
@@ -815,6 +819,8 @@ export function Music() {
       }
       return;
     }
+
+    userExplicitlyExitedFullscreenRef.current = false;
 
     let reqPromise: any = null;
     if (docEl.requestFullscreen) {
@@ -839,11 +845,20 @@ export function Music() {
     }
   };
 
-  // Safe helper to automatically request browser native fullscreen on initial user activation or playback
-  const enterBrowserFullscreenSafely = () => {
+  // Safe helper to automatically request browser native fullscreen on tablets/desktop (including iPadOS & Android tablets)
+  const enterBrowserFullscreenSafely = (fromDirectGesture = false) => {
     try {
-      if (isIOS || typeof document === 'undefined') return;
-      if (typeof navigator !== 'undefined' && 'userActivation' in navigator && !(navigator as any).userActivation?.isActive) {
+      if (typeof document === 'undefined' || typeof window === 'undefined') return;
+      if (userExplicitlyExitedFullscreenRef.current) return;
+      // iPhone/iPod Safari does not support HTML5 element fullscreen; iPadOS and Android tablets do
+      const isIPhoneOrPod = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent);
+      if (isIPhoneOrPod) return;
+      // Already running as an installed full-screen Home Screen / PWA app
+      const isStandalonePwa =
+        Boolean((window.navigator as any)?.standalone) ||
+        Boolean(window.matchMedia?.('(display-mode: standalone)').matches);
+      if (isStandalonePwa) return;
+      if (!fromDirectGesture && typeof navigator !== 'undefined' && 'userActivation' in navigator && !(navigator as any).userActivation?.isActive) {
         return;
       }
       const doc = document as any;
@@ -875,7 +890,7 @@ export function Music() {
   // Automatically request browser fullscreen on first user activation when opening the player
   useEffect(() => {
     const handleInitialUserGesture = () => {
-      enterBrowserFullscreenSafely();
+      enterBrowserFullscreenSafely(true);
     };
 
     window.addEventListener('click', handleInitialUserGesture, { passive: true });
@@ -1398,17 +1413,18 @@ export function Music() {
         playTrack(matchedIdx, matchedFormat);
       }
 
-      // Als iemand op de site komt met een link naar een track/video:
-      // Altijd fullscreen tonen in de positie waarin het device zich dan bevindt.
+      // Als iemand op de site komt met een link naar een track/video (o.a. via QR-code):
+      // Altijd fullscreen tonen in de positie waarin het device (tablet/telefoon/desktop) zich dan bevindt.
       const isVideoLink = matchedFormat === 'video' || (matchedTrack && getEffectiveFormat(matchedTrack, matchedFormat) === 'video');
+      const isQrEntry = urlParams.get('qr') === '1' || urlParams.get('ceremony') === 'done' || urlParams.get('single') === '1';
       if (isVideoLink) {
         isDirectVideoRequested.current = true;
         setLoopMode('off');
-        setDesktopViewMode('fullscreen');
-        setOrientation(getDeviceOrientation());
-      } else if (typeof window !== 'undefined' && window.innerWidth >= 768) {
-        setDesktopViewMode('fullscreen');
-        setOrientation('landscape');
+      }
+      setDesktopViewMode('fullscreen');
+      setOrientation(getDeviceOrientation());
+      if (isQrEntry) {
+        enterBrowserFullscreenSafely();
       }
     } else {
       // Check if direct album URL parameter was specified (?album=...) or GUID parameter (?guid=...)
@@ -2282,6 +2298,7 @@ export function Music() {
               fadeToVolume(el, targetVol, durationMs);
             }
           }
+          enterBrowserFullscreenSafely(true);
         };
 
         const cleanup = () => {
@@ -2395,7 +2412,7 @@ export function Music() {
         startPlaybackWithVolumeRamp(el, 750);
       }
 
-      enterBrowserFullscreenSafely();
+      enterBrowserFullscreenSafely(true);
     }
     resetNavBarTimer();
     resetRatingButtonsTimer();
@@ -2914,7 +2931,7 @@ export function Music() {
         }
       }
 
-      enterBrowserFullscreenSafely();
+      enterBrowserFullscreenSafely(true);
 
       setShowNavBar(prev => {
         const next = !prev;
@@ -4915,6 +4932,7 @@ export function Music() {
                         setIsAutoplayMuted(false);
                         shouldAutoPlayRef.current = false;
                         startPlaybackWithVolumeRamp(activeEl, 400);
+                        enterBrowserFullscreenSafely(true);
                       }
                     }}
                     className="flex items-center gap-2.5 px-5 py-3 rounded-full bg-earth-gold hover:bg-amber-400 text-black text-xs sm:text-sm font-bold border border-white/30 shadow-[0_10px_40px_rgba(212,175,55,0.6)] cursor-pointer transition-all hover:scale-105 active:scale-95 animate-bounce"
