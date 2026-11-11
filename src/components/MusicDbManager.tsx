@@ -4,7 +4,7 @@ import {
   Database, RefreshCw, Plus, Trash2, Edit3, CheckCircle2, AlertCircle, 
   Music, Folder, FileAudio, FileVideo, Image, Subtitles, ExternalLink,
   Sparkles, Layers, Shield, Check, X, Eye, HelpCircle, ChevronRight,
-  FolderSync, Lock, LockOpen, RotateCcw
+  FolderSync, Lock, LockOpen, RotateCcw, QrCode
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
@@ -45,6 +45,7 @@ interface DbTrack {
     portraitJpg?: string | null;
     landscapeJpg?: string | null;
     thumbnailJpg?: string | null;
+    barcodePng?: string | null;
     subtitles?: Record<string, string>;
   };
 }
@@ -990,6 +991,12 @@ export function MusicDbManager() {
                               SRT ({Object.keys(media.subtitles).join('/')})
                             </span>
                           )}
+                          {/* Barcode / QR PNG badge */}
+                          {media?.barcodePng && (
+                            <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono text-[10px]" title="Barcode / QR-code (.png)">
+                              Barcode (PNG)
+                            </span>
+                          )}
 
                           <button
                             onClick={() => setPreviewMediaTrack(trk)}
@@ -1430,6 +1437,46 @@ export function MusicDbManager() {
                   </div>
                   {previewMediaTrack.media_detected?.subtitles ? (
                     <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono text-[10px]">Aanwezig</span>
+                  ) : (
+                    <span className="text-[10px] text-earth-light/30 font-mono">—</span>
+                  )}
+                </div>
+
+                {/* Soundtrack Cover (.jpg) */}
+                <div className="p-3 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Image className="w-4 h-4 text-earth-gold shrink-0" />
+                    <div className="truncate">
+                      <div className="font-bold text-white">SoundTrack Cover (JPG)</div>
+                      <div className="text-[11px] font-mono text-earth-light/40 truncate">{previewMediaTrack.media_detected?.coverJpg || previewMediaTrack.media_detected?.thumbnailJpg || 'Geen cover .jpg in map'}</div>
+                    </div>
+                  </div>
+                  {(previewMediaTrack.media_detected?.coverJpg || previewMediaTrack.media_detected?.thumbnailJpg) ? (
+                    <img
+                      src={previewMediaTrack.media_detected?.coverJpg || previewMediaTrack.media_detected?.thumbnailJpg || ''}
+                      alt="SoundTrack Cover"
+                      className="w-10 h-10 rounded object-cover border border-white/10 shrink-0"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-earth-light/30 font-mono">—</span>
+                  )}
+                </div>
+
+                {/* Barcode / QR-code (.png) */}
+                <div className="p-3 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <QrCode className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <div className="truncate">
+                      <div className="font-bold text-white">Barcode / QR-code (PNG)</div>
+                      <div className="text-[11px] font-mono text-earth-light/40 truncate">{previewMediaTrack.media_detected?.barcodePng || 'Geen barcode .png in map'}</div>
+                    </div>
+                  </div>
+                  {previewMediaTrack.media_detected?.barcodePng ? (
+                    <img
+                      src={previewMediaTrack.media_detected.barcodePng}
+                      alt="Barcode QR-code"
+                      className="w-10 h-10 rounded bg-white p-0.5 object-contain border border-white/10 shrink-0"
+                    />
                   ) : (
                     <span className="text-[10px] text-earth-light/30 font-mono">—</span>
                   )}

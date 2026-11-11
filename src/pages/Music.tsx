@@ -54,6 +54,7 @@ interface Track {
   portraitJpg?: string;
   landscapeJpg?: string;
   thumbnailJpg?: string;
+  barcodePng?: string;
   videoMov?: string;
   subtitles?: {
     GB?: string;
@@ -294,10 +295,19 @@ export const sanitizeMediaUrl = (url?: string): string | undefined => {
   }
 };
 
+export const sanitizeCoverImageUrl = (url?: string): string | undefined => {
+  const sanitized = sanitizeMediaUrl(url);
+  if (!sanitized) return undefined;
+  const cleanPath = sanitized.split('?')[0].split('#')[0].toLowerCase();
+  if (cleanPath.endsWith('.png')) return undefined;
+  return sanitized;
+};
+
 export const getTrackCoverJpg = (t?: Partial<Track> | null): string | undefined => {
   if (!t) return undefined;
-  if (t.coverJpg && typeof t.coverJpg === 'string' && t.coverJpg.trim() !== '') {
-    return sanitizeMediaUrl(t.coverJpg);
+  const cleanCover = sanitizeCoverImageUrl(t.coverJpg);
+  if (cleanCover) {
+    return cleanCover;
   }
   if (t.mp3 && typeof t.mp3 === 'string') {
     const clean = t.mp3.trim().split('?')[0];
@@ -306,7 +316,7 @@ export const getTrackCoverJpg = (t?: Partial<Track> | null): string | undefined 
       return sanitizeMediaUrl(derived) || derived;
     }
   }
-  return sanitizeMediaUrl(t.portraitJpg) || sanitizeMediaUrl(t.thumbnailJpg);
+  return sanitizeCoverImageUrl(t.portraitJpg) || sanitizeCoverImageUrl(t.thumbnailJpg);
 };
 
 export const normalizeTrack = (t: Track): Track => {
@@ -319,7 +329,7 @@ export const normalizeTrack = (t: Track): Track => {
   }
 
   const mp3Url = sanitizeMediaUrl(t.mp3);
-  let coverJpg = sanitizeMediaUrl(t.coverJpg);
+  let coverJpg = sanitizeCoverImageUrl(t.coverJpg);
   if (!coverJpg && mp3Url) {
     const clean = mp3Url.split('?')[0];
     if (clean.toLowerCase().endsWith('.mp3')) {
@@ -327,7 +337,7 @@ export const normalizeTrack = (t: Track): Track => {
     }
   }
 
-  const portraitUrl = sanitizeMediaUrl(t.portraitJpg);
+  const portraitUrl = sanitizeCoverImageUrl(t.portraitJpg);
 
   return {
     ...t,
@@ -337,8 +347,9 @@ export const normalizeTrack = (t: Track): Track => {
     videoMov: sanitizeMediaUrl(t.videoMov),
     coverJpg: coverJpg,
     portraitJpg: portraitUrl || coverJpg,
-    landscapeJpg: sanitizeMediaUrl(t.landscapeJpg),
-    thumbnailJpg: sanitizeMediaUrl(t.thumbnailJpg) || coverJpg || portraitUrl,
+    landscapeJpg: sanitizeCoverImageUrl(t.landscapeJpg),
+    thumbnailJpg: sanitizeCoverImageUrl(t.thumbnailJpg) || coverJpg || portraitUrl,
+    barcodePng: sanitizeMediaUrl(t.barcodePng),
     subtitles: Object.keys(normSubtitles).length > 0 ? normSubtitles : t.subtitles,
   };
 };

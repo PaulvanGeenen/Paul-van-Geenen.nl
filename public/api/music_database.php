@@ -189,6 +189,7 @@ function resolveTrackFiles($folderName, $title) {
         'portraitJpg' => null,
         'landscapeJpg' => null,
         'thumbnailJpg' => null,
+        'barcodePng' => null,
         'subtitles' => []
     ];
 
@@ -220,11 +221,17 @@ function resolveTrackFiles($folderName, $title) {
         $fileUrl = $urlBase . '/' . rawurlencode($f);
         $baseName = strtolower(pathinfo($f, PATHINFO_FILENAME));
 
-        // Gelijknamige albumcover (.jpg / .jpeg / .png / .webp) van mp3
-        if ($mp3BaseName && $baseName === $mp3BaseName && preg_match('/\.(jpg|jpeg|png|webp)$/i', $f)) {
+        // Gelijknamige albumcover (.jpg / .jpeg / .webp) van mp3; .png is altijd de barcode/QR-code
+        if ($mp3BaseName && $baseName === $mp3BaseName && preg_match('/\.(jpg|jpeg|webp)$/i', $f)) {
             $result['coverJpg'] = $fileUrl;
             if (empty($result['thumbnailJpg'])) {
                 $result['thumbnailJpg'] = $fileUrl;
+            }
+        }
+        // Barcode / QR-code (.png is altijd een barcode/QR-code, nooit een soundtrackcover)
+        else if (preg_match('/\.png$/i', $f)) {
+            if (empty($result['barcodePng']) || ($mp3BaseName && $baseName === $mp3BaseName)) {
+                $result['barcodePng'] = $fileUrl;
             }
         }
         // MP3 (als nog niet gevonden)
@@ -244,15 +251,15 @@ function resolveTrackFiles($folderName, $title) {
             $result['videoMov'] = $fileUrl;
         }
         // Portrait afbeelding
-        else if ((strpos($fLower, 'portrait') !== false || strpos($fLower, 'staand') !== false) && preg_match('/\.(jpg|jpeg|png|webp)$/i', $f)) {
+        else if ((strpos($fLower, 'portrait') !== false || strpos($fLower, 'staand') !== false) && preg_match('/\.(jpg|jpeg|webp)$/i', $f)) {
             $result['portraitJpg'] = $fileUrl;
         }
         // Landscape afbeelding
-        else if ((strpos($fLower, 'landscape') !== false || strpos($fLower, 'liggend') !== false) && preg_match('/\.(jpg|jpeg|png|webp)$/i', $f)) {
+        else if ((strpos($fLower, 'landscape') !== false || strpos($fLower, 'liggend') !== false) && preg_match('/\.(jpg|jpeg|webp)$/i', $f)) {
             $result['landscapeJpg'] = $fileUrl;
         }
         // Thumbnail afbeelding
-        else if ((strpos($fLower, 'thumbnail') !== false || strpos($fLower, 'thumb') !== false) && preg_match('/\.(jpg|jpeg|png|webp)$/i', $f)) {
+        else if ((strpos($fLower, 'thumbnail') !== false || strpos($fLower, 'thumb') !== false) && preg_match('/\.(jpg|jpeg|webp)$/i', $f)) {
             $result['thumbnailJpg'] = $fileUrl;
         }
         // Subtitles
@@ -719,7 +726,8 @@ if ($action === 'get_catalog') {
                 "coverJpg" => $media['coverJpg'],
                 "portraitJpg" => $media['portraitJpg'],
                 "landscapeJpg" => $media['landscapeJpg'],
-                "thumbnailJpg" => $media['thumbnailJpg']
+                "thumbnailJpg" => $media['thumbnailJpg'],
+                "barcodePng" => $media['barcodePng']
             ];
 
             if (isset($media['subtitles'])) {

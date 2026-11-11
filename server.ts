@@ -170,7 +170,8 @@ async function startServer() {
         const cleanTitle = rawTitle.replace(/_/g, ' ').trim();
 
         const audioExts = ['.mp3', '.m4a', '.wav', '.aac', '.ogg', '.flac'];
-        const imgExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+        // Soundtrack covers & visuals are always JPG/JPEG/WEBP; PNG files in track folders are barcodes/QR codes
+        const imgExts = ['.jpg', '.jpeg', '.webp', '.gif'];
 
         const isNonEmptyFile = (fileName?: string) => {
           if (!fileName) return false;
@@ -202,6 +203,10 @@ async function startServer() {
         const thumbnailImg = sameNameJpg
           || allImages.find(f => f.toLowerCase().includes('thumbnail') || f.toLowerCase().includes('thumb'))
           || portraitImg;
+
+        const barcodePngFile = (mp3BaseName
+          ? files.find(f => f.toLowerCase().endsWith('.png') && isNonEmptyFile(f) && f.replace(/\.[^.]+$/, '').toLowerCase() === mp3BaseName)
+          : undefined) || files.find(f => f.toLowerCase().endsWith('.png') && isNonEmptyFile(f));
 
         const getAssetUrl = (fileName?: string) => fileName ? `/@music/${encodeURIComponent(folderName)}/${encodeURIComponent(fileName)}` : undefined;
 
@@ -239,6 +244,7 @@ async function startServer() {
           portraitJpg: getAssetUrl(portraitImg),
           landscapeJpg: getAssetUrl(landscapeImg),
           thumbnailJpg: getAssetUrl(thumbnailImg),
+          barcodePng: getAssetUrl(barcodePngFile),
           videoMov: getAssetUrl(videoFile),
           subtitles: Object.keys(subtitles).length > 0 ? subtitles : undefined
         };
