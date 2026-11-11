@@ -30,7 +30,7 @@ export interface QrStyleConfig {
 }
 
 export const BOOK_DEFAULT_QR_STYLE: Omit<QrStyleConfig, 'url' | 'image'> = {
-  size: 200,
+  size: 246,
   fgColor: '#000000',
   bgColor: '#FFFFFF',
   dotType: 'square',
@@ -39,7 +39,7 @@ export const BOOK_DEFAULT_QR_STYLE: Omit<QrStyleConfig, 'url' | 'image'> = {
   errorCorrectionLevel: 'H',
   imageSize: 0.35,
   imageMarginRatio: 0.014,
-  quietZoneRatio: 0.04,
+  quietZoneRatio: 0.048,
 };
 
 /**
@@ -153,13 +153,13 @@ export async function verifyQrBlobScanability(blob: Blob): Promise<{
 }
 
 /**
- * Genereert een scherpe 200x200 PNG data-URL van een QR-code (standaard boekstijl)
+ * Genereert een scherpe 246x246 PNG data-URL van een QR-code (exacte boekstijl)
  * voor opslag bij Redirect Mappings en verifieert direct met jsQR.
  */
 export async function generateRedirectQrDataUrl(
   redirectCode: string,
   centerLogo?: string | null,
-  size = 200
+  size = 246
 ): Promise<{ dataUrl: string; targetUrl: string; verified: boolean }> {
   const targetUrl = buildRedirectQrUrl(redirectCode);
   const config: QrStyleConfig = {

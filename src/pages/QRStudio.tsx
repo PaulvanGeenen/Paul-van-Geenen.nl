@@ -333,7 +333,7 @@ export function QRStudio() {
     setSavingToMapping(true);
     setSaveToast(null);
     try {
-      const { dataUrl } = await generateRedirectQrDataUrl(matchedMapping.id, effectiveLogo, 200);
+      const { dataUrl } = await generateRedirectQrDataUrl(matchedMapping.id, effectiveLogo, 246);
       const updated = { ...matchedMapping, qrImage: dataUrl };
       const token = localStorage.getItem('krabbels_admin_token') || 'GONDA1984';
       let savedViaApi = false;
@@ -952,16 +952,21 @@ export function QRStudio() {
                 type="range"
                 min={200}
                 max={2400}
-                step={100}
+                step={2}
                 value={config.size}
                 onChange={(e) => setConfig((prev) => ({ ...prev, size: Number(e.target.value) }))}
                 className="w-full accent-earth-gold cursor-pointer"
               />
-              <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center justify-between text-xs gap-2">
                 <span className="text-earth-light/40">Lage kwaliteit</span>
-                <span className="font-mono font-bold text-earth-gold">
+                <button
+                  type="button"
+                  onClick={() => setConfig((prev) => ({ ...prev, size: 246 }))}
+                  className="font-mono font-bold text-earth-gold hover:underline cursor-pointer"
+                  title="Klik om terug te zetten naar 246 x 246 Px (boek-standaard)"
+                >
                   {config.size} x {config.size} Px
-                </span>
+                </button>
                 <span className="text-earth-light/40">Drukwerk (hoog)</span>
               </div>
             </div>

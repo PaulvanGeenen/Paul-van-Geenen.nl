@@ -873,13 +873,13 @@ export function Admin() {
     const bookLogo = getBookQrLogo(boekId);
     setIsGeneratingQr(true);
     try {
-      const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 200);
+      const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 246);
       setNewItem(prev => ({ ...prev, qrImage: dataUrl }));
       setQrImageOrigin('auto');
       setUploadError(null);
       if (!silent) {
         setUploadSuccess(
-          `Automatisch QR-code (200x200) gegenereerd voor:\n"${targetUrl}"` +
+          `Automatisch QR-code (246x246) gegenereerd voor:\n"${targetUrl}"` +
           (bookLogo ? ' (inclusief midden-logo van het boek)' : ' (zonder midden-logo: boek heeft nog geen logo ingesteld)') +
           (verified ? ' ✓ Scanbaar' : '')
         );
@@ -909,13 +909,13 @@ export function Admin() {
       const bookLogo = boeken.find(b => b.id === newItem.boekId)?.qrLogo || '';
       setIsGeneratingQr(true);
       try {
-        const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 200);
+        const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 246);
         if (cancelled) return;
         setNewItem(prev => ({ ...prev, qrImage: dataUrl }));
         setQrImageOrigin('auto');
         setUploadError(null);
         setUploadSuccess(
-          `Automatisch QR-code (200x200) gegenereerd voor:\n"${targetUrl}"` +
+          `Automatisch QR-code (246x246) gegenereerd voor:\n"${targetUrl}"` +
           (bookLogo ? ' (met boek-logo)' : ' (zonder boek-logo)') +
           (verified ? ' ✓ Scanbaar' : '')
         );
@@ -940,7 +940,7 @@ export function Admin() {
       // Zorg dat er bij opslaan altijd automatisch een QR-afbeelding wordt gegenereerd indien nog leeg
       if (!payloadToSave.qrImage && payloadToSave.id.trim().length >= 2) {
         const bookLogo = getBookQrLogo(payloadToSave.boekId);
-        const generated = await generateRedirectQrDataUrl(payloadToSave.id, bookLogo, 200);
+        const generated = await generateRedirectQrDataUrl(payloadToSave.id, bookLogo, 246);
         payloadToSave.qrImage = generated.dataUrl;
       }
 
@@ -1379,35 +1379,6 @@ export function Admin() {
             <p className="text-earth-light/60 italic">Onderhoud de boeken, hoofdstukken en redirects.</p>
           </div>
           <div className="flex gap-3">
-            {activeTab === 'qrcodes' && (
-              <button 
-                onClick={() => {
-                  const preselectedBookId = selectedBookQRFilter || boeken[0]?.id || '';
-                  const preselectedBook = boeken.find(b => b.id === preselectedBookId);
-                  const firstChapter = hoofdstukken.find(h => h.boekId === preselectedBookId);
-                  setEditingQRCode(null);
-                  setQrImageOrigin('none');
-                  setNewItem({
-                    id: '',
-                    boekId: preselectedBookId,
-                    boekTitel: preselectedBook?.boektitel || '',
-                    hoofdstukId: firstChapter?.id || '',
-                    hoofdstuk: firstChapter?.omschrijving || '',
-                    song: '',
-                    artist: '',
-                    spotifyLink: '',
-                    qrImage: ''
-                  });
-                  setUploadError(null);
-                  setUploadSuccess(null);
-                  setIsAdding(true);
-                }}
-                className="flex items-center gap-2 bg-earth-gold text-black px-6 py-3 rounded-full font-bold hover:scale-105 transition-transform"
-              >
-                <Plus className="w-5 h-5" />
-                Nieuwe Redirect
-              </button>
-            )}
             {activeTab === 'boeken' && (
               <button 
                 onClick={() => {
@@ -1771,6 +1742,37 @@ export function Admin() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const preselectedBookId = selectedBookQRFilter || boeken[0]?.id || '';
+                    const preselectedBook = boeken.find(b => b.id === preselectedBookId);
+                    const firstChapter = hoofdstukken.find(h => h.boekId === preselectedBookId);
+                    setEditingQRCode(null);
+                    setQrImageOrigin('none');
+                    setNewItem({
+                      id: '',
+                      boekId: preselectedBookId,
+                      boekTitel: preselectedBook?.boektitel || '',
+                      hoofdstukId: firstChapter?.id || '',
+                      hoofdstuk: firstChapter?.omschrijving || '',
+                      song: '',
+                      artist: '',
+                      spotifyLink: '',
+                      qrImage: ''
+                    });
+                    setUploadError(null);
+                    setUploadSuccess(null);
+                    setIsAdding(true);
+                  }}
+                  className="flex items-center gap-2 bg-earth-gold text-black px-6 py-3 rounded-full font-bold hover:scale-105 transition-transform shadow-lg shadow-earth-gold/10 cursor-pointer"
+                >
+                  <Plus className="w-5 h-5" />
+                  Nieuwe Redirect
+                </button>
               </div>
             </div>
           );
@@ -4022,7 +4024,7 @@ export function Admin() {
                                     {
                                       ...BOOK_DEFAULT_QR_STYLE,
                                       url: buildRedirectQrUrl(newItem.id),
-                                      size: 200,
+                                      size: 246,
                                       errorCorrectionLevel: bookLogo ? 'H' : 'Q',
                                       image: bookLogo || undefined,
                                     },
