@@ -6,9 +6,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, Lock, LockOpen } from 'lucide-react';
 import { transipPost, getQrCodeByCode } from '../lib/transip';
 import {
+  isTrackUnlocked,
+  isRawIdentifierUnlockedInStorage,
   unlockTrack,
   unlockTrackByRawIdentifier,
-  playLockUnlockSound
+  playLockUnlockSound,
+  unlockLockAudioContext
 } from '../lib/trackLocks';
 import { sanitizeMediaUrl, getTrackCoverJpg } from './Music';
 
@@ -153,6 +156,7 @@ export function QRRedirect() {
   const [visualStage, setVisualStage] = useState<
     'book-in' | 'lock-locked' | 'lock-rattling' | 'lock-opening' | 'cover-in' | 'cover-out'
   >('book-in');
+  const [wasAlreadyUnlocked, setWasAlreadyUnlocked] = useState<boolean>(false);
   const [isFadingToBlack, setIsFadingToBlack] = useState<boolean>(false);
   const isRedirectingRef = useRef<boolean>(false);
   const sequenceTimersRef = useRef<NodeJS.Timeout[]>([]);
@@ -251,6 +255,13 @@ export function QRRedirect() {
             ) || null;
           }
 
+          // Determine BEFORE unlocking whether this SoundTrack was already open on this device
+          const alreadyOpen = Boolean(
+            (matchedTrack && isTrackUnlocked(matchedTrack, 99, undefined, matchedAlbum)) ||
+            isRawIdentifierUnlockedInStorage(data.song) ||
+            isRawIdentifierUnlockedInStorage(data.hoofdstuk)
+          );
+
           // Now unlock the SoundTrack in localStorage on the reader's device
           if (matchedTrack) {
             unlockTrack(matchedTrack);
@@ -320,6 +331,7 @@ export function QRRedirect() {
           );
 
           if (active) {
+            setWasAlreadyUnlocked(alreadyOpen);
             setMatchedBook(foundBook);
             setSongInfo({
               song: matchedTrack?.title || songTitle,
@@ -373,6 +385,7 @@ export function QRRedirect() {
   };
 
   const requestTabletFullscreenSilently = () => {
+    unlockLockAudioContext();
     try {
       if (typeof document === 'undefined' || error) return;
       const isIPhoneOrPod = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent);
@@ -393,7 +406,7 @@ export function QRRedirect() {
 
   // Pure visual sequence:
   // 1. Fullpage Book Cover fades in & stays 3s (requests fullscreen immediately if allowed)
-  // 2. Book cover fades out -> Golden Lock rattles with sound & opens
+  // 2. ONLY on first unlock (!wasAlreadyUnlocked): Golden Lock rattles with sound & opens
   // 3. Fullpage SoundTrack Cover fades in (preserves aspect ratio) for 5s
   // 4. SoundTrack cover fades out to pure black and launches the Music Player
   useEffect(() => {
@@ -405,39 +418,57 @@ export function QRRedirect() {
     setVisualStage('book-in');
     requestTabletFullscreenSilently();
 
-    const tLockIn = setTimeout(() => {
-      setVisualStage('lock-locked');
-    }, 3000);
+    if (!wasAlreadyUnlocked) {
+      const tLockIn = setTimeout(() => {
+        setVisualStage('lock-locked');
+      }, 3000);
 
-    const tRattle = setTimeout(() => {
-      setVisualStage('lock-rattling');
-      playLockUnlockSound();
-    }, 3700);
+      const tRattle = setTimeout(() => {
+        setVisualStage('lock-rattling');
+        playLockUnlockSound();
+      }, 3700);
 
-    const tOpen = setTimeout(() => {
-      setVisualStage('lock-opening');
-    }, 4350);
+      const tOpen = setTimeout(() => {
+        setVisualStage('lock-opening');
+      }, 4350);
 
-    const tCoverIn = setTimeout(() => {
-      setVisualStage('cover-in');
-    }, 5300);
+      const tCoverIn = setTimeout(() => {
+        setVisualStage('cover-in');
+      }, 5300);
 
-    const tCoverOut = setTimeout(() => {
-      setVisualStage('cover-out');
-      setIsFadingToBlack(true);
-    }, 10700);
+      const tCoverOut = setTimeout(() => {
+        setVisualStage('cover-out');
+        setIsFadingToBlack(true);
+      }, 10700);
 
-    const tRedirect = setTimeout(() => {
-      triggerPlayerRedirect(songInfo.targetUrl);
-    }, 11550);
+      const tRedirect = setTimeout(() => {
+        triggerPlayerRedirect(songInfo.targetUrl);
+      }, 11550);
 
-    sequenceTimersRef.current = [tLockIn, tRattle, tOpen, tCoverIn, tCoverOut, tRedirect];
+      sequenceTimersRef.current = [tLockIn, tRattle, tOpen, tCoverIn, tCoverOut, tRedirect];
+    } else {
+      // Already unlocked previously -> skip lock animation and go straight from book cover to soundtrack cover
+      const tCoverIn = setTimeout(() => {
+        setVisualStage('cover-in');
+      }, 3000);
+
+      const tCoverOut = setTimeout(() => {
+        setVisualStage('cover-out');
+        setIsFadingToBlack(true);
+      }, 8650);
+
+      const tRedirect = setTimeout(() => {
+        triggerPlayerRedirect(songInfo.targetUrl);
+      }, 9500);
+
+      sequenceTimersRef.current = [tCoverIn, tCoverOut, tRedirect];
+    }
 
     return () => {
       sequenceTimersRef.current.forEach(t => clearTimeout(t));
       sequenceTimersRef.current = [];
     };
-  }, [loading, error, songInfo]);
+  }, [loading, error, songInfo, wasAlreadyUnlocked]);
 
   // Book cover: use De Geboorte van de Leeuw book cover by default (or specific book cover if book 1/2), never De Echo when scanning De Geboorte van de Leeuw
   const bookTitleLower = (songInfo?.boekTitel || '').toLowerCase();
@@ -465,6 +496,7 @@ export function QRRedirect() {
 
   return (
     <div
+      onPointerDown={unlockLockAudioContext}
       onClick={requestTabletFullscreenSilently}
       onTouchEnd={requestTabletFullscreenSilently}
       className="fixed inset-0 z-50 w-full h-[100dvh] bg-black text-white flex flex-col justify-center items-center p-0 select-none overflow-hidden"
@@ -527,7 +559,7 @@ export function QRRedirect() {
                 className="absolute w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-earth-gold/30 blur-3xl pointer-events-none"
               />
 
-              {/* Ornate Metallic Lock Emblem */}
+              {/* Glowing Golden Padlock (direct on black over warm glow, without any box or border) */}
               <motion.div
                 animate={
                   visualStage === 'lock-rattling'
@@ -537,19 +569,19 @@ export function QRRedirect() {
                         scale: [1, 1.08, 1.05, 1.1, 1.04, 1]
                       }
                     : visualStage === 'lock-opening'
-                    ? { scale: 1.14, rotate: 0, x: 0 }
+                    ? { scale: 1.18, rotate: 0, x: 0 }
                     : { scale: 1, rotate: 0, x: 0 }
                 }
                 transition={{
                   duration: visualStage === 'lock-rattling' ? 0.58 : 0.8,
                   ease: 'easeInOut'
                 }}
-                className="relative z-10 w-28 h-28 sm:w-36 sm:h-36 rounded-3xl bg-gradient-to-b from-[#2a2118] via-[#15100c] to-[#080604] border-2 border-earth-gold/60 shadow-[0_0_60px_rgba(212,175,55,0.35)] flex items-center justify-center"
+                className="relative z-10 flex items-center justify-center"
               >
                 {visualStage === 'lock-opening' ? (
-                  <LockOpen className="w-14 h-14 sm:w-16 sm:h-16 text-amber-300 drop-shadow-[0_0_20px_rgba(252,211,77,0.8)]" />
+                  <LockOpen className="w-24 h-24 sm:w-28 sm:h-28 text-amber-300 drop-shadow-[0_0_26px_rgba(252,211,77,0.85)]" />
                 ) : (
-                  <Lock className="w-14 h-14 sm:w-16 sm:h-16 text-earth-gold drop-shadow-[0_0_15px_rgba(212,175,55,0.5)]" />
+                  <Lock className="w-24 h-24 sm:w-28 sm:h-28 text-earth-gold drop-shadow-[0_0_20px_rgba(212,175,55,0.6)]" />
                 )}
               </motion.div>
             </motion.div>

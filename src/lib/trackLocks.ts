@@ -667,74 +667,103 @@ function getLockAudioContext(): AudioContext | null {
 }
 
 /**
+ * Call from any user gesture (touch/pointer/click) so Safari & Chrome keep Web Audio unlocked for lock animations
+ */
+export function unlockLockAudioContext(): void {
+  const ctx = getLockAudioContext();
+  if (!ctx) return;
+  try {
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    // Play a 1-sample silent buffer on iOS/Safari to unlock hardware audio cleanly
+    if (ctx.state === 'suspended') {
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+    }
+  } catch {}
+}
+
+/**
  * Synthesize a realistic heavy metallic padlock rattle sound effect
  * when a reader taps a locked slotje.
  */
-export function playLockRattleSound(): void {
-  const ctx = getLockAudioContext();
+export function playLockRattleSound(existingCtx?: AudioContext): void {
+  const ctx = existingCtx || getLockAudioContext();
   if (!ctx) return;
 
-  try {
-    const now = ctx.currentTime;
-    const hitOffsets = [0, 0.085, 0.165, 0.26, 0.34];
-    const baseFreqs = [520, 680, 460, 740, 590];
+  const scheduleRattle = () => {
+    try {
+      const now = ctx.currentTime;
+      const hitOffsets = [0, 0.085, 0.165, 0.26, 0.34];
+      const baseFreqs = [520, 680, 460, 740, 590];
 
-    hitOffsets.forEach((offset, idx) => {
-      const startTime = now + offset;
-      const duration = 0.065;
+      hitOffsets.forEach((offset, idx) => {
+        const startTime = now + offset;
+        const duration = 0.065;
 
-      const bufferSize = Math.floor(ctx.sampleRate * duration);
-      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const data = noiseBuffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
-      }
+        const bufferSize = Math.floor(ctx.sampleRate * duration);
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
+        }
 
-      const noise = ctx.createBufferSource();
-      noise.buffer = noiseBuffer;
+        const noise = ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
 
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(1800 + (idx % 2) * 650, startTime);
-      filter.Q.setValueAtTime(6.0, startTime);
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1800 + (idx % 2) * 650, startTime);
+        filter.Q.setValueAtTime(6.0, startTime);
 
-      const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.35, startTime);
-      noiseGain.gain.exponentialRampToValueAtTime(0.005, startTime + duration);
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.35, startTime);
+        noiseGain.gain.exponentialRampToValueAtTime(0.005, startTime + duration);
 
-      noise.connect(filter);
-      filter.connect(noiseGain);
-      noiseGain.connect(ctx.destination);
-      noise.start(startTime);
-      noise.stop(startTime + duration);
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+        noise.start(startTime);
+        noise.stop(startTime + duration);
 
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      osc1.type = 'triangle';
-      osc2.type = 'square';
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        osc1.type = 'triangle';
+        osc2.type = 'square';
 
-      const f = baseFreqs[idx];
-      osc1.frequency.setValueAtTime(f, startTime);
-      osc1.frequency.exponentialRampToValueAtTime(f * 0.72, startTime + duration);
+        const f = baseFreqs[idx];
+        osc1.frequency.setValueAtTime(f, startTime);
+        osc1.frequency.exponentialRampToValueAtTime(f * 0.72, startTime + duration);
 
-      osc2.frequency.setValueAtTime(f * 2.41, startTime);
-      osc2.frequency.exponentialRampToValueAtTime(f * 1.9, startTime + duration);
+        osc2.frequency.setValueAtTime(f * 2.41, startTime);
+        osc2.frequency.exponentialRampToValueAtTime(f * 1.9, startTime + duration);
 
-      const clankGain = ctx.createGain();
-      clankGain.gain.setValueAtTime(0.22, startTime);
-      clankGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        const clankGain = ctx.createGain();
+        clankGain.gain.setValueAtTime(0.22, startTime);
+        clankGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
 
-      osc1.connect(clankGain);
-      osc2.connect(clankGain);
-      clankGain.connect(ctx.destination);
+        osc1.connect(clankGain);
+        osc2.connect(clankGain);
+        clankGain.connect(ctx.destination);
 
-      osc1.start(startTime);
-      osc2.start(startTime);
-      osc1.stop(startTime + duration);
-      osc2.stop(startTime + duration);
-    });
-  } catch {
-    // Ignore audio context restrictions if any
+        osc1.start(startTime);
+        osc2.start(startTime);
+        osc1.stop(startTime + duration);
+        osc2.stop(startTime + duration);
+      });
+    } catch {
+      // Ignore audio context restrictions if any
+    }
+  };
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(scheduleRattle).catch(() => {});
+  } else {
+    scheduleRattle();
   }
 }
 
@@ -745,44 +774,52 @@ export function playLockUnlockSound(): void {
   const ctx = getLockAudioContext();
   if (!ctx) return;
 
-  try {
-    playLockRattleSound();
+  const scheduleUnlock = () => {
+    try {
+      playLockRattleSound(ctx);
 
-    const now = ctx.currentTime;
-    const unlatchTime = now + 0.52;
+      const now = ctx.currentTime;
+      const unlatchTime = now + 0.52;
 
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(320, unlatchTime);
-    osc.frequency.exponentialRampToValueAtTime(980, unlatchTime + 0.045);
-    osc.frequency.exponentialRampToValueAtTime(440, unlatchTime + 0.14);
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(320, unlatchTime);
+      osc.frequency.exponentialRampToValueAtTime(980, unlatchTime + 0.045);
+      osc.frequency.exponentialRampToValueAtTime(440, unlatchTime + 0.14);
 
-    const latchGain = ctx.createGain();
-    latchGain.gain.setValueAtTime(0.3, unlatchTime);
-    latchGain.gain.exponentialRampToValueAtTime(0.005, unlatchTime + 0.16);
+      const latchGain = ctx.createGain();
+      latchGain.gain.setValueAtTime(0.32, unlatchTime);
+      latchGain.gain.exponentialRampToValueAtTime(0.005, unlatchTime + 0.16);
 
-    osc.connect(latchGain);
-    latchGain.connect(ctx.destination);
-    osc.start(unlatchTime);
-    osc.stop(unlatchTime + 0.16);
+      osc.connect(latchGain);
+      latchGain.connect(ctx.destination);
+      osc.start(unlatchTime);
+      osc.stop(unlatchTime + 0.16);
 
-    const chimeTime = now + 0.68;
-    const chimeFreqs = [523.25, 659.25, 783.99, 1046.5];
-    chimeFreqs.forEach((freq, i) => {
-      const cOsc = ctx.createOscillator();
-      cOsc.type = 'sine';
-      cOsc.frequency.setValueAtTime(freq, chimeTime + i * 0.035);
+      const chimeTime = now + 0.68;
+      const chimeFreqs = [523.25, 659.25, 783.99, 1046.5];
+      chimeFreqs.forEach((freq, i) => {
+        const cOsc = ctx.createOscillator();
+        cOsc.type = 'sine';
+        cOsc.frequency.setValueAtTime(freq, chimeTime + i * 0.035);
 
-      const cGain = ctx.createGain();
-      cGain.gain.setValueAtTime(0.08, chimeTime + i * 0.035);
-      cGain.gain.exponentialRampToValueAtTime(0.0008, chimeTime + i * 0.035 + 0.85);
+        const cGain = ctx.createGain();
+        cGain.gain.setValueAtTime(0.09, chimeTime + i * 0.035);
+        cGain.gain.exponentialRampToValueAtTime(0.0008, chimeTime + i * 0.035 + 0.85);
 
-      cOsc.connect(cGain);
-      cGain.connect(ctx.destination);
-      cOsc.start(chimeTime + i * 0.035);
-      cOsc.stop(chimeTime + i * 0.035 + 0.9);
-    });
-  } catch {
-    // Ignore audio context restrictions
+        cOsc.connect(cGain);
+        cGain.connect(ctx.destination);
+        cOsc.start(chimeTime + i * 0.035);
+        cOsc.stop(chimeTime + i * 0.035 + 0.9);
+      });
+    } catch {
+      // Ignore audio context restrictions
+    }
+  };
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(scheduleUnlock).catch(() => {});
+  } else {
+    scheduleUnlock();
   }
 }
