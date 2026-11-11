@@ -648,9 +648,6 @@ export function Music() {
           const inNetherlands = isCountryNetherlands(geo.country);
           const detectedLang: MusicLanguage = inNetherlands ? 'nl' : 'en';
           setMusicLangState(detectedLang);
-          if (!localStorage.getItem('krabbels_subtitle_prefs')) {
-            setSubtitleLang(detectedLang === 'en' ? 'GB' : 'NL');
-          }
         }
       }).catch(() => {});
     }

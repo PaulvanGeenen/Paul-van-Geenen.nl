@@ -24,7 +24,7 @@ export function getSubtitlePreferences(): { enabled: boolean; lang: 'GB' | 'NL';
       enabled = true;
     }
 
-    let lang: 'GB' | 'NL' = 'GB';
+    let lang: 'GB' | 'NL' = 'NL';
     const effectiveLang = cookieLang || localLang;
     if (effectiveLang === 'NL' || effectiveLang === 'nl') {
       lang = 'NL';
@@ -46,7 +46,7 @@ export function getSubtitlePreferences(): { enabled: boolean; lang: 'GB' | 'NL';
 
     return { enabled, lang, size };
   } catch {
-    return { enabled: true, lang: 'GB', size: 'md' };
+    return { enabled: true, lang: 'NL', size: 'md' };
   }
 }
 
