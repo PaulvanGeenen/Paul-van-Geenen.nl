@@ -608,7 +608,8 @@ export function Music() {
   });
   const [isIOS, setIsIOS] = useState(() => {
     if (typeof navigator !== 'undefined') {
-      return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      return /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+        (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1) ||
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     }
     return false;
@@ -841,7 +842,7 @@ export function Music() {
   // Safe helper to automatically request browser native fullscreen on initial user activation or playback
   const enterBrowserFullscreenSafely = () => {
     try {
-      if (typeof document === 'undefined') return;
+      if (isIOS || typeof document === 'undefined') return;
       if (typeof navigator !== 'undefined' && 'userActivation' in navigator && !(navigator as any).userActivation?.isActive) {
         return;
       }
@@ -2176,21 +2177,39 @@ export function Music() {
 
     const targetVol = isMuted ? 0 : volume;
     if (targetVol <= 0) {
-      el.volume = 0;
+      if (!isIOS) {
+        try {
+          el.volume = 0;
+        } catch (e) {}
+      }
       const p = el.play();
-      if (p !== undefined) p.catch(() => {});
-      setIsPlaying(true);
+      if (p !== undefined) {
+        p.then(() => {
+          shouldAutoPlayRef.current = false;
+          setIsPlaying(true);
+        }).catch(() => {});
+      } else {
+        setIsPlaying(true);
+      }
       return;
     }
 
-    el.volume = 0;
+    // On iOS/iPadOS Safari, HTMLMediaElement.volume is read-only (hardware controls volume); avoid volume=0 ramp interference
+    if (!isIOS) {
+      try {
+        el.volume = 0;
+      } catch (e) {}
+    }
 
     const playPromise = el.play();
 
     const runRamp = () => {
       shouldAutoPlayRef.current = false;
+      setIsAutoplayMuted(false);
       setIsPlaying(true);
-      fadeToVolume(el, targetVol, durationMs);
+      if (!isIOS) {
+        fadeToVolume(el, targetVol, durationMs);
+      }
     };
 
     if (playPromise !== undefined) {
@@ -2203,11 +2222,13 @@ export function Music() {
         // Only fall back to muted autoplay / gesture prompt when the browser explicitly blocks unmuted autoplay (NotAllowedError)
         if (e.name !== 'NotAllowedError') {
           console.warn('Media playback error:', e);
-          shouldAutoPlayRef.current = true;
+          shouldAutoPlayRef.current = false;
+          setIsPlaying(false);
           return;
         }
 
         console.warn('Playback with audio blocked by browser policy:', e);
+        setIsPlaying(false);
         setIsAutoplayMuted(true);
         if (el === videoRef.current) {
           el.muted = true;
@@ -2229,7 +2250,12 @@ export function Music() {
           autoplayGestureCleanupRef.current = null;
         }
 
-        const handleUserGesture = () => {
+        const handleUserGesture = (evt?: Event) => {
+          const targetEl = evt?.target as HTMLElement | null;
+          // Let dedicated player control buttons (e.g., Play/Pause button) handle their own click directly
+          if (targetEl?.closest?.('[data-player-control]')) {
+            return;
+          }
           if (autoplayGestureCleanupRef.current) {
             autoplayGestureCleanupRef.current();
             autoplayGestureCleanupRef.current = null;
@@ -2242,25 +2268,31 @@ export function Music() {
           if (el) {
             el.muted = isMuted;
             setIsAutoplayMuted(false);
+            shouldAutoPlayRef.current = false;
             if (el.paused) {
               el.play().then(() => {
                 setIsPlaying(true);
-              }).catch(() => {});
+              }).catch(() => {
+                setIsPlaying(false);
+              });
             } else {
               setIsPlaying(true);
             }
-            fadeToVolume(el, targetVol, durationMs);
+            if (!isIOS) {
+              fadeToVolume(el, targetVol, durationMs);
+            }
           }
         };
 
         const cleanup = () => {
-          ['click', 'touchstart', 'keydown'].forEach(evt => {
+          // NOTE: Use touchend + click + keydown (never touchstart, which iOS/iPadOS Safari rejects for unlocking audio)
+          ['click', 'touchend', 'keydown'].forEach(evt => {
             window.removeEventListener(evt, handleUserGesture);
           });
         };
         autoplayGestureCleanupRef.current = cleanup;
 
-        ['click', 'touchstart', 'keydown'].forEach(evt => {
+        ['click', 'touchend', 'keydown'].forEach(evt => {
           window.addEventListener(evt, handleUserGesture, { once: true, passive: true });
         });
       });
@@ -2307,6 +2339,21 @@ export function Music() {
     });
   };
 
+  // Helper to check if an HTMLMediaElement already points to targetUrl without error
+  const doesMediaElementMatchUrl = (el: HTMLMediaElement, targetUrl: string): boolean => {
+    if (!el.src || !targetUrl) return false;
+    const encoded = encodeURI(targetUrl);
+    try {
+      return (
+        el.src === targetUrl ||
+        el.src.endsWith(encoded) ||
+        decodeURIComponent(el.src) === decodeURIComponent(targetUrl)
+      );
+    } catch {
+      return el.src === targetUrl || el.src.endsWith(encoded);
+    }
+  };
+
   // Play / Pause toggle with smooth fade-out on stop and smooth fade-in on play
   const togglePlayPause = () => {
     // Tijdens de filmische eind-overgang start het volgende nummer vanzelf; negeer play/pause dan even
@@ -2317,28 +2364,38 @@ export function Music() {
     }
     const activeFormat = getEffectiveFormat(currentTrack, selectedFormat);
     const el = activeFormat === 'video' ? videoRef.current : getActiveAudioEl();
+    const isActuallyPlaying = el ? (!el.paused && !el.ended) : isPlaying;
 
-    if (isPlaying) {
+    if (isActuallyPlaying) {
       pausePlaybackWithVolumeRamp(el, 300);
     } else {
-      enterBrowserFullscreenSafely();
+      if (autoplayGestureCleanupRef.current) {
+        autoplayGestureCleanupRef.current();
+        autoplayGestureCleanupRef.current = null;
+      }
       setPhase('player');
       shouldAutoPlayRef.current = false;
-      setIsPlaying(true);
+      setIsAutoplayMuted(false);
 
-      if (isAutoplayMuted && el) {
-        if (!isIOS && !isMobileDevice) {
+      if (el) {
+        const targetMediaUrl = currentTrack ? getMediaUrl(currentTrack, activeFormat) : undefined;
+        if (targetMediaUrl && (!el.src || el.error || !doesMediaElementMatchUrl(el, targetMediaUrl))) {
+          el.src = targetMediaUrl;
+          try {
+            el.load();
+          } catch (e) {}
+        }
+        if (!isIOS && !isMobileDevice && isAutoplayMuted) {
           try {
             equalizerEngine.onResumeMediaElement(el, 150);
           } catch (err) {}
         }
-        el.muted = false;
-        setIsAutoplayMuted(false);
-      }
-
-      if (el) {
+        el.muted = isMuted;
+        // Start playback synchronously within the click gesture BEFORE requesting fullscreen
         startPlaybackWithVolumeRamp(el, 750);
       }
+
+      enterBrowserFullscreenSafely();
     }
     resetNavBarTimer();
     resetRatingButtonsTimer();
@@ -2373,18 +2430,25 @@ export function Music() {
       clearElFadeTimer(incomingEl);
     }
 
-    // Smoothly fade OUT outgoing track over 320ms, then pause and reset
+    // Smoothly fade OUT outgoing track over 320ms on desktop/Android, pause directly on iOS
     if (outgoingEl && outgoingEl !== incomingEl) {
       if (!outgoingEl.paused) {
-        fadeToVolume(outgoingEl, 0, 320, () => {
+        if (isIOS) {
           try {
             outgoingEl.pause();
             outgoingEl.currentTime = 0;
-            if (!isIOS && !isMobileDevice) {
-              equalizerEngine.detachMediaElement(outgoingEl);
-            }
           } catch (e) {}
-        });
+        } else {
+          fadeToVolume(outgoingEl, 0, 320, () => {
+            try {
+              outgoingEl.pause();
+              outgoingEl.currentTime = 0;
+              if (!isIOS && !isMobileDevice) {
+                equalizerEngine.detachMediaElement(outgoingEl);
+              }
+            } catch (e) {}
+          });
+        }
       } else if (!isIOS && !isMobileDevice) {
         try {
           equalizerEngine.detachMediaElement(outgoingEl);
@@ -2394,14 +2458,9 @@ export function Music() {
 
     const targetMediaUrl = targetTrack ? getMediaUrl(targetTrack, targetEffectiveFormat) : undefined;
     if (incomingEl && targetMediaUrl) {
-      const targetEncodedUrl = encodeURI(targetMediaUrl);
-      const isDifferent =
-        !incomingEl.src ||
-        (incomingEl.src !== targetMediaUrl &&
-          !incomingEl.src.endsWith(targetEncodedUrl) &&
-          decodeURIComponent(incomingEl.src) !== decodeURIComponent(targetMediaUrl));
+      const needsLoad = !incomingEl.src || Boolean(incomingEl.error) || !doesMediaElementMatchUrl(incomingEl, targetMediaUrl);
 
-      if (isDifferent) {
+      if (needsLoad) {
         incomingEl.src = targetMediaUrl;
       } else {
         try {
@@ -2409,7 +2468,11 @@ export function Music() {
         } catch (e) {}
       }
 
-      incomingEl.volume = 0;
+      if (!isIOS) {
+        try {
+          incomingEl.volume = 0;
+        } catch (e) {}
+      }
       incomingEl.muted = isMuted;
       setIsAutoplayMuted(false);
 
@@ -2821,22 +2884,37 @@ export function Music() {
       gestureTypeRef.current = 'none';
 
       resetRatingButtonsTimer();
-      enterBrowserFullscreenSafely();
 
       const activeEl = effectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
       if (isAutoplayMuted && activeEl) {
+        if (autoplayGestureCleanupRef.current) {
+          autoplayGestureCleanupRef.current();
+          autoplayGestureCleanupRef.current = null;
+        }
         if (!isIOS && !isMobileDevice) {
           try {
             equalizerEngine.onResumeMediaElement(activeEl, 200);
           } catch (err) {}
         }
-        activeEl.muted = false;
-        setIsAutoplayMuted(false);
-        if (activeEl.paused) {
-          activeEl.play().then(() => setIsPlaying(true)).catch(() => {});
+        const activeFmt = getEffectiveFormat(currentTrack, selectedFormat);
+        const targetMediaUrl = currentTrack ? getMediaUrl(currentTrack, activeFmt) : undefined;
+        if (targetMediaUrl && (!activeEl.src || activeEl.error || !doesMediaElementMatchUrl(activeEl, targetMediaUrl))) {
+          activeEl.src = targetMediaUrl;
+          try {
+            activeEl.load();
+          } catch (err) {}
         }
-        fadeToVolume(activeEl, volume, 400);
+        activeEl.muted = isMuted;
+        setIsAutoplayMuted(false);
+        shouldAutoPlayRef.current = false;
+        if (activeEl.paused) {
+          startPlaybackWithVolumeRamp(activeEl, 400);
+        } else {
+          setIsPlaying(true);
+        }
       }
+
+      enterBrowserFullscreenSafely();
 
       setShowNavBar(prev => {
         const next = !prev;
@@ -4811,21 +4889,32 @@ export function Music() {
                 >
                   <button
                     type="button"
+                    data-player-control="start-autoplay"
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (autoplayGestureCleanupRef.current) {
+                        autoplayGestureCleanupRef.current();
+                        autoplayGestureCleanupRef.current = null;
+                      }
                       const activeEl = effectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
                       if (activeEl) {
-                        try {
-                          equalizerEngine.resume();
-                        } catch (err) {}
-                        activeEl.muted = false;
-                        setIsAutoplayMuted(false);
-                        if (activeEl.paused) {
-                          activeEl.play().then(() => setIsPlaying(true)).catch(() => {});
-                        } else {
-                          setIsPlaying(true);
+                        if (!isIOS && !isMobileDevice) {
+                          try {
+                            equalizerEngine.resume();
+                          } catch (err) {}
                         }
-                        fadeToVolume(activeEl, volume, 400);
+                        const activeFmt = getEffectiveFormat(currentTrack, selectedFormat);
+                        const targetMediaUrl = currentTrack ? getMediaUrl(currentTrack, activeFmt) : undefined;
+                        if (targetMediaUrl && (!activeEl.src || activeEl.error || !doesMediaElementMatchUrl(activeEl, targetMediaUrl))) {
+                          activeEl.src = targetMediaUrl;
+                          try {
+                            activeEl.load();
+                          } catch (err) {}
+                        }
+                        activeEl.muted = isMuted;
+                        setIsAutoplayMuted(false);
+                        shouldAutoPlayRef.current = false;
+                        startPlaybackWithVolumeRamp(activeEl, 400);
                       }
                     }}
                     className="flex items-center gap-2.5 px-5 py-3 rounded-full bg-earth-gold hover:bg-amber-400 text-black text-xs sm:text-sm font-bold border border-white/30 shadow-[0_10px_40px_rgba(212,175,55,0.6)] cursor-pointer transition-all hover:scale-105 active:scale-95 animate-bounce"
@@ -5240,6 +5329,7 @@ export function Music() {
 
                       <button
                         type="button"
+                        data-player-control="play-pause"
                         onClick={togglePlayPause}
                         className="w-12 h-12 rounded-full bg-earth-gold hover:bg-earth-gold/90 text-black flex items-center justify-center shadow-lg transition-transform active:scale-90 cursor-pointer shrink-0"
                         title={isPlaying ? t.player.pause : t.player.play}
@@ -5282,7 +5372,7 @@ export function Music() {
         ref={audioRefA}
         preload="auto"
         playsInline
-        crossOrigin="anonymous"
+        crossOrigin={!isIOS && !isMobileDevice ? 'anonymous' : undefined}
         onTimeUpdate={() => {
           if (activeDeckRef.current === 'A') handleMediaTimeUpdate(audioRefA.current);
         }}
@@ -5324,13 +5414,20 @@ export function Music() {
         onPause={() => {
           if (activeDeckRef.current === 'A') setIsPlaying(false);
         }}
+        onError={(e) => {
+          console.warn('[Music] Audio deck A error:', (e.currentTarget as HTMLAudioElement).error);
+          if (activeDeckRef.current === 'A') {
+            shouldAutoPlayRef.current = false;
+            setIsPlaying(false);
+          }
+        }}
       />
 
       <audio
         ref={audioRefB}
         preload="auto"
         playsInline
-        crossOrigin="anonymous"
+        crossOrigin={!isIOS && !isMobileDevice ? 'anonymous' : undefined}
         onTimeUpdate={() => {
           if (activeDeckRef.current === 'B') handleMediaTimeUpdate(audioRefB.current);
         }}
@@ -5371,6 +5468,13 @@ export function Music() {
         }}
         onPause={() => {
           if (activeDeckRef.current === 'B') setIsPlaying(false);
+        }}
+        onError={(e) => {
+          console.warn('[Music] Audio deck B error:', (e.currentTarget as HTMLAudioElement).error);
+          if (activeDeckRef.current === 'B') {
+            shouldAutoPlayRef.current = false;
+            setIsPlaying(false);
+          }
         }}
       />
 
