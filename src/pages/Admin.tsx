@@ -1,7 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload } from 'lucide-react';
-import { generateRedirectQrDataUrl, optimizeCenterLogoForBook, buildRedirectQrUrl } from '../utils/qrGenerator';
+import {
+  BOOK_DEFAULT_QR_STYLE,
+  buildRedirectQrUrl,
+  downloadDataUrlAsPng,
+  downloadStyledQr,
+  generateRedirectQrDataUrl,
+  optimizeCenterLogoForBook,
+} from '../utils/qrGenerator';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { cn } from '../lib/utils';
 import { isOwnAnalyticsIgnored, setAdminCookie, markDeviceAsAdmin } from '../lib/analytics';
@@ -866,13 +873,13 @@ export function Admin() {
     const bookLogo = getBookQrLogo(boekId);
     setIsGeneratingQr(true);
     try {
-      const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 400);
+      const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 200);
       setNewItem(prev => ({ ...prev, qrImage: dataUrl }));
       setQrImageOrigin('auto');
       setUploadError(null);
       if (!silent) {
         setUploadSuccess(
-          `Automatisch QR-code gegenereerd voor:\n"${targetUrl}"` +
+          `Automatisch QR-code (200x200) gegenereerd voor:\n"${targetUrl}"` +
           (bookLogo ? ' (inclusief midden-logo van het boek)' : ' (zonder midden-logo: boek heeft nog geen logo ingesteld)') +
           (verified ? ' ✓ Scanbaar' : '')
         );
@@ -902,13 +909,13 @@ export function Admin() {
       const bookLogo = boeken.find(b => b.id === newItem.boekId)?.qrLogo || '';
       setIsGeneratingQr(true);
       try {
-        const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 400);
+        const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 200);
         if (cancelled) return;
         setNewItem(prev => ({ ...prev, qrImage: dataUrl }));
         setQrImageOrigin('auto');
         setUploadError(null);
         setUploadSuccess(
-          `Automatisch QR-code gegenereerd voor:\n"${targetUrl}"` +
+          `Automatisch QR-code (200x200) gegenereerd voor:\n"${targetUrl}"` +
           (bookLogo ? ' (met boek-logo)' : ' (zonder boek-logo)') +
           (verified ? ' ✓ Scanbaar' : '')
         );
@@ -933,7 +940,7 @@ export function Admin() {
       // Zorg dat er bij opslaan altijd automatisch een QR-afbeelding wordt gegenereerd indien nog leeg
       if (!payloadToSave.qrImage && payloadToSave.id.trim().length >= 2) {
         const bookLogo = getBookQrLogo(payloadToSave.boekId);
-        const generated = await generateRedirectQrDataUrl(payloadToSave.id, bookLogo, 400);
+        const generated = await generateRedirectQrDataUrl(payloadToSave.id, bookLogo, 200);
         payloadToSave.qrImage = generated.dataUrl;
       }
 
@@ -1689,14 +1696,18 @@ export function Admin() {
                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                       Ja
                                     </span>
-                                    <a
-                                      href={code.qrImage}
-                                      download={`qrcode_${code.id}.jpg`}
-                                      className="p-1.5 text-earth-light/50 hover:text-earth-gold border border-transparent hover:border-white/10 hover:bg-white/5 rounded-lg transition-all"
-                                      title="QR Code downloaden"
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!code.qrImage) return;
+                                        const fileName = code.song?.trim() || code.id || 'qrcode';
+                                        downloadDataUrlAsPng(code.qrImage, fileName);
+                                      }}
+                                      className="p-1.5 text-earth-light/50 hover:text-earth-gold border border-transparent hover:border-white/10 hover:bg-white/5 rounded-lg transition-all cursor-pointer"
+                                      title={`Downloaden als "${(code.song?.trim() || code.id || 'qrcode')}.png"`}
                                     >
                                       <Download className="w-4 h-4" />
-                                    </a>
+                                    </button>
                                   </>
                                 ) : (
                                   <span className="text-earth-light/20 text-xs font-mono">-</span>
@@ -4000,14 +4011,34 @@ export function Admin() {
                             referrerPolicy="no-referrer"
                           />
                           <div className="flex gap-4">
-                            <a
-                              href={newItem.qrImage}
-                              download={`qrcode_${newItem.id || 'redirect'}.jpg`}
-                              className="text-xs text-earth-gold hover:text-earth-gold/80 hover:underline transition-colors mt-1 flex items-center gap-1 font-semibold"
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!newItem.qrImage) return;
+                                const fileName = newItem.song?.trim() || newItem.id || 'redirect';
+                                if (qrImageOrigin === 'auto' && newItem.id.trim().length >= 2) {
+                                  const bookLogo = getBookQrLogo(newItem.boekId);
+                                  await downloadStyledQr(
+                                    {
+                                      ...BOOK_DEFAULT_QR_STYLE,
+                                      url: buildRedirectQrUrl(newItem.id),
+                                      size: 200,
+                                      errorCorrectionLevel: bookLogo ? 'H' : 'Q',
+                                      image: bookLogo || undefined,
+                                    },
+                                    'png',
+                                    fileName
+                                  );
+                                } else {
+                                  await downloadDataUrlAsPng(newItem.qrImage, fileName);
+                                }
+                              }}
+                              className="text-xs text-earth-gold hover:text-earth-gold/80 hover:underline transition-colors mt-1 flex items-center gap-1 font-semibold cursor-pointer"
+                              title={`Downloaden als "${(newItem.song?.trim() || newItem.id || 'redirect')}.png"`}
                             >
                               <Download className="w-3.5 h-3.5" />
                               Downloaden
-                            </a>
+                            </button>
                             <button
                               type="button"
                               onClick={() => {

@@ -292,6 +292,9 @@ export function QRStudio() {
   };
 
   const deriveFileName = () => {
+    if (matchedMapping?.song?.trim()) {
+      return matchedMapping.song.trim();
+    }
     try {
       const parsed = new URL(config.url);
       const slug = parsed.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
@@ -330,7 +333,7 @@ export function QRStudio() {
     setSavingToMapping(true);
     setSaveToast(null);
     try {
-      const { dataUrl } = await generateRedirectQrDataUrl(matchedMapping.id, effectiveLogo, 400);
+      const { dataUrl } = await generateRedirectQrDataUrl(matchedMapping.id, effectiveLogo, 200);
       const updated = { ...matchedMapping, qrImage: dataUrl };
       const token = localStorage.getItem('krabbels_admin_token') || 'GONDA1984';
       let savedViaApi = false;

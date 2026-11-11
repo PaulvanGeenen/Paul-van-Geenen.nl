@@ -30,7 +30,7 @@ export interface QrStyleConfig {
 }
 
 export const BOOK_DEFAULT_QR_STYLE: Omit<QrStyleConfig, 'url' | 'image'> = {
-  size: 1200,
+  size: 200,
   fgColor: '#000000',
   bgColor: '#FFFFFF',
   dotType: 'square',
@@ -153,13 +153,13 @@ export async function verifyQrBlobScanability(blob: Blob): Promise<{
 }
 
 /**
- * Genereert een compacte JPEG data-URL van een QR-code (standaard boekstijl)
- * voor snelle opslag bij Redirect Mappings en verifieert direct met jsQR.
+ * Genereert een scherpe 200x200 PNG data-URL van een QR-code (standaard boekstijl)
+ * voor opslag bij Redirect Mappings en verifieert direct met jsQR.
  */
 export async function generateRedirectQrDataUrl(
   redirectCode: string,
   centerLogo?: string | null,
-  size = 400
+  size = 200
 ): Promise<{ dataUrl: string; targetUrl: string; verified: boolean }> {
   const targetUrl = buildRedirectQrUrl(redirectCode);
   const config: QrStyleConfig = {
@@ -190,7 +190,7 @@ export async function generateRedirectQrDataUrl(
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const decoded = jsQR(imageData.data, imageData.width, imageData.height);
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+  const dataUrl = canvas.toDataURL('image/png');
 
   return {
     dataUrl,
@@ -246,6 +246,40 @@ export function optimizeCenterLogoForBook(file: File, maxDim = 512): Promise<str
   });
 }
 
+export function sanitizeDownloadFileName(name: string, fallback = 'qrcode'): string {
+  const cleaned = (name || '')
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || fallback;
+}
+
+/**
+ * Converteert een willekeurige QR-dataURL (bijv. JPEG uit database) naar een echte PNG-download.
+ */
+export async function downloadDataUrlAsPng(dataUrl: string, fileName: string): Promise<void> {
+  const safeName = sanitizeDownloadFileName(fileName, 'qrcode');
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.crossOrigin = 'anonymous';
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = dataUrl;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width || 400;
+  canvas.height = img.height || 400;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas context niet beschikbaar.');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0);
+
+  const pngBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!pngBlob) throw new Error('PNG export mislukt.');
+  triggerBlobDownload(pngBlob, `${safeName}.png`);
+}
+
 /**
  * Downloadt een QR-code als haarscherpe PNG, vector SVG of drukklare PDF.
  */
@@ -254,7 +288,7 @@ export async function downloadStyledQr(
   format: 'png' | 'svg' | 'pdf',
   fileName: string
 ): Promise<void> {
-  const safeName = fileName.replace(/[^a-zA-Z0-9_-]/g, '_') || 'qrcode';
+  const safeName = sanitizeDownloadFileName(fileName, 'qrcode');
 
   if (format === 'svg') {
     const svgQr = createStyledQrInstance(config, 'svg');
