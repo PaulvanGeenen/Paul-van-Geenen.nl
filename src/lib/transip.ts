@@ -79,9 +79,12 @@ export async function getTransipQrCodes(): Promise<any[]> {
 }
 
 export async function getTransipBoeken(): Promise<any[]> {
-  const sql = `SELECT id, volgnummer, boektitel FROM boeken ORDER BY volgnummer ASC;`;
+  const sql = `SELECT id, volgnummer, boektitel, qr_logo AS qrLogo FROM boeken ORDER BY volgnummer ASC;`;
   const rows = await transipQuerySql(sql);
-  return rows || [];
+  if (rows !== null) return rows;
+  // Fallback indien oudere schema zonder qr_logo kolom
+  const fallbackRows = await transipQuerySql(`SELECT id, volgnummer, boektitel FROM boeken ORDER BY volgnummer ASC;`);
+  return fallbackRows || [];
 }
 
 export async function getTransipHoofdstukken(boekId?: string): Promise<any[]> {
@@ -91,11 +94,12 @@ export async function getTransipHoofdstukken(boekId?: string): Promise<any[]> {
   return rows || [];
 }
 
-export async function saveTransipBoek(boek: { id?: string; volgnummer: number; boektitel: string }): Promise<boolean> {
+export async function saveTransipBoek(boek: { id?: string; volgnummer: number; boektitel: string; qrLogo?: string | null }): Promise<boolean> {
   const cleanId = (boek.id || `bk_${Date.now()}`).replace(/'/g, "''");
   const cleanTitel = (boek.boektitel || '').trim().replace(/'/g, "''");
   const num = parseInt(String(boek.volgnummer), 10) || 1;
-  const sql = `INSERT INTO boeken (id, volgnummer, boektitel) VALUES ('${cleanId}', ${num}, '${cleanTitel}') ON DUPLICATE KEY UPDATE volgnummer = VALUES(volgnummer), boektitel = VALUES(boektitel);`;
+  const logoVal = boek.qrLogo ? `'${String(boek.qrLogo).replace(/'/g, "''")}'` : 'NULL';
+  const sql = `INSERT INTO boeken (id, volgnummer, boektitel, qr_logo) VALUES ('${cleanId}', ${num}, '${cleanTitel}', ${logoVal}) ON DUPLICATE KEY UPDATE volgnummer = VALUES(volgnummer), boektitel = VALUES(boektitel), qr_logo = VALUES(qr_logo);`;
   const res = await transipQuerySql(sql);
   return res !== null;
 }

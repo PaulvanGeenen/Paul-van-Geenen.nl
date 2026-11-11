@@ -186,6 +186,19 @@ function ensure_analytics_columns($pdo) {
     } catch (Exception $e) {}
 }
 
+// Zorg dat de kolom 'qr_logo' bestaat op de boeken-tabel
+function ensure_boeken_columns($pdo) {
+    static $boekenEnsured = false;
+    if ($boekenEnsured) return;
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM `boeken` LIKE 'qr_logo'")->fetchAll();
+        if (empty($cols)) {
+            $pdo->exec("ALTER TABLE `boeken` ADD COLUMN `qr_logo` LONGTEXT NULL AFTER `boektitel`");
+        }
+        $boekenEnsured = true;
+    } catch (Exception $e) {}
+}
+
 // Als er geen databaseverbinding is gemaakt:
 if (!$pdo) {
     http_response_code(500);
@@ -331,6 +344,7 @@ if ($action === 'init_tables') {
               `id` VARCHAR(64) PRIMARY KEY,
               `volgnummer` INT NOT NULL DEFAULT 1,
               `boektitel` VARCHAR(255) NOT NULL,
+              `qr_logo` LONGTEXT NULL,
               `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -366,6 +380,8 @@ if ($action === 'init_tables') {
                 $pdo->exec("ALTER TABLE `music_listens` ADD INDEX `idx_completed` (`completed`)");
             }
         } catch (Exception $e) {}
+
+        ensure_boeken_columns($pdo);
 
         echo json_encode([
             "success" => true,
@@ -1137,6 +1153,9 @@ if ($action === 'sql' || $action === 'execute_sql') {
         exit;
     }
     try {
+        if (stripos($sql, 'boeken') !== false) {
+            ensure_boeken_columns($pdo);
+        }
         // Multi-query support
         $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, 1);
         $stmt = $pdo->prepare($sql);
@@ -1192,8 +1211,9 @@ if ($action === 'get_overview') {
 // 9. ACTIES: BOEKEN BEHEER
 // ==========================================
 if ($action === 'get_boeken') {
+    ensure_boeken_columns($pdo);
     try {
-        $stmt = $pdo->query("SELECT id, volgnummer, boektitel FROM boeken ORDER BY volgnummer ASC");
+        $stmt = $pdo->query("SELECT id, volgnummer, boektitel, qr_logo AS qrLogo FROM boeken ORDER BY volgnummer ASC");
         $boeken = $stmt->fetchAll();
         echo json_encode(["success" => true, "boeken" => $boeken]);
     } catch (PDOException $e) {
@@ -1204,9 +1224,11 @@ if ($action === 'get_boeken') {
 }
 
 if ($action === 'save_boek') {
+    ensure_boeken_columns($pdo);
     $id = $input['id'] ?? ($_POST['id'] ?? '');
     $volgnummer = (int)($input['volgnummer'] ?? ($_POST['volgnummer'] ?? 1));
     $boektitel = trim($input['boektitel'] ?? ($_POST['boektitel'] ?? ''));
+    $qrLogo = $input['qrLogo'] ?? ($input['qr_logo'] ?? ($_POST['qrLogo'] ?? null));
 
     if (empty($id) || empty($boektitel)) {
         http_response_code(400);
@@ -1215,11 +1237,11 @@ if ($action === 'save_boek') {
     }
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO boeken (id, volgnummer, boektitel)
-            VALUES (?, ?, ?)
-            ON DUPLICATE KEY UPDATE volgnummer = VALUES(volgnummer), boektitel = VALUES(boektitel)
+            INSERT INTO boeken (id, volgnummer, boektitel, qr_logo)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE volgnummer = VALUES(volgnummer), boektitel = VALUES(boektitel), qr_logo = VALUES(qr_logo)
         ");
-        $stmt->execute([$id, $volgnummer, $boektitel]);
+        $stmt->execute([$id, $volgnummer, $boektitel, $qrLogo ?: null]);
         echo json_encode(["success" => true, "id" => $id]);
     } catch (PDOException $e) {
         http_response_code(500);

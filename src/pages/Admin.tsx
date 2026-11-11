@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw } from 'lucide-react';
+import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload } from 'lucide-react';
+import { generateRedirectQrDataUrl, optimizeCenterLogoForBook, buildRedirectQrUrl } from '../utils/qrGenerator';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { cn } from '../lib/utils';
 import { isOwnAnalyticsIgnored, setAdminCookie, markDeviceAsAdmin } from '../lib/analytics';
@@ -47,6 +48,7 @@ interface BookAdminData {
   id: string;
   volgnummer: number;
   boektitel: string;
+  qrLogo?: string;
 }
 
 interface ChapterAdminData {
@@ -328,6 +330,8 @@ export function Admin() {
   const [editingQRCode, setEditingQRCode] = useState<QRCodeData | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [qrImageOrigin, setQrImageOrigin] = useState<'none' | 'auto' | 'manual' | 'existing'>('none');
+  const [isGeneratingQr, setIsGeneratingQr] = useState(false);
   const [newItem, setNewItem] = useState<QRCodeData>({
     id: '',
     boekId: '',
@@ -343,9 +347,10 @@ export function Admin() {
   // Book Add/Edit state
   const [isAddingBoek, setIsAddingBoek] = useState(false);
   const [editingBoek, setEditingBoek] = useState<BookAdminData | null>(null);
-  const [newBoek, setNewBoek] = useState<{ volgnummer: number; boektitel: string }>({
+  const [newBoek, setNewBoek] = useState<{ volgnummer: number; boektitel: string; qrLogo?: string }>({
     volgnummer: 1,
-    boektitel: ''
+    boektitel: '',
+    qrLogo: ''
   });
 
   // Chapter Add/Edit state
@@ -850,11 +855,89 @@ export function Admin() {
     }
   }, [boeken, selectedBookQRFilter, selectedBookChapterFilter]);
 
+  const getBookQrLogo = (boekId?: string): string => {
+    if (!boekId) return '';
+    return boeken.find(b => b.id === boekId)?.qrLogo || '';
+  };
+
+  const runAutoGenerateQr = async (code: string, boekId?: string, silent = false) => {
+    const cleanCode = (code || '').trim().toUpperCase();
+    if (cleanCode.length < 2) return '';
+    const bookLogo = getBookQrLogo(boekId);
+    setIsGeneratingQr(true);
+    try {
+      const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 400);
+      setNewItem(prev => ({ ...prev, qrImage: dataUrl }));
+      setQrImageOrigin('auto');
+      setUploadError(null);
+      if (!silent) {
+        setUploadSuccess(
+          `Automatisch QR-code gegenereerd voor:\n"${targetUrl}"` +
+          (bookLogo ? ' (inclusief midden-logo van het boek)' : ' (zonder midden-logo: boek heeft nog geen logo ingesteld)') +
+          (verified ? ' ✓ Scanbaar' : '')
+        );
+      }
+      return dataUrl;
+    } catch (err) {
+      console.error('Auto QR generation error:', err);
+      if (!silent) {
+        setUploadError('Automatisch genereren van QR-code is mislukt.');
+      }
+      return '';
+    } finally {
+      setIsGeneratingQr(false);
+    }
+  };
+
+  // Automatische achtergrond-generatie zodra Redirect Code of Boek verandert (tenzij handmatig geüpload)
+  useEffect(() => {
+    if (!isAdding) return;
+    if (qrImageOrigin === 'manual' || qrImageOrigin === 'existing') return;
+    const cleanCode = newItem.id.trim().toUpperCase();
+    if (cleanCode.length < 2) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (cancelled) return;
+      const bookLogo = boeken.find(b => b.id === newItem.boekId)?.qrLogo || '';
+      setIsGeneratingQr(true);
+      try {
+        const { dataUrl, targetUrl, verified } = await generateRedirectQrDataUrl(cleanCode, bookLogo, 400);
+        if (cancelled) return;
+        setNewItem(prev => ({ ...prev, qrImage: dataUrl }));
+        setQrImageOrigin('auto');
+        setUploadError(null);
+        setUploadSuccess(
+          `Automatisch QR-code gegenereerd voor:\n"${targetUrl}"` +
+          (bookLogo ? ' (met boek-logo)' : ' (zonder boek-logo)') +
+          (verified ? ' ✓ Scanbaar' : '')
+        );
+      } catch (err) {
+        console.warn('Background QR generation failed:', err);
+      } finally {
+        if (!cancelled) setIsGeneratingQr(false);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isAdding, newItem.id, newItem.boekId, qrImageOrigin, boeken]);
+
   // QRCode Handlers
   const saveQRCode = async (idWasChanged: boolean) => {
     setLoading(true);
     try {
-      await saveDocOrFirestore('/api/qrcodes', 'qrcodes', newItem.id, newItem);
+      let payloadToSave = { ...newItem };
+      // Zorg dat er bij opslaan altijd automatisch een QR-afbeelding wordt gegenereerd indien nog leeg
+      if (!payloadToSave.qrImage && payloadToSave.id.trim().length >= 2) {
+        const bookLogo = getBookQrLogo(payloadToSave.boekId);
+        const generated = await generateRedirectQrDataUrl(payloadToSave.id, bookLogo, 400);
+        payloadToSave.qrImage = generated.dataUrl;
+      }
+
+      await saveDocOrFirestore('/api/qrcodes', 'qrcodes', payloadToSave.id, payloadToSave);
       
       if (idWasChanged && editingQRCode) {
         // Delete old record with original ID
@@ -864,6 +947,7 @@ export function Admin() {
       setIsAdding(false);
       setEditingQRCode(null);
       setShowConfirmIdChange(false);
+      setQrImageOrigin('none');
       setUploadError(null);
       setUploadSuccess(null);
       setNewItem({
@@ -972,9 +1056,11 @@ export function Admin() {
                 storageCtx.drawImage(img, 0, 0, width, height);
                 const optimizedBase64 = storageCanvas.toDataURL("image/jpeg", 0.75);
                 setNewItem(prev => ({ ...prev, qrImage: optimizedBase64 }));
+                setQrImageOrigin('manual');
                 setUploadSuccess(`Afbeelding [${img.width}x${img.height}px] met succes gescand!\n\nDe QR-code bevat de waarde:\n"${decodedValue}"\n\nDit komt correct overeen met de ingestelde redirectcode: "${targetId}".`);
               } else {
                 setNewItem(prev => ({ ...prev, qrImage: result }));
+                setQrImageOrigin('manual');
                 setUploadSuccess(`Afbeelding met succes gescand!\n\nWaarde: "${decodedValue}" komt overeen met "${targetId}".`);
               }
             } else {
@@ -1046,6 +1132,19 @@ export function Admin() {
   };
 
   // Book Handlers
+  const handleBookLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const optimized = await optimizeCenterLogoForBook(file, 512);
+      setNewBoek(prev => ({ ...prev, qrLogo: optimized }));
+    } catch (err) {
+      console.error('Book logo upload error:', err);
+      setError('Logo-afbeelding kon niet worden verwerkt.');
+    }
+    e.target.value = '';
+  };
+
   const handleSaveBoek = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBoek.boektitel) return;
@@ -1055,12 +1154,13 @@ export function Admin() {
       const targetId = editingBoek?.id || undefined;
       const bPayload = {
         volgnummer: newBoek.volgnummer,
-        boektitel: newBoek.boektitel
+        boektitel: newBoek.boektitel,
+        qrLogo: newBoek.qrLogo || null
       };
       await saveDocOrFirestore('/api/boeken', 'boeken', targetId, bPayload);
       setIsAddingBoek(false);
       setEditingBoek(null);
-      setNewBoek({ volgnummer: 1, boektitel: '' });
+      setNewBoek({ volgnummer: 1, boektitel: '', qrLogo: '' });
       fetchAllData();
     } catch (err) {
       console.error(err);
@@ -1250,6 +1350,24 @@ export function Admin() {
                 <Lock className={cn("w-3.5 h-3.5", activeTab === 'track_locks' ? "text-black" : "text-earth-gold")} />
                 <span>Sloten & SoundTracks Beheer</span>
               </button>
+
+              {/* QR-CODE STUDIO SHORTCUT PILL (OPENT NIEUW VENSTER/TABBLAD) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const targetBookId = selectedBookQRFilter || boeken[0]?.id || '';
+                  const url = targetBookId
+                    ? `/beheer/qr-studio?boekId=${encodeURIComponent(targetBookId)}`
+                    : '/beheer/qr-studio';
+                  window.open(url, '_blank', 'noopener,noreferrer');
+                }}
+                className="flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer bg-white/5 border-earth-gold/30 text-white/90 hover:border-earth-gold hover:bg-earth-gold/15"
+                title="Open de QR-code Studio in een nieuw venster om drukklare QR-codes te maken en te downloaden"
+              >
+                <QrCode className="w-3.5 h-3.5 text-earth-gold" />
+                <span>QR-code Studio</span>
+                <ExternalLink className="w-3 h-3 text-earth-gold/70" />
+              </button>
             </div>
             <p className="text-earth-light/60 italic">Onderhoud de boeken, hoofdstukken en redirects.</p>
           </div>
@@ -1260,6 +1378,8 @@ export function Admin() {
                   const preselectedBookId = selectedBookQRFilter || boeken[0]?.id || '';
                   const preselectedBook = boeken.find(b => b.id === preselectedBookId);
                   const firstChapter = hoofdstukken.find(h => h.boekId === preselectedBookId);
+                  setEditingQRCode(null);
+                  setQrImageOrigin('none');
                   setNewItem({
                     id: '',
                     boekId: preselectedBookId,
@@ -1285,7 +1405,7 @@ export function Admin() {
               <button 
                 onClick={() => {
                   setEditingBoek(null);
-                  setNewBoek({ volgnummer: boeken.length + 1, boektitel: '' });
+                  setNewBoek({ volgnummer: boeken.length + 1, boektitel: '', qrLogo: '' });
                   setIsAddingBoek(true);
                 }}
                 className="flex items-center gap-2 bg-earth-gold text-black px-6 py-3 rounded-full font-bold hover:scale-105 transition-transform"
@@ -1598,8 +1718,22 @@ export function Admin() {
                             </td>
                             <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
                               <button
+                                type="button"
+                                onClick={() => {
+                                  const qs = new URLSearchParams();
+                                  if (code.id) qs.set('code', code.id);
+                                  if (code.boekId) qs.set('boekId', code.boekId);
+                                  window.open(`/beheer/qr-studio?${qs.toString()}`, '_blank', 'noopener,noreferrer');
+                                }}
+                                className="p-2 text-earth-light/50 hover:text-earth-gold inline-block align-middle transition-colors"
+                                title="Open in QR-code Studio (hoge resolutie PNG/SVG/PDF)"
+                              >
+                                <QrCode className="w-4 h-4" />
+                              </button>
+                              <button
                                 onClick={() => {
                                   setEditingQRCode(code);
+                                  setQrImageOrigin(code.qrImage ? 'existing' : 'none');
                                   setNewItem({
                                     ...code,
                                     qrImage: code.qrImage || ''
@@ -1640,13 +1774,14 @@ export function Admin() {
                   <tr className="bg-white/5 text-earth-light/40 text-xs uppercase tracking-widest font-bold">
                     <th className="px-6 py-4 w-28">Volgnummer</th>
                     <th className="px-6 py-4">Boektitel</th>
+                    <th className="px-6 py-4">QR Midden-Logo</th>
                     <th className="px-6 py-4 text-right">Acties</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {boeken.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center text-earth-light/30">
+                      <td colSpan={4} className="px-6 py-12 text-center text-earth-light/30">
                         Geen boeken gevonden. Klik op "Nieuw Boek" om er een aan te maken.
                       </td>
                     </tr>
@@ -1659,11 +1794,25 @@ export function Admin() {
                         <td className="px-6 py-4 text-white font-medium">
                           {b.boektitel}
                         </td>
+                        <td className="px-6 py-4">
+                          {b.qrLogo ? (
+                            <div className="flex items-center gap-2.5">
+                              <img
+                                src={b.qrLogo}
+                                alt={`QR logo ${b.boektitel}`}
+                                className="w-9 h-9 object-contain bg-white rounded-md p-0.5 border border-white/20"
+                              />
+                              <span className="text-xs text-emerald-400 font-medium">Ingesteld</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-earth-light/35 italic">Geen logo</span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 text-right space-x-2">
                           <button
                             onClick={() => {
                               setEditingBoek(b);
-                              setNewBoek({ volgnummer: b.volgnummer, boektitel: b.boektitel });
+                              setNewBoek({ volgnummer: b.volgnummer, boektitel: b.boektitel, qrLogo: b.qrLogo || '' });
                               setIsAddingBoek(true);
                             }}
                             className="bg-white/5 border border-white/10 hover:border-earth-gold hover:bg-earth-gold hover:text-black hover:scale-105 transition-all text-white text-xs px-3 py-1.5 rounded-full font-bold"
@@ -3756,19 +3905,26 @@ export function Admin() {
                     <input 
                       type="text"
                       required
-                      readOnly={!!newItem.qrImage}
+                      readOnly={!!newItem.qrImage && (qrImageOrigin === 'manual' || qrImageOrigin === 'existing')}
                       value={newItem.id}
                       onChange={(e) => setNewItem({ ...newItem, id: e.target.value.toUpperCase().trim() })}
                       className={cn(
                         "w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-earth-gold font-mono text-base uppercase transition-all",
-                        newItem.qrImage ? "opacity-55 select-none cursor-not-allowed bg-black/20 border-white/5 focus:border-white/5" : ""
+                        (newItem.qrImage && (qrImageOrigin === 'manual' || qrImageOrigin === 'existing'))
+                          ? "opacity-55 select-none cursor-not-allowed bg-black/20 border-white/5 focus:border-white/5"
+                          : ""
                       )}
                       placeholder="H01S1"
                     />
-                    {newItem.qrImage && (
+                    {newItem.qrImage && (qrImageOrigin === 'manual' || qrImageOrigin === 'existing') && (
                       <p className="text-earth-gold/80 text-[10px] mt-2 leading-snug font-medium flex items-start gap-1">
                         <span className="shrink-0 text-amber-500">⚠️</span>
-                        <span>Vergrendeld omdat er een QR-afbeelding is gekoppeld. Verwijder de afbeelding om deze code te wijzigen.</span>
+                        <span>Vergrendeld omdat er een gekoppelde QR-afbeelding is. Verwijder deze of klik op &quot;Genereer opnieuw&quot; om de code aan te passen.</span>
+                      </p>
+                    )}
+                    {qrImageOrigin === 'auto' && newItem.id && (
+                      <p className="text-emerald-400/80 text-[10px] mt-2 leading-snug font-mono truncate">
+                        → {buildRedirectQrUrl(newItem.id)}
                       </p>
                     )}
                   </div>
@@ -3785,9 +3941,38 @@ export function Admin() {
                   </div>
                 </div>
 
-                {/* ROW 5: QR CODE IMAGE UPLOAD & PREVIEW */}
+                {/* ROW 5: QR CODE IMAGE UPLOAD, AUTO-GENERATIE & PREVIEW */}
                 <div className="border-t border-white/5 pt-5 space-y-4">
-                  <span className="block text-earth-light/40 text-xs font-bold uppercase tracking-wider">QR Code Afbeelding</span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="block text-earth-light/40 text-xs font-bold uppercase tracking-wider">QR Code Afbeelding</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isGeneratingQr || newItem.id.trim().length < 2}
+                        onClick={() => runAutoGenerateQr(newItem.id, newItem.boekId)}
+                        className="inline-flex items-center gap-1.5 bg-earth-gold/15 hover:bg-earth-gold/25 border border-earth-gold/40 text-earth-gold text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                        title="Genereer automatisch in exacte boekstijl voor https://paulvangeenen.nl/<RedirectCode> met het opgeslagen boek-logo"
+                      >
+                        <RefreshCw className={cn("w-3.5 h-3.5", isGeneratingQr && "animate-spin")} />
+                        {isGeneratingQr ? 'Genereren...' : 'Auto-genereer (Boekstijl)'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const qs = new URLSearchParams();
+                          if (newItem.id) qs.set('code', newItem.id);
+                          if (newItem.boekId) qs.set('boekId', newItem.boekId);
+                          window.open(`/beheer/qr-studio?${qs.toString()}`, '_blank', 'noopener,noreferrer');
+                        }}
+                        className="inline-flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/15 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                        title="Open in QR-code Studio voor PNG / SVG / PDF drukwerk download"
+                      >
+                        <QrCode className="w-3.5 h-3.5 text-earth-gold" />
+                        QR Studio
+                        <ExternalLink className="w-3 h-3 opacity-60" />
+                      </button>
+                    </div>
+                  </div>
                   
                   {uploadError && (
                     <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-lg text-sm flex items-start gap-2">
@@ -3827,6 +4012,7 @@ export function Admin() {
                               type="button"
                               onClick={() => {
                                 setNewItem({ ...newItem, qrImage: '' });
+                                setQrImageOrigin('none');
                                 setUploadSuccess(null);
                                 setUploadError(null);
                               }}
@@ -3837,9 +4023,11 @@ export function Admin() {
                           </div>
                         </div>
                       ) : (
-                        <div className="text-center text-earth-light/20 text-sm py-4">
+                        <div className="text-center text-earth-light/30 text-sm py-4">
                           <span className="block text-3xl mb-1">🖼️</span>
-                          Geen QR-code afbeelding gekoppeld.
+                          {newItem.id.trim().length >= 2
+                            ? 'Wordt automatisch gegenereerd bij typen of opslaan...'
+                            : 'Vul een Redirect Code in voor automatische QR-generatie.'}
                         </div>
                       )}
                     </div>
@@ -3854,8 +4042,8 @@ export function Admin() {
                           onChange={handleImageUpload}
                         />
                         <span className="text-3xl mb-2">📤</span>
-                        <span className="text-sm font-semibold text-white block">Sleep hier een bestand of klik om te uploaden</span>
-                        <span className="text-xs text-earth-light/40 mt-1 block font-mono">PNG, JPG of JPEG (QR zal automatisch gescand worden)</span>
+                        <span className="text-sm font-semibold text-white block">Of upload handmatig een QR-bestand</span>
+                        <span className="text-xs text-earth-light/40 mt-1 block font-mono">PNG, JPG of JPEG (wordt automatisch gescand ter controle)</span>
                       </label>
                     </div>
                   </div>
@@ -3994,6 +4182,49 @@ export function Admin() {
                     className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-earth-gold"
                     placeholder="bijv. Koester het leven"
                   />
+                </div>
+
+                <div className="pt-2 border-t border-white/5 space-y-3">
+                  <label className="block text-earth-light/40 text-xs font-bold uppercase tracking-wider">
+                    QR-Code Midden-Logo (bijv. Leeuw JPG/PNG)
+                  </label>
+                  <p className="text-[11px] text-earth-light/50 leading-relaxed">
+                    Dit plaatje wordt opgeslagen op het boek en automatisch in het midden van iedere nieuw gegenereerde QR-code van dit boek geplaatst.
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <div className="w-20 h-20 rounded-xl bg-white border border-white/20 flex items-center justify-center overflow-hidden shrink-0">
+                      {newBoek.qrLogo ? (
+                        <img
+                          src={newBoek.qrLogo}
+                          alt="Boek QR Logo"
+                          className="w-full h-full object-contain p-1"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-neutral-400 text-center px-1">Geen logo</span>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="inline-flex items-center gap-2 bg-white/10 hover:bg-earth-gold hover:text-black text-white text-xs font-bold px-3.5 py-2 rounded-lg transition-colors cursor-pointer">
+                        <Upload className="w-3.5 h-3.5" />
+                        {newBoek.qrLogo ? 'Logo vervangen' : 'Logo uploaden'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleBookLogoUpload}
+                        />
+                      </label>
+                      {newBoek.qrLogo && (
+                        <button
+                          type="button"
+                          onClick={() => setNewBoek(prev => ({ ...prev, qrLogo: '' }))}
+                          className="text-left text-xs text-red-400 hover:underline cursor-pointer"
+                        >
+                          Logo verwijderen
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex gap-4 pt-4">

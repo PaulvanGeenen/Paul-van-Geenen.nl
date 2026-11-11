@@ -40,6 +40,7 @@ const Echo = lazy(() => import('./pages/Echo').then(module => ({ default: module
 const Fragments = lazy(() => import('./pages/Fragments').then(module => ({ default: module.Fragments })));
 const MRIScan = lazy(() => import('./pages/MRIScan').then(module => ({ default: module.MRIScan })));
 const Admin = lazy(() => import('./pages/Admin').then(module => ({ default: module.Admin })));
+const QRStudio = lazy(() => import('./pages/QRStudio').then(module => ({ default: module.QRStudio })));
 const Music = lazy(() => import('./pages/Music').then(module => ({ default: module.Music })));
 const QRRedirect = lazy(() => import('./pages/QRRedirect').then(module => ({ default: module.QRRedirect })));
 const Privacy = lazy(() => import('./pages/Privacy').then(module => ({ default: module.Privacy })));
@@ -121,6 +122,7 @@ export default function App() {
                 <Route path="/mri-scan" element={<MRIScan />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/beheer" element={<Admin />} />
+                <Route path="/beheer/qr-studio" element={<QRStudio />} />
                 <Route path="/music" element={<Music />} />
                 <Route path="/music/*" element={<Music />} />
                 <Route path="/@music" element={<Music />} />

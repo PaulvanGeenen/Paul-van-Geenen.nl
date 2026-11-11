@@ -410,7 +410,7 @@ async function startServer() {
   // Admin Books endpoints (100% TransIP MySQL)
   app.get('/api/boeken', checkAdminAuth, async (req, res) => {
     try {
-      const sql = 'SELECT id, volgnummer, boektitel FROM boeken ORDER BY volgnummer ASC';
+      const sql = 'SELECT id, volgnummer, boektitel, qr_logo AS qrLogo FROM boeken ORDER BY volgnummer ASC';
       const list = await queryTransipSql(sql) || [];
       res.json({ boeken: list, source: 'transip' });
     } catch (err) {
@@ -420,7 +420,7 @@ async function startServer() {
   });
 
   app.post('/api/boeken', checkAdminAuth, async (req, res) => {
-    const { id, volgnummer, boektitel } = req.body;
+    const { id, volgnummer, boektitel, qrLogo } = req.body;
     if (volgnummer === undefined || !boektitel) {
       return res.status(400).json({ error: 'Volgnummer en boektitel zijn verplicht.' });
     }
@@ -428,8 +428,9 @@ async function startServer() {
       const cleanId = (id || `bk_${Date.now()}`).replace(/'/g, "''");
       const cleanTitel = boektitel.trim().replace(/'/g, "''");
       const num = parseInt(volgnummer) || 1;
-      const sql = `INSERT INTO boeken (id, volgnummer, boektitel) VALUES ('${cleanId}', ${num}, '${cleanTitel}')
-        ON DUPLICATE KEY UPDATE volgnummer = VALUES(volgnummer), boektitel = VALUES(boektitel)`;
+      const logoVal = qrLogo ? `'${String(qrLogo).replace(/'/g, "''")}'` : 'NULL';
+      const sql = `INSERT INTO boeken (id, volgnummer, boektitel, qr_logo) VALUES ('${cleanId}', ${num}, '${cleanTitel}', ${logoVal})
+        ON DUPLICATE KEY UPDATE volgnummer = VALUES(volgnummer), boektitel = VALUES(boektitel), qr_logo = VALUES(qr_logo)`;
       await queryTransipSql(sql);
       res.json({ success: true, id: cleanId, source: 'transip' });
     } catch (err) {
