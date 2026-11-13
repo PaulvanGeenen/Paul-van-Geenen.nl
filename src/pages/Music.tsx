@@ -609,6 +609,8 @@ export function Music() {
       } catch {}
       return next;
     });
+    setShowNavBar(true);
+    resetNavBarTimer();
   };
 
   // Orientation state: 'portrait' | 'landscape'
@@ -3265,117 +3267,189 @@ export function Music() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.2 }}
-              className="absolute inset-0 z-[100] bg-black text-white select-none flex flex-col justify-between p-3 sm:p-6 overflow-hidden"
+              onClick={() => {
+                setShowNavBar(prev => {
+                  const next = !prev;
+                  if (next) resetNavBarTimer();
+                  return next;
+                });
+              }}
+              className="absolute inset-0 z-[100] bg-black text-white select-none overflow-hidden cursor-pointer"
             >
-              {/* Dimmed blurred background artwork */}
+              {/* Fullscreen Artwork (Always visible, unobstructed when controls auto-hide) */}
               {currBgImage && (
                 <div 
-                  className="absolute inset-0 bg-cover bg-center opacity-25 blur-2xl scale-110 pointer-events-none"
+                  className="absolute inset-0 bg-contain bg-center bg-no-repeat pointer-events-none transition-all duration-500"
                   style={{ backgroundImage: `url(${currBgImage})` }}
                 />
               )}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/80 to-black/95 pointer-events-none" />
 
-              {/* Top Bar: SoundTrack Title (leading) + Book Title + Car Mode Exit Button */}
-              <div className="relative z-10 w-full flex items-center justify-between gap-3 pt-1 sm:pt-2 px-1">
-                <div className="flex-1 min-w-0 pr-2">
-                  <h1 className="text-xl sm:text-3xl md:text-4xl font-serif font-black text-white tracking-wide truncate drop-shadow-md">
-                    {currentTrack.title}
-                  </h1>
-                  <p className="text-sm sm:text-base md:text-lg font-serif text-earth-gold font-bold tracking-wider uppercase mt-0.5 truncate drop-shadow">
-                    {currentTrack.album || 'SoundTrack'}
-                  </p>
+              {/* Atmospheric dark gradient overlay (fades out when controls auto-hide) */}
+              <div 
+                className={`absolute inset-0 bg-gradient-to-b from-black/85 via-black/40 to-black/90 pointer-events-none transition-opacity duration-300 ${
+                  showNavBar ? 'opacity-100' : 'opacity-0'
+                }`} 
+              />
+
+              {/* Driving Controls Layer (auto-hides after 4s so artwork is unobstructed, reappears upon screen tap) */}
+              <div 
+                className={`relative z-10 w-full h-full flex flex-col justify-between p-3 sm:p-6 transition-opacity duration-300 ${
+                  showNavBar ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                {/* Top Bar: SoundTrack Title (leading) + Book Title + Loop Button + Car Mode Exit Button */}
+                <div className="w-full flex items-center justify-between gap-2 sm:gap-3 pt-1 sm:pt-2 px-1">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <h1 className="text-xl sm:text-3xl md:text-4xl font-serif font-black text-white tracking-wide truncate drop-shadow-md">
+                      {currentTrack.title}
+                    </h1>
+                    <p className="text-sm sm:text-base md:text-lg font-serif text-earth-gold font-bold tracking-wider uppercase mt-0.5 truncate drop-shadow">
+                      {currentTrack.album || 'SoundTrack'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                    {/* LIJST / 1x / UIT Repeat Loop Mode Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resetNavBarTimer();
+                        cycleLoopMode();
+                      }}
+                      className={`h-9 sm:h-11 px-3 sm:px-4 rounded-2xl transition-all cursor-pointer border active:scale-95 flex items-center gap-1.5 shadow-lg ${
+                        loopMode === 'all'
+                          ? 'bg-earth-gold/25 border-earth-gold text-earth-gold font-bold'
+                          : loopMode === 'one'
+                          ? 'bg-amber-400/25 border-amber-400 text-amber-300 font-bold'
+                          : 'bg-white/10 hover:bg-white/20 border-white/20 text-white/70 hover:text-white'
+                      }`}
+                      title={loopMode === 'all' ? t.player.loopListTitle : loopMode === 'one' ? t.player.loopOneTitle : t.player.loopOffTitle}
+                    >
+                      {loopMode === 'one' ? (
+                        <Repeat1 className="w-5 h-5 sm:w-6 sm:h-6 text-amber-300" />
+                      ) : (
+                        <Repeat className="w-5 h-5 sm:w-6 sm:h-6 text-earth-gold" />
+                      )}
+                      <span className="text-xs sm:text-sm font-bold tracking-wider uppercase">
+                        {loopMode === 'all' && (t.player.loopList || 'Lijst')}
+                        {loopMode === 'one' && (t.player.loopOne || '1x')}
+                        {loopMode === 'off' && (t.player.loopOff || 'Uit')}
+                      </span>
+                    </button>
+
+                    {/* Car Button to toggle back to normal player */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resetNavBarTimer();
+                        toggleCarMode();
+                      }}
+                      className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all cursor-pointer border border-white/25 shrink-0 shadow-lg group"
+                      title="Auto-modus uitschakelen (terug naar normale weergave)"
+                    >
+                      <img
+                        src="/images/car-mode-icon.png"
+                        alt="Auto-modus sluiten"
+                        className="w-10 h-7 sm:w-12 sm:h-8 object-contain drop-shadow-[0_0_12px_rgba(239,68,68,0.7)] group-hover:scale-105 transition-transform"
+                      />
+                      <span className="hidden sm:inline text-xs font-bold text-white/90 uppercase tracking-wider">
+                        Normaal
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Car Button to toggle back to normal player */}
-                <button
-                  type="button"
-                  onClick={toggleCarMode}
-                  className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all cursor-pointer border border-white/25 shrink-0 shadow-lg group"
-                  title="Auto-modus uitschakelen (terug naar normale weergave)"
-                >
-                  <img
-                    src="/images/car-mode-icon.png"
-                    alt="Auto-modus sluiten"
-                    className="w-10 h-7 sm:w-12 sm:h-8 object-contain drop-shadow-[0_0_12px_rgba(239,68,68,0.7)] group-hover:scale-105 transition-transform"
-                  />
-                  <span className="hidden sm:inline text-xs font-bold text-white/90 uppercase tracking-wider">
-                    Normaal
-                  </span>
-                </button>
-              </div>
+                {/* Center: Gigantic Touch Zones filling the screen */}
+                <div className="flex-1 my-3 sm:my-5 flex gap-2.5 sm:gap-5 w-full">
+                  {/* Left: Previous Track */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetNavBarTimer();
+                      handlePrev();
+                    }}
+                    className="flex-1 h-full rounded-3xl bg-white/10 hover:bg-white/15 active:bg-white/25 border-2 border-white/15 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.98] select-none shadow-2xl group"
+                    title="Vorige SoundTrack"
+                  >
+                    <SkipBack className="w-14 h-14 sm:w-20 sm:h-20 md:w-28 md:h-28 text-white fill-current drop-shadow-lg group-hover:scale-110 transition-transform" />
+                    <span className="text-xs sm:text-sm md:text-base font-bold text-white/70 tracking-widest uppercase mt-3">
+                      Vorige
+                    </span>
+                  </button>
 
-              {/* Center: Gigantic Touch Zones filling the screen */}
-              <div className="relative z-10 flex-1 my-3 sm:my-5 flex gap-2.5 sm:gap-5 w-full">
-                {/* Left: Previous Track */}
-                <button
-                  type="button"
-                  onClick={handlePrev}
-                  className="flex-1 h-full rounded-3xl bg-white/10 hover:bg-white/15 active:bg-white/25 border-2 border-white/15 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.98] select-none shadow-2xl group"
-                  title="Vorige SoundTrack"
-                >
-                  <SkipBack className="w-14 h-14 sm:w-20 sm:h-20 md:w-28 md:h-28 text-white fill-current drop-shadow-lg group-hover:scale-110 transition-transform" />
-                  <span className="text-xs sm:text-sm md:text-base font-bold text-white/70 tracking-widest uppercase mt-3">
-                    Vorige
-                  </span>
-                </button>
+                  {/* Center: Play / Pause (Huge & Earth Gold) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetNavBarTimer();
+                      togglePlayPause();
+                    }}
+                    className="flex-[1.3] sm:flex-[1.4] h-full rounded-3xl bg-earth-gold hover:bg-earth-gold/90 active:bg-earth-gold/80 text-black flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.97] select-none shadow-[0_0_50px_rgba(217,160,54,0.4)] border-2 border-amber-300/40 group"
+                    title={isPlaying ? "Pauzeer" : "Afspelen"}
+                  >
+                    {isPlaying ? (
+                      <Pause className="w-18 h-18 sm:w-28 sm:h-28 md:w-36 md:h-36 fill-black drop-shadow group-hover:scale-110 transition-transform" />
+                    ) : (
+                      <Play className="w-18 h-18 sm:w-28 sm:h-28 md:w-36 md:h-36 fill-black ml-2 drop-shadow group-hover:scale-110 transition-transform" />
+                    )}
+                    <span className="text-xs sm:text-sm md:text-base font-black text-black tracking-widest uppercase mt-3">
+                      {isPlaying ? 'Pauze' : 'Speel af'}
+                    </span>
+                  </button>
 
-                {/* Center: Play / Pause (Huge & Earth Gold) */}
-                <button
-                  type="button"
-                  onClick={togglePlayPause}
-                  className="flex-[1.3] sm:flex-[1.4] h-full rounded-3xl bg-earth-gold hover:bg-earth-gold/90 active:bg-earth-gold/80 text-black flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.97] select-none shadow-[0_0_50px_rgba(217,160,54,0.4)] border-2 border-amber-300/40 group"
-                  title={isPlaying ? "Pauzeer" : "Afspelen"}
-                >
-                  {isPlaying ? (
-                    <Pause className="w-18 h-18 sm:w-28 sm:h-28 md:w-36 md:h-36 fill-black drop-shadow group-hover:scale-110 transition-transform" />
-                  ) : (
-                    <Play className="w-18 h-18 sm:w-28 sm:h-28 md:w-36 md:h-36 fill-black ml-2 drop-shadow group-hover:scale-110 transition-transform" />
-                  )}
-                  <span className="text-xs sm:text-sm md:text-base font-black text-black tracking-widest uppercase mt-3">
-                    {isPlaying ? 'Pauze' : 'Speel af'}
-                  </span>
-                </button>
+                  {/* Right: Next Track */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetNavBarTimer();
+                      handleNext();
+                    }}
+                    className="flex-1 h-full rounded-3xl bg-white/10 hover:bg-white/15 active:bg-white/25 border-2 border-white/15 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.98] select-none shadow-2xl group"
+                    title="Volgende SoundTrack"
+                  >
+                    <SkipForward className="w-14 h-14 sm:w-20 sm:h-20 md:w-28 md:h-28 text-white fill-current drop-shadow-lg group-hover:scale-110 transition-transform" />
+                    <span className="text-xs sm:text-sm md:text-base font-bold text-white/70 tracking-widest uppercase mt-3">
+                      Volgende
+                    </span>
+                  </button>
+                </div>
 
-                {/* Right: Next Track */}
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  className="flex-1 h-full rounded-3xl bg-white/10 hover:bg-white/15 active:bg-white/25 border-2 border-white/15 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.98] select-none shadow-2xl group"
-                  title="Volgende SoundTrack"
+                {/* Bottom: Progress Bar */}
+                <div 
+                  className="w-full flex items-center gap-3 px-2 sm:px-4 pb-1"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <SkipForward className="w-14 h-14 sm:w-20 sm:h-20 md:w-28 md:h-28 text-white fill-current drop-shadow-lg group-hover:scale-110 transition-transform" />
-                  <span className="text-xs sm:text-sm md:text-base font-bold text-white/70 tracking-widest uppercase mt-3">
-                    Volgende
+                  <span className="font-mono text-xs sm:text-base text-white/80 font-bold min-w-[45px]">
+                    {formatTime(currentTime)}
                   </span>
-                </button>
-              </div>
-
-              {/* Bottom: Progress Bar */}
-              <div className="relative z-10 w-full flex items-center gap-3 px-2 sm:px-4 pb-1">
-                <span className="font-mono text-xs sm:text-base text-white/80 font-bold min-w-[45px]">
-                  {formatTime(currentTime)}
-                </span>
-                <div
-                  className="flex-1 h-3 sm:h-4 bg-white/20 rounded-full overflow-hidden cursor-pointer relative"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                    const newTime = pct * (duration || 0);
-                    const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
-                    const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
-                    if (el) el.currentTime = newTime;
-                    setCurrentTime(newTime);
-                  }}
-                >
                   <div
-                    className="h-full bg-earth-gold transition-all duration-100 rounded-full"
-                    style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-                  />
+                    className="flex-1 h-3 sm:h-4 bg-white/20 rounded-full overflow-hidden cursor-pointer relative"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetNavBarTimer();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                      const newTime = pct * (duration || 0);
+                      const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
+                      const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
+                      if (el) el.currentTime = newTime;
+                      setCurrentTime(newTime);
+                    }}
+                  >
+                    <div
+                      className="h-full bg-earth-gold transition-all duration-100 rounded-full"
+                      style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <span className="font-mono text-xs sm:text-base text-white/80 font-bold min-w-[45px] text-right">
+                    {formatTime(duration)}
+                  </span>
                 </div>
-                <span className="font-mono text-xs sm:text-base text-white/80 font-bold min-w-[45px] text-right">
-                  {formatTime(duration)}
-                </span>
               </div>
             </motion.div>
           )}
