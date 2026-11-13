@@ -182,8 +182,98 @@ function ensure_analytics_columns($pdo) {
               AND `ip_address` NOT LIKE '%.0'
         ");
 
+        // 5. Tabellen voor volledige beheerder-IP's en eenmalige opschoning
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `admin_ips` (
+              `ip_address` VARCHAR(45) NOT NULL PRIMARY KEY,
+              `user_agent` TEXT NULL,
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `last_seen_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `analytics_meta` (
+              `meta_key` VARCHAR(64) NOT NULL PRIMARY KEY,
+              `meta_value` VARCHAR(255) NOT NULL,
+              `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+
         $columnsEnsured = true;
     } catch (Exception $e) {}
+}
+
+// Controleer of het volledige IP-adres bekend is als beheerder-IP
+function is_known_admin_ip($pdo, $rawIp) {
+    if (empty($rawIp)) return false;
+    try {
+        ensure_analytics_columns($pdo);
+        $stmt = $pdo->prepare("SELECT 1 FROM `admin_ips` WHERE `ip_address` = ? LIMIT 1");
+        $stmt->execute([$rawIp]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+// Eenmalig alle geanonimiseerde data uit Almere (beheerder) verwijderen zodra een beheerder op de site komt
+function run_one_time_almere_cleanup($pdo) {
+    try {
+        ensure_analytics_columns($pdo);
+        $check = $pdo->prepare("SELECT `meta_value` FROM `analytics_meta` WHERE `meta_key` = 'almere_one_time_cleanup_done' LIMIT 1");
+        $check->execute();
+        if ($check->fetchColumn() === '1') {
+            return ["ran" => false, "reason" => "already_done"];
+        }
+
+        // Markeer eerst of direct in transactie/meta zodat het strikt eenmalig is
+        $findSess = $pdo->prepare("SELECT `session_id` FROM `visitor_sessions` WHERE LOWER(`city`) LIKE '%almere%'");
+        $findSess->execute();
+        $sessionIds = $findSess->fetchAll(PDO::FETCH_COLUMN);
+
+        $delPageviews = 0;
+        $delClicks = 0;
+        if (!empty($sessionIds)) {
+            $placeholders = implode(',', array_fill(0, count($sessionIds), '?'));
+            $stmtPv = $pdo->prepare("DELETE FROM `visitor_pageviews` WHERE `session_id` IN ($placeholders)");
+            $stmtPv->execute($sessionIds);
+            $delPageviews = $stmtPv->rowCount();
+
+            $stmtCl = $pdo->prepare("DELETE FROM `visitor_clicks` WHERE `session_id` IN ($placeholders)");
+            $stmtCl->execute($sessionIds);
+            $delClicks = $stmtCl->rowCount();
+        }
+
+        $stmtSess = $pdo->prepare("DELETE FROM `visitor_sessions` WHERE LOWER(`city`) LIKE '%almere%'");
+        $stmtSess->execute();
+        $delSessions = $stmtSess->rowCount();
+
+        $stmtMusic = $pdo->prepare("DELETE FROM `music_listens` WHERE LOWER(`city`) LIKE '%almere%'");
+        $stmtMusic->execute();
+        $delListens = $stmtMusic->rowCount();
+
+        $stmtQr = $pdo->prepare("DELETE FROM `qr_scans` WHERE LOWER(`city`) LIKE '%almere%'");
+        $stmtQr->execute();
+        $delScans = $stmtQr->rowCount();
+
+        $mark = $pdo->prepare("
+            INSERT INTO `analytics_meta` (`meta_key`, `meta_value`, `updated_at`)
+            VALUES ('almere_one_time_cleanup_done', '1', NOW())
+            ON DUPLICATE KEY UPDATE `meta_value` = '1', `updated_at` = NOW()
+        ");
+        $mark->execute();
+
+        return [
+            "ran" => true,
+            "deleted_sessions" => $delSessions,
+            "deleted_pageviews" => $delPageviews,
+            "deleted_clicks" => $delClicks,
+            "deleted_listens" => $delListens,
+            "deleted_scans" => $delScans
+        ];
+    } catch (Exception $e) {
+        return ["ran" => false, "error" => $e->getMessage()];
+    }
 }
 
 // Zorg dat de kolom 'qr_logo' bestaat op de boeken-tabel
@@ -403,10 +493,79 @@ if ($action === 'init_tables') {
 }
 
 // ==========================================
+// 4B. ACTIE: REGISTREER VOLLEDIG BEHEERDER IP + EENMALIGE ALMERE OPSCHONING
+// ==========================================
+if ($action === 'register_admin_ip') {
+    ensure_analytics_columns($pdo);
+    $rawIp = get_client_ip_clean();
+    $userAgent = $input['userAgent'] ?? ($_SERVER['HTTP_USER_AGENT'] ?? '');
+    $extraSessionId = trim($input['sessionId'] ?? ($input['session_id'] ?? ''));
+
+    try {
+        if (!empty($rawIp)) {
+            $stmt = $pdo->prepare("
+                INSERT INTO `admin_ips` (`ip_address`, `user_agent`, `created_at`, `last_seen_at`)
+                VALUES (?, ?, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE `user_agent` = VALUES(`user_agent`), `last_seen_at` = NOW()
+            ");
+            $stmt->execute([$rawIp, $userAgent]);
+
+            // Verwijder eventueel al opgeslagen sessies/clicks/listens/scans van dit IP of actieve sessie
+            $anonIp = anonymize_ip($rawIp);
+            $ipCandidates = array_values(array_unique(array_filter([$rawIp, $anonIp])));
+            $foundSessionIds = [];
+            if (!empty($ipCandidates)) {
+                $inIps = implode(',', array_fill(0, count($ipCandidates), '?'));
+                $findSessStmt = $pdo->prepare("SELECT session_id FROM visitor_sessions WHERE ip_address IN ($inIps)");
+                $findSessStmt->execute($ipCandidates);
+                $foundSessionIds = $findSessStmt->fetchAll(PDO::FETCH_COLUMN);
+            }
+            if (!empty($extraSessionId)) {
+                $foundSessionIds[] = $extraSessionId;
+            }
+            $foundSessionIds = array_values(array_unique(array_filter($foundSessionIds)));
+            if (!empty($foundSessionIds)) {
+                $inSess = implode(',', array_fill(0, count($foundSessionIds), '?'));
+                $pdo->prepare("DELETE FROM visitor_pageviews WHERE session_id IN ($inSess)")->execute($foundSessionIds);
+                $pdo->prepare("DELETE FROM visitor_clicks WHERE session_id IN ($inSess)")->execute($foundSessionIds);
+                $pdo->prepare("DELETE FROM visitor_sessions WHERE session_id IN ($inSess)")->execute($foundSessionIds);
+                $pdo->prepare("DELETE FROM music_listens WHERE session_id IN ($inSess)")->execute($foundSessionIds);
+                $pdo->prepare("DELETE FROM qr_scans WHERE session_id IN ($inSess)")->execute($foundSessionIds);
+            }
+            if (!empty($ipCandidates)) {
+                $inIps = implode(',', array_fill(0, count($ipCandidates), '?'));
+                $pdo->prepare("DELETE FROM visitor_sessions WHERE ip_address IN ($inIps)")->execute($ipCandidates);
+                $pdo->prepare("DELETE FROM music_listens WHERE ip_address IN ($inIps)")->execute($ipCandidates);
+                $pdo->prepare("DELETE FROM qr_scans WHERE ip_address IN ($inIps)")->execute($ipCandidates);
+            }
+        }
+
+        // Voer eenmalig de opschoning van alle geanonimiseerde Almere-data uit
+        $cleanupResult = run_one_time_almere_cleanup($pdo);
+
+        echo json_encode([
+            "success" => true,
+            "ip_stored" => !empty($rawIp),
+            "almere_cleanup" => $cleanupResult
+        ]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==========================================
 // 5. ACTIE: REGISTREER SESSIE START
 // ==========================================
 if ($action === 'session_start') {
     ensure_analytics_columns($pdo);
+    $rawIp = get_client_ip_clean();
+    if (is_known_admin_ip($pdo, $rawIp)) {
+        run_one_time_almere_cleanup($pdo);
+        echo json_encode(["success" => true, "skipped_admin" => true]);
+        exit;
+    }
     $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? uniqid('sess_', true));
     $city = $input['city'] ?? 'Onbekend';
     $country = $input['country'] ?? 'Nederland';
@@ -447,6 +606,10 @@ if ($action === 'session_start') {
 // 5A-1. ACTIE: SESSIE HEARTBEAT (TIJD OP SITE)
 // ==========================================
 if ($action === 'session_heartbeat') {
+    if (is_known_admin_ip($pdo, get_client_ip_clean())) {
+        echo json_encode(["success" => true, "skipped_admin" => true]);
+        exit;
+    }
     $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? '');
     $pageStaySeconds = (int)($input['pageStaySeconds'] ?? ($input['seconds'] ?? 10));
     $currentPath = $input['currentPath'] ?? ($input['path'] ?? '/');
@@ -493,6 +656,10 @@ if ($action === 'session_heartbeat') {
 // 5A-2. ACTIE: SESSIE PAGEVIEW
 // ==========================================
 if ($action === 'session_pageview') {
+    if (is_known_admin_ip($pdo, get_client_ip_clean())) {
+        echo json_encode(["success" => true, "skipped_admin" => true]);
+        exit;
+    }
     $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? '');
     $pagePath = $input['pagePath'] ?? ($input['path'] ?? '/');
     $pageTitle = $input['pageTitle'] ?? ($input['title'] ?? '');
@@ -527,6 +694,10 @@ if ($action === 'session_pageview') {
 // 5A-3. ACTIE: SESSIE CLICK
 // ==========================================
 if ($action === 'session_click') {
+    if (is_known_admin_ip($pdo, get_client_ip_clean())) {
+        echo json_encode(["success" => true, "skipped_admin" => true]);
+        exit;
+    }
     $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? '');
     $elementText = $input['elementText'] ?? ($input['text'] ?? '');
     $elementId = $input['elementId'] ?? ($input['id'] ?? '');
@@ -555,6 +726,12 @@ if ($action === 'session_click') {
 // ==========================================
 if ($action === 'qr_scan') {
     ensure_analytics_columns($pdo);
+    $rawIp = get_client_ip_clean();
+    if (is_known_admin_ip($pdo, $rawIp)) {
+        run_one_time_almere_cleanup($pdo);
+        echo json_encode(["success" => true, "skipped_admin" => true]);
+        exit;
+    }
     $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? null);
     $code = $input['redirectCode'] ?? ($input['code'] ?? 'ONBEKEND');
     $targetRoute = $input['targetRoute'] ?? '/';
@@ -618,6 +795,12 @@ if ($action === 'subscribe') {
 // ==========================================
 if ($action === 'music_play') {
     ensure_analytics_columns($pdo);
+    $rawIp = get_client_ip_clean();
+    if (is_known_admin_ip($pdo, $rawIp)) {
+        run_one_time_almere_cleanup($pdo);
+        echo json_encode(["success" => true, "skipped_admin" => true]);
+        exit;
+    }
     $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? null);
     $trackId = $input['trackId'] ?? 'Onbekend';
     $trackTitle = $input['trackTitle'] ?? 'Muzieknummer';
@@ -667,6 +850,10 @@ if ($action === 'music_play') {
 // 6B. ACTIE: UPDATE MUZIEKPLAY (Bij volledig afluisteren of tussentijdse update)
 // ==========================================
 if ($action === 'music_update' || $action === 'music_complete') {
+    if (is_known_admin_ip($pdo, get_client_ip_clean())) {
+        echo json_encode(["success" => true, "skipped_admin" => true]);
+        exit;
+    }
     $id = (int)($input['id'] ?? ($_GET['id'] ?? 0));
     $completed = (!empty($input['completed']) && $input['completed'] !== 'false' && $input['completed'] !== false) ? 1 : 0;
     $duration = (int)($input['duration'] ?? ($input['durationSeconds'] ?? 0));
@@ -702,6 +889,12 @@ if ($action === 'music_update' || $action === 'music_complete') {
 // ==========================================
 if ($action === 'music_rate') {
     ensure_analytics_columns($pdo);
+    $rawIp = get_client_ip_clean();
+    if (is_known_admin_ip($pdo, $rawIp)) {
+        run_one_time_almere_cleanup($pdo);
+        echo json_encode(["success" => true, "skipped_admin" => true]);
+        exit;
+    }
     $sessionId = $input['sessionId'] ?? ($input['session_id'] ?? null);
     $trackId = $input['trackId'] ?? ($input['track_id'] ?? 'Onbekend');
     $trackTitle = $input['trackTitle'] ?? ($input['track_title'] ?? 'Muzieknummer');

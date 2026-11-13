@@ -92,8 +92,11 @@ export function markDeviceAsAdmin(): void {
       }
     }
 
-    // 1. Directe TransIP MySQL bridge call
-    transipPost('delete_by_ip', { sessionId: currentSessionId }).catch(() => {});
+    // 1. Directe TransIP MySQL bridge call: sla volledige beheerder-IP op, wis huidige IP/sessie-data en voer eenmalig Almere-opschoning uit
+    transipPost('register_admin_ip', {
+      sessionId: currentSessionId,
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : ''
+    }).catch(() => {});
 
     // 2. Express API route als fallback
     if (typeof fetch !== 'undefined') {
