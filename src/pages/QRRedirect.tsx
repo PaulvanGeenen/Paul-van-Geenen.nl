@@ -13,6 +13,7 @@ import {
   playLockUnlockSound,
   unlockLockAudioContext
 } from '../lib/trackLocks';
+import { requestScreenWakeLock } from '../lib/wakeLock';
 import { sanitizeMediaUrl, getTrackCoverJpg } from './Music';
 
 async function recordScan(redirectCode: string, data: any, book: BookType | null) {
@@ -174,6 +175,7 @@ export function QRRedirect() {
 
   useEffect(() => {
     let active = true;
+    requestScreenWakeLock();
 
     async function fetchRedirect() {
       if (!qrCode) {

@@ -28,6 +28,7 @@ import {
   playLockRattleSound,
   playLockUnlockSound
 } from '../lib/trackLocks';
+import { requestScreenWakeLock, releaseScreenWakeLock } from '../lib/wakeLock';
 import {
   MusicLanguage,
   getInitialMusicLanguage,
@@ -3216,6 +3217,19 @@ export function Music() {
       });
     };
   }, [isPlaying, currentTrack, selectedFormat, duration]);
+
+  // Keep screen awake while music is playing (Screen Wake Lock API)
+  // Overrides Android system sleep timeout (e.g. 5-min corporate policy) without user-visible interruptions
+  useEffect(() => {
+    if (isPlaying) {
+      requestScreenWakeLock();
+    } else {
+      releaseScreenWakeLock();
+    }
+    return () => {
+      releaseScreenWakeLock();
+    };
+  }, [isPlaying]);
 
   // Main Mobile / Screen Content Component
   const renderScreenContent = () => {
