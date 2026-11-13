@@ -4506,20 +4506,15 @@ export function Music() {
                 className="absolute inset-0 w-full h-full bg-black z-20 pointer-events-none"
               />
 
-              {/* Soundtrack cover shown after single-track playback finishes (fade-in and stay) */}
+              {/* Soundtrack cover shown after single-track playback finishes (fade-in and stay, full screen without distortion or text) */}
               {showEndedSoundtrackCover && currentTrack && (
-                <div className="absolute inset-0 w-full h-full bg-black z-[15] flex flex-col items-center justify-center p-6 text-center pointer-events-none">
-                  <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-2xl overflow-hidden border-2 border-earth-gold/60 shadow-[0_25px_70px_rgba(0,0,0,0.95)] bg-black mb-5">
-                    <img
-                      src={getTrackCoverJpg(currentTrack) || currentTrack.portraitJpg || currentTrack.thumbnailJpg || '/@music/_albums/De%20Geboorte%20van%20de%20Leeuw%20Album.jpg'}
-                      alt={currentTrack.title || 'SoundTrack'}
-                      className="w-full h-full object-contain select-none"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                  <h3 className="text-2xl sm:text-3xl font-serif font-bold text-white drop-shadow">
-                    {currentTrack.title}
-                  </h3>
+                <div className="absolute inset-0 w-full h-full bg-black z-[15] flex items-center justify-center pointer-events-none">
+                  <img
+                    src={getTrackCoverJpg(currentTrack) || currentTrack.portraitJpg || currentTrack.thumbnailJpg || '/@music/_albums/De%20Geboorte%20van%20de%20Leeuw%20Album.jpg'}
+                    alt={currentTrack.title || 'SoundTrack'}
+                    className="w-full h-full object-contain select-none"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
               )}
 
