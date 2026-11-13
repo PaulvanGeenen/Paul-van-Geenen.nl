@@ -2756,11 +2756,30 @@ export function Music() {
       return;
     }
 
-    // 3. 1X (loopMode === 'off'): 1x afspelen en dan stopt de player
-    setCurrentTime(0);
-    savedTimeRef.current = 0;
-    setIsPlaying(false);
-    setShowNavBar(true);
+    // 3. 1X (loopMode === 'off'): fade-out naar zwart, daarna fade-in van de soundtrack-cover en zo blijven staan
+    cancelEndTransition();
+    isEndTransitioningRef.current = true;
+    setShowNavBar(false);
+    setEndTransitionPhase('fadingOut');
+
+    const tHold = setTimeout(() => {
+      setCurrentTime(0);
+      savedTimeRef.current = 0;
+      setIsPlaying(false);
+
+      const tFadeIn = setTimeout(() => {
+        setEndTransitionPhase('fadingIn');
+
+        const tDone = setTimeout(() => {
+          isEndTransitioningRef.current = false;
+          setEndTransitionPhase('idle');
+          endTransitionTimersRef.current = [];
+        }, END_FADE_IN_MS);
+        endTransitionTimersRef.current.push(tDone);
+      }, END_HOLD_MS);
+      endTransitionTimersRef.current.push(tFadeIn);
+    }, END_FADE_OUT_MS);
+    endTransitionTimersRef.current.push(tHold);
   };
 
   // Swipe gesture & Kobo-style vertical volume control handling
