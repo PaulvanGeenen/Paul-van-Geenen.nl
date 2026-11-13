@@ -2377,16 +2377,30 @@ export function Music() {
   // Helper to check if an HTMLMediaElement already points to targetUrl without error
   const doesMediaElementMatchUrl = (el: HTMLMediaElement, targetUrl: string): boolean => {
     if (!el.src || !targetUrl) return false;
-    const encoded = encodeURI(targetUrl);
     try {
-      return (
-        el.src === targetUrl ||
-        el.src.endsWith(encoded) ||
-        decodeURIComponent(el.src) === decodeURIComponent(targetUrl)
-      );
+      // 1. Direct equality
+      if (el.src === targetUrl) return true;
+
+      // 2. Decode both and compare decoded strings
+      const decodedEl = decodeURI(el.src);
+      const decodedTarget = decodeURI(targetUrl);
+      if (decodedEl === decodedTarget || decodedEl.endsWith(decodedTarget)) return true;
+
+      // 3. Resolve targetUrl relative to browser location (handles relative URLs like /@music/...)
+      if (typeof window !== 'undefined') {
+        const resolvedTarget = new URL(targetUrl, window.location.origin).href;
+        if (el.src === resolvedTarget) return true;
+        if (decodeURI(el.src) === decodeURI(resolvedTarget)) return true;
+      }
+
+      // 4. Compare pathname without query string / hash
+      const cleanElPath = decodedEl.split('?')[0].split('#')[0];
+      const cleanTargetPath = decodedTarget.split('?')[0].split('#')[0];
+      if (cleanElPath.endsWith(cleanTargetPath)) return true;
     } catch {
-      return el.src === targetUrl || el.src.endsWith(encoded);
+      if (el.src.includes(targetUrl) || targetUrl.includes(el.src)) return true;
     }
+    return false;
   };
 
   // Play / Pause toggle with smooth fade-out on stop and smooth fade-in on play
@@ -2426,6 +2440,14 @@ export function Music() {
           } catch (err) {}
         }
         el.muted = isMuted;
+
+        // If resuming a paused track and currentTime was preserved, ensure element stays at current position
+        if (currentTime > 0 && Math.abs(el.currentTime - currentTime) > 1.5) {
+          try {
+            el.currentTime = currentTime;
+          } catch (e) {}
+        }
+
         // Start playback synchronously within the click gesture BEFORE requesting fullscreen
         startPlaybackWithVolumeRamp(el, 750);
       }
@@ -2569,9 +2591,7 @@ export function Music() {
       activeEl &&
       activeEl.src &&
       targetMediaUrl &&
-      (activeEl.src === targetMediaUrl ||
-        activeEl.src.endsWith(targetEncodedUrl) ||
-        decodeURIComponent(activeEl.src) === decodeURIComponent(targetMediaUrl))
+      doesMediaElementMatchUrl(activeEl, targetMediaUrl)
     );
 
     // Only restart on the same deck if the exact track + media URL is ALREADY loaded on the active element in player mode:
