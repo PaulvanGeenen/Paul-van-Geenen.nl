@@ -989,6 +989,7 @@ export function Music() {
   const END_HOLD_MS = 350;
   const END_FADE_IN_MS = 1400;
   const [endTransitionPhase, setEndTransitionPhase] = useState<'idle' | 'fadingOut' | 'fadingIn'>('idle');
+  const [showEndedSoundtrackCover, setShowEndedSoundtrackCover] = useState(false);
   const endTransitionTimersRef = useRef<any[]>([]);
   const isEndTransitioningRef = useRef<boolean>(false);
 
@@ -2423,6 +2424,7 @@ export function Music() {
         autoplayGestureCleanupRef.current = null;
       }
       setPhase('player');
+      setShowEndedSoundtrackCover(false);
       shouldAutoPlayRef.current = false;
       setIsAutoplayMuted(false);
 
@@ -2464,6 +2466,7 @@ export function Music() {
     targetEffectiveFormat: 'mp3' | 'audiobook' | 'reflection' | 'video'
   ) => {
     cancelEndTransition();
+    setShowEndedSoundtrackCover(false);
     if (introAudioRef.current && !introAudioRef.current.paused) {
       try {
         introAudioRef.current.pause();
@@ -2560,6 +2563,7 @@ export function Music() {
 
     setSelectedFormat(newSelectedFormat);
     setCurrentTrackIndex(index);
+    setShowEndedSoundtrackCover(false);
     setPhase('player');
     setShowNavBar(false);
     resetRatingButtonsTimer();
@@ -2575,6 +2579,7 @@ export function Music() {
   // Start playing a track directly
   const playTrack = (index: number, format?: 'mp3' | 'audiobook' | 'reflection' | 'video') => {
     cancelEndTransition();
+    setShowEndedSoundtrackCover(false);
     enterBrowserFullscreenSafely();
     if (autoNextTimeoutRef.current) {
       clearTimeout(autoNextTimeoutRef.current);
@@ -2809,6 +2814,7 @@ export function Music() {
       setCurrentTime(0);
       savedTimeRef.current = 0;
       setIsPlaying(false);
+      setShowEndedSoundtrackCover(true);
 
       const tFadeIn = setTimeout(() => {
         setEndTransitionPhase('fadingIn');
@@ -4499,6 +4505,23 @@ export function Music() {
                 }}
                 className="absolute inset-0 w-full h-full bg-black z-20 pointer-events-none"
               />
+
+              {/* Soundtrack cover shown after single-track playback finishes (fade-in and stay) */}
+              {showEndedSoundtrackCover && currentTrack && (
+                <div className="absolute inset-0 w-full h-full bg-black z-[15] flex flex-col items-center justify-center p-6 text-center pointer-events-none">
+                  <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-2xl overflow-hidden border-2 border-earth-gold/60 shadow-[0_25px_70px_rgba(0,0,0,0.95)] bg-black mb-5">
+                    <img
+                      src={getTrackCoverJpg(currentTrack) || currentTrack.portraitJpg || currentTrack.thumbnailJpg || '/@music/_albums/De%20Geboorte%20van%20de%20Leeuw%20Album.jpg'}
+                      alt={currentTrack.title || 'SoundTrack'}
+                      className="w-full h-full object-contain select-none"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                  <h3 className="text-2xl sm:text-3xl font-serif font-bold text-white drop-shadow">
+                    {currentTrack.title}
+                  </h3>
+                </div>
+              )}
 
               {/* Center Panel: Current Track Image (Always rendered solid at z-10 for seamless cross-dissolve) */}
               {currBgImage && (
