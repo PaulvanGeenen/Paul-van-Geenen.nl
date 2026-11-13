@@ -594,21 +594,10 @@ export function Music() {
   const [isAutoplayMuted, setIsAutoplayMuted] = useState(false);
 
   // Car Mode state (fullscreen large touch buttons for safe driving)
-  const [isCarMode, setIsCarMode] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('pvg_car_mode_active') === 'true';
-    }
-    return false;
-  });
+  const [isCarMode, setIsCarMode] = useState<boolean>(false);
 
   const toggleCarMode = () => {
-    setIsCarMode(prev => {
-      const next = !prev;
-      try {
-        localStorage.setItem('pvg_car_mode_active', String(next));
-      } catch {}
-      return next;
-    });
+    setIsCarMode(prev => !prev);
     setShowNavBar(true);
     resetNavBarTimer();
   };
@@ -2844,7 +2833,11 @@ export function Music() {
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('input, button, a')) {
+    const isNonSwipeable = isCarMode
+      ? target.closest('input, a, [data-car-non-swipeable]')
+      : target.closest('input, button, a');
+
+    if (isNonSwipeable) {
       touchStartXRef.current = null;
       touchStartYRef.current = null;
       gestureTypeRef.current = 'none';
@@ -2861,7 +2854,10 @@ export function Music() {
     // Ignore emulated mouse events fired right after touch events on mobile browsers
     if (Date.now() - lastTouchEndTimeRef.current < 650) return;
     const target = e.target as HTMLElement;
-    if (target.closest('input, button, a')) return;
+    const isNonSwipeable = isCarMode
+      ? target.closest('input, a, [data-car-non-swipeable]')
+      : target.closest('input, button, a');
+    if (isNonSwipeable) return;
     startGesture(e.clientX, e.clientY, e.currentTarget as HTMLElement);
   };
 
@@ -2895,7 +2891,7 @@ export function Music() {
     });
   };
 
-  const finishGesture = (endX: number, endY: number) => {
+  const finishGesture = (endX: number, endY: number, target?: EventTarget | null) => {
     if (touchStartXRef.current === null || touchStartYRef.current === null) {
       setDragX(0);
       setIsSwiping(false);
@@ -2924,10 +2920,17 @@ export function Music() {
     }
 
     // Tap / Click detection: any single tap or click that is not a swipe toggles the control bar
-    if (Math.abs(deltaX) < 30 && Math.abs(deltaY) < 30) {
+    if (Math.abs(deltaX) < 25 && Math.abs(deltaY) < 25) {
       setIsSwiping(false);
       setDragX(0);
       gestureTypeRef.current = 'none';
+
+      // If user tapped directly on an interactive button or slider, don't toggle nav bar (the button handler will handle it)
+      const element = target as HTMLElement | null;
+      if (element && element.closest('button, input, a, [data-car-button]')) {
+        resetNavBarTimer();
+        return;
+      }
 
       resetRatingButtonsTimer();
 
@@ -3019,13 +3022,13 @@ export function Music() {
     lastTouchEndTimeRef.current = Date.now();
     const endX = e.changedTouches[0]?.clientX ?? 0;
     const endY = e.changedTouches[0]?.clientY ?? 0;
-    finishGesture(endX, endY);
+    finishGesture(endX, endY, e.target);
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
     // Ignore emulated mouseup fired right after touchend on mobile browsers
     if (Date.now() - lastTouchEndTimeRef.current < 650) return;
-    finishGesture(e.clientX, e.clientY);
+    finishGesture(e.clientX, e.clientY, e.target);
   };
 
   // Next / Previous track actions with visual slide and acoustic crossfade (ZERO opacity fade)
@@ -3258,203 +3261,6 @@ export function Music() {
       <div 
         className="relative w-full h-full bg-black text-white font-sans overflow-hidden select-none flex flex-col justify-between"
       >
-        {/* ---------------- 0. FULLSCREEN CAR MODE (VEILIG AUTORIJDEN) ---------------- */}
-        <AnimatePresence>
-          {isCarMode && phase === 'player' && currentTrack && (
-            <motion.div
-              key="car-mode-screen"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.2 }}
-              onClick={() => {
-                setShowNavBar(prev => {
-                  const next = !prev;
-                  if (next) resetNavBarTimer();
-                  return next;
-                });
-              }}
-              className="absolute inset-0 z-[100] bg-black text-white select-none overflow-hidden cursor-pointer"
-            >
-              {/* Fullscreen Artwork (Always visible, unobstructed when controls auto-hide) */}
-              {currBgImage && (
-                <div 
-                  className="absolute inset-0 bg-contain bg-center bg-no-repeat pointer-events-none transition-all duration-500"
-                  style={{ backgroundImage: `url(${currBgImage})` }}
-                />
-              )}
-
-              {/* Atmospheric dark gradient overlay (fades out when controls auto-hide) */}
-              <div 
-                className={`absolute inset-0 bg-gradient-to-b from-black/85 via-black/40 to-black/90 pointer-events-none transition-opacity duration-300 ${
-                  showNavBar ? 'opacity-100' : 'opacity-0'
-                }`} 
-              />
-
-              {/* Driving Controls Layer (auto-hides after 4s so artwork is unobstructed, reappears upon screen tap) */}
-              <div 
-                className={`relative z-10 w-full h-full flex flex-col justify-between p-3 sm:p-6 transition-opacity duration-300 ${
-                  showNavBar ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                }`}
-              >
-                {/* Top Bar: SoundTrack Title (leading) + Book Title + Loop Button + Car Mode Exit Button */}
-                <div className="w-full flex items-center justify-between gap-2 sm:gap-3 pt-1 sm:pt-2 px-1">
-                  <div className="flex-1 min-w-0 pr-2">
-                    <h1 className="text-xl sm:text-3xl md:text-4xl font-serif font-black text-white tracking-wide truncate drop-shadow-md">
-                      {currentTrack.title}
-                    </h1>
-                    <p className="text-sm sm:text-base md:text-lg font-serif text-earth-gold font-bold tracking-wider uppercase mt-0.5 truncate drop-shadow">
-                      {currentTrack.album || 'SoundTrack'}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    {/* LIJST / 1x / UIT Repeat Loop Mode Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        resetNavBarTimer();
-                        cycleLoopMode();
-                      }}
-                      className={`h-9 sm:h-11 px-3 sm:px-4 rounded-2xl transition-all cursor-pointer border active:scale-95 flex items-center gap-1.5 shadow-lg ${
-                        loopMode === 'all'
-                          ? 'bg-earth-gold/25 border-earth-gold text-earth-gold font-bold'
-                          : loopMode === 'one'
-                          ? 'bg-amber-400/25 border-amber-400 text-amber-300 font-bold'
-                          : 'bg-white/10 hover:bg-white/20 border-white/20 text-white/70 hover:text-white'
-                      }`}
-                      title={loopMode === 'all' ? t.player.loopListTitle : loopMode === 'one' ? t.player.loopOneTitle : t.player.loopOffTitle}
-                    >
-                      {loopMode === 'one' ? (
-                        <Repeat1 className="w-5 h-5 sm:w-6 sm:h-6 text-amber-300" />
-                      ) : (
-                        <Repeat className="w-5 h-5 sm:w-6 sm:h-6 text-earth-gold" />
-                      )}
-                      <span className="text-xs sm:text-sm font-bold tracking-wider uppercase">
-                        {loopMode === 'all' && (t.player.loopList || 'Lijst')}
-                        {loopMode === 'one' && (t.player.loopOne || '1x')}
-                        {loopMode === 'off' && (t.player.loopOff || 'Uit')}
-                      </span>
-                    </button>
-
-                    {/* Car Button to toggle back to normal player */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        resetNavBarTimer();
-                        toggleCarMode();
-                      }}
-                      className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all cursor-pointer border border-white/25 shrink-0 shadow-lg group"
-                      title="Auto-modus uitschakelen (terug naar normale weergave)"
-                    >
-                      <img
-                        src="/images/car-mode-icon.png"
-                        alt="Auto-modus sluiten"
-                        className="w-10 h-7 sm:w-12 sm:h-8 object-contain drop-shadow-[0_0_12px_rgba(239,68,68,0.7)] group-hover:scale-105 transition-transform"
-                      />
-                      <span className="hidden sm:inline text-xs font-bold text-white/90 uppercase tracking-wider">
-                        Normaal
-                      </span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Center: Gigantic Touch Zones filling the screen */}
-                <div className="flex-1 my-3 sm:my-5 flex gap-2.5 sm:gap-5 w-full">
-                  {/* Left: Previous Track */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      resetNavBarTimer();
-                      handlePrev();
-                    }}
-                    className="flex-1 h-full rounded-3xl bg-white/10 hover:bg-white/15 active:bg-white/25 border-2 border-white/15 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.98] select-none shadow-2xl group"
-                    title="Vorige SoundTrack"
-                  >
-                    <SkipBack className="w-14 h-14 sm:w-20 sm:h-20 md:w-28 md:h-28 text-white fill-current drop-shadow-lg group-hover:scale-110 transition-transform" />
-                    <span className="text-xs sm:text-sm md:text-base font-bold text-white/70 tracking-widest uppercase mt-3">
-                      Vorige
-                    </span>
-                  </button>
-
-                  {/* Center: Play / Pause (Huge & Earth Gold) */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      resetNavBarTimer();
-                      togglePlayPause();
-                    }}
-                    className="flex-[1.3] sm:flex-[1.4] h-full rounded-3xl bg-earth-gold hover:bg-earth-gold/90 active:bg-earth-gold/80 text-black flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.97] select-none shadow-[0_0_50px_rgba(217,160,54,0.4)] border-2 border-amber-300/40 group"
-                    title={isPlaying ? "Pauzeer" : "Afspelen"}
-                  >
-                    {isPlaying ? (
-                      <Pause className="w-18 h-18 sm:w-28 sm:h-28 md:w-36 md:h-36 fill-black drop-shadow group-hover:scale-110 transition-transform" />
-                    ) : (
-                      <Play className="w-18 h-18 sm:w-28 sm:h-28 md:w-36 md:h-36 fill-black ml-2 drop-shadow group-hover:scale-110 transition-transform" />
-                    )}
-                    <span className="text-xs sm:text-sm md:text-base font-black text-black tracking-widest uppercase mt-3">
-                      {isPlaying ? 'Pauze' : 'Speel af'}
-                    </span>
-                  </button>
-
-                  {/* Right: Next Track */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      resetNavBarTimer();
-                      handleNext();
-                    }}
-                    className="flex-1 h-full rounded-3xl bg-white/10 hover:bg-white/15 active:bg-white/25 border-2 border-white/15 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.98] select-none shadow-2xl group"
-                    title="Volgende SoundTrack"
-                  >
-                    <SkipForward className="w-14 h-14 sm:w-20 sm:h-20 md:w-28 md:h-28 text-white fill-current drop-shadow-lg group-hover:scale-110 transition-transform" />
-                    <span className="text-xs sm:text-sm md:text-base font-bold text-white/70 tracking-widest uppercase mt-3">
-                      Volgende
-                    </span>
-                  </button>
-                </div>
-
-                {/* Bottom: Progress Bar */}
-                <div 
-                  className="w-full flex items-center gap-3 px-2 sm:px-4 pb-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <span className="font-mono text-xs sm:text-base text-white/80 font-bold min-w-[45px]">
-                    {formatTime(currentTime)}
-                  </span>
-                  <div
-                    className="flex-1 h-3 sm:h-4 bg-white/20 rounded-full overflow-hidden cursor-pointer relative"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      resetNavBarTimer();
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                      const newTime = pct * (duration || 0);
-                      const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
-                      const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
-                      if (el) el.currentTime = newTime;
-                      setCurrentTime(newTime);
-                    }}
-                  >
-                    <div
-                      className="h-full bg-earth-gold transition-all duration-100 rounded-full"
-                      style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-                    />
-                  </div>
-                  <span className="font-mono text-xs sm:text-base text-white/80 font-bold min-w-[45px] text-right">
-                    {formatTime(duration)}
-                  </span>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* ---------------- 1. STARTUP SPLASH SCREEN ---------------- */}
         <AnimatePresence>
           {phase === 'startup' && !isDirectTrackRequested.current && (
@@ -4790,7 +4596,7 @@ export function Music() {
 
             {/* Thumbs Up & Thumbs Down rating buttons overlay vertically centered along the right edge of the screen */}
             <AnimatePresence>
-              {showRatingButtons && !isSwiping && (
+              {showRatingButtons && !isSwiping && !isCarMode && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.85 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -4866,135 +4672,283 @@ export function Music() {
             {/* Top Bar overlay (fades in/out on tap, strictly hidden when swiping) */}
             <AnimatePresence>
               {showNavBar && !isSwiping && !isSwipingRelease && (
-                <motion.div
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.25 }}
-                  className="relative z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent"
-                  onClick={(e) => { e.stopPropagation(); resetNavBarTimer(); }}
-                >
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPhase('albums')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-sm"
-                      title={t.topNav.albumsTitle}
-                    >
-                      <Disc3 className="w-3.5 h-3.5 text-earth-gold" />
-                      <span>{t.topNav.toAlbums}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPhase('list')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-earth-gold/20 hover:bg-earth-gold/30 text-earth-gold border border-earth-gold/40 backdrop-blur-md text-xs font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
-                      title={t.topNav.tracksTitle}
-                    >
-                      <ArrowLeft className="w-3.5 h-3.5" />
-                      <span>{t.topNav.toTracks}</span>
-                    </button>
-                  </div>
-
-                  {effectiveOrientation !== 'portrait' ? (
-                    <div className="text-center min-w-0 px-2 flex-1">
-                      <p className="text-[10px] uppercase tracking-widest text-earth-gold font-bold truncate">
-                        {currentTrack?.album || 'Muzikale Krabbels'}
+                isCarMode ? (
+                  <motion.div
+                    key="car-top-bar"
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.25 }}
+                    className="relative z-30 flex items-center justify-between p-3 sm:p-5 bg-gradient-to-b from-black/90 via-black/60 to-transparent"
+                    onClick={(e) => { e.stopPropagation(); resetNavBarTimer(); }}
+                  >
+                    {/* Left: SoundTrack Title (Leading) + Book Title underneath (No artist name) */}
+                    <div className="flex-1 min-w-0 pr-2">
+                      <h2 className="text-lg sm:text-2xl md:text-3xl font-serif font-black text-white truncate drop-shadow-md">
+                        {currentTrack?.title || 'SoundTrack'}
+                      </h2>
+                      <p className="text-xs sm:text-sm md:text-base font-bold text-earth-gold tracking-wide truncate mt-0.5 drop-shadow">
+                        {currentTrack?.album || 'SoundTrack'}
                       </p>
-                      <h3 className="text-sm font-serif text-white truncate">{currentTrack?.title}</h3>
                     </div>
-                  ) : (
-                    <div className="flex-1 min-w-0" />
-                  )}
 
-                  <div className="flex items-center gap-2">
-                    {/* Subtitles CC Button in Top Bar (Only visible in landscape mode when subtitles are available) */}
-                    {areSubtitlesAvailableInCurrentView && (
+                    {/* Right: Loop button (Lijst / 1x / Uit) & Mode toggle (Normaal) */}
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                      <button
+                        type="button"
+                        data-car-non-swipeable="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cycleLoopMode();
+                          resetNavBarTimer();
+                        }}
+                        className={`h-10 sm:h-12 px-3 sm:px-4 rounded-2xl transition-all cursor-pointer text-xs sm:text-sm font-bold border flex items-center gap-1.5 sm:gap-2 shadow-lg active:scale-95 ${
+                          loopMode === 'all'
+                            ? 'bg-earth-gold/30 border-earth-gold text-earth-gold'
+                            : loopMode === 'one'
+                            ? 'bg-amber-400/30 border-amber-400 text-amber-300'
+                            : 'bg-white/10 hover:bg-white/20 border-white/20 text-white/80'
+                        }`}
+                        title={loopMode === 'all' ? t.player.loopListTitle : loopMode === 'one' ? t.player.loopOneTitle : t.player.loopOffTitle}
+                      >
+                        {loopMode === 'one' ? (
+                          <Repeat1 className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300 pointer-events-none" />
+                        ) : (
+                          <Repeat className="w-4 h-4 sm:w-5 sm:h-5 text-earth-gold pointer-events-none" />
+                        )}
+                        <span className="font-mono tracking-wider uppercase text-[11px] sm:text-xs pointer-events-none">
+                          {loopMode === 'all' && (t.player.loopList || 'Lijst')}
+                          {loopMode === 'one' && (t.player.loopOne || '1x')}
+                          {loopMode === 'off' && (t.player.loopOff || 'Uit')}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        data-car-non-swipeable="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCarMode();
+                        }}
+                        className="h-10 sm:h-12 px-3 sm:px-4 rounded-2xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 text-white flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg"
+                        title="Terug naar normale weergave"
+                      >
+                        <img
+                          src="/images/car-mode-icon.png"
+                          alt="Auto-modus"
+                          className="w-5 h-3.5 sm:w-7 sm:h-5 object-contain pointer-events-none"
+                        />
+                        <span className="text-xs sm:text-sm font-bold tracking-wider uppercase pointer-events-none">
+                          Normaal
+                        </span>
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="normal-top-bar"
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.25 }}
+                    className="relative z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent"
+                    onClick={(e) => { e.stopPropagation(); resetNavBarTimer(); }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPhase('albums')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-sm"
+                        title={t.topNav.albumsTitle}
+                      >
+                        <Disc3 className="w-3.5 h-3.5 text-earth-gold" />
+                        <span>{t.topNav.toAlbums}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhase('list')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-earth-gold/20 hover:bg-earth-gold/30 text-earth-gold border border-earth-gold/40 backdrop-blur-md text-xs font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
+                        title={t.topNav.tracksTitle}
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>{t.topNav.toTracks}</span>
+                      </button>
+                    </div>
+
+                    {effectiveOrientation !== 'portrait' ? (
+                      <div className="text-center min-w-0 px-2 flex-1">
+                        <p className="text-[10px] uppercase tracking-widest text-earth-gold font-bold truncate">
+                          {currentTrack?.album || 'Muzikale Krabbels'}
+                        </p>
+                        <h3 className="text-sm font-serif text-white truncate">{currentTrack?.title}</h3>
+                      </div>
+                    ) : (
+                      <div className="flex-1 min-w-0" />
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      {/* Subtitles CC Button in Top Bar (Only visible in landscape mode when subtitles are available) */}
+                      {areSubtitlesAvailableInCurrentView && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            resetNavBarTimer();
+                            setShowSubtitleMenu(prev => !prev);
+                          }}
+                          className={`p-2 rounded-full border backdrop-blur-md transition-all cursor-pointer shadow-sm flex items-center justify-center ${
+                            subtitlesEnabled
+                              ? 'bg-earth-gold/20 border-earth-gold/60 text-earth-gold shadow-earth-gold/10'
+                              : 'bg-white/10 hover:bg-white/20 border-white/10 text-white/50 hover:text-white'
+                          }`}
+                          title={t.player.subtitlesTitle(subtitlesEnabled, activeSubtitleLang)}
+                        >
+                          <Subtitles className="w-4 h-4" />
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          resetNavBarTimer();
-                          setShowSubtitleMenu(prev => !prev);
+                          handleShareTrack();
                         }}
-                        className={`p-2 rounded-full border backdrop-blur-md transition-all cursor-pointer shadow-sm flex items-center justify-center ${
-                          subtitlesEnabled
-                            ? 'bg-earth-gold/20 border-earth-gold/60 text-earth-gold shadow-earth-gold/10'
-                            : 'bg-white/10 hover:bg-white/20 border-white/10 text-white/50 hover:text-white'
+                        className="p-2 rounded-full bg-earth-gold/20 hover:bg-earth-gold/30 text-earth-gold border border-earth-gold/40 backdrop-blur-md transition-all cursor-pointer shadow-md"
+                        title={t.topNav.shareTrack}
+                      >
+                        <Share2 className="w-4 h-4" />
+                      </button>
+                      {/* Equalizer / Klank Instellingen Knop */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowEqualizerModal(true);
+                        }}
+                        className={`p-2 rounded-full backdrop-blur-md transition-all cursor-pointer border ${
+                          equalizerPrefs.enabled && equalizerPrefs.presetId !== 'flat'
+                            ? 'bg-earth-gold/25 border-earth-gold/60 text-earth-gold shadow-md'
+                            : 'bg-white/10 hover:bg-white/20 border-white/15 text-white/80 hover:text-white'
                         }`}
-                        title={t.player.subtitlesTitle(subtitlesEnabled, activeSubtitleLang)}
+                        title={t.player.eqTitle(equalizerPrefs.enabled, equalizerPrefs.presetId)}
                       >
-                        <Subtitles className="w-4 h-4" />
+                        <SlidersHorizontal className="w-4 h-4 text-earth-gold" />
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={toggleBrowserFullscreen}
+                        className="p-2 rounded-full backdrop-blur-md transition-all bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                        title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
+                      >
+                        {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                      </button>
+                      {!isMobileDevice && desktopViewMode === 'fullscreen' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDesktopViewMode('iphone');
+                            if (isBrowserFullscreen) toggleBrowserFullscreen();
+                          }}
+                          className="p-2 rounded-full backdrop-blur-md transition-all bg-white/10 hover:bg-white/20 border border-white/15 text-white cursor-pointer shadow-sm"
+                          title={t.desktop.backToSimulator}
+                        >
+                          <Minimize2 className="w-4 h-4 text-earth-gold" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={toggleOrientation}
+                        className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all cursor-pointer"
+                        title={t.topNav.rotateScreen}
+                      >
+                        <RotateCw className="w-4 h-4" />
+                      </button>
+                      {SHOW_TEST_BUTTON && (
+                        <button
+                          type="button"
+                          onClick={() => setShowTestModal(true)}
+                          className="px-2.5 py-1.5 rounded-full bg-earth-gold/20 hover:bg-earth-gold/30 text-earth-gold border border-earth-gold/40 backdrop-blur-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow"
+                          title="Test knoppen zichtbaarheid"
+                        >
+                          <FlaskConical className="w-3.5 h-3.5" />
+                          <span>Test</span>
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )
+              )}
+            </AnimatePresence>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleShareTrack();
-                      }}
-                      className="p-2 rounded-full bg-earth-gold/20 hover:bg-earth-gold/30 text-earth-gold border border-earth-gold/40 backdrop-blur-md transition-all cursor-pointer shadow-md"
-                      title={t.topNav.shareTrack}
-                    >
-                      <Share2 className="w-4 h-4" />
-                    </button>
-                    {/* Equalizer / Klank Instellingen Knop */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowEqualizerModal(true);
-                      }}
-                      className={`p-2 rounded-full backdrop-blur-md transition-all cursor-pointer border ${
-                        equalizerPrefs.enabled && equalizerPrefs.presetId !== 'flat'
-                          ? 'bg-earth-gold/25 border-earth-gold/60 text-earth-gold shadow-md'
-                          : 'bg-white/10 hover:bg-white/20 border-white/15 text-white/80 hover:text-white'
-                      }`}
-                      title={t.player.eqTitle(equalizerPrefs.enabled, equalizerPrefs.presetId)}
-                    >
-                      <SlidersHorizontal className="w-4 h-4 text-earth-gold" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={toggleBrowserFullscreen}
-                      className="p-2 rounded-full backdrop-blur-md transition-all bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                      title={isBrowserFullscreen ? t.topNav.fullscreenExit : t.topNav.fullscreenEnter}
-                    >
-                      {isBrowserFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                    </button>
-                    {!isMobileDevice && desktopViewMode === 'fullscreen' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDesktopViewMode('iphone');
-                          if (isBrowserFullscreen) toggleBrowserFullscreen();
-                        }}
-                        className="p-2 rounded-full backdrop-blur-md transition-all bg-white/10 hover:bg-white/20 border border-white/15 text-white cursor-pointer shadow-sm"
-                        title={t.desktop.backToSimulator}
-                      >
-                        <Minimize2 className="w-4 h-4 text-earth-gold" />
-                      </button>
+            {/* Car Mode Center Screen-Spanning Buttons (Vorige, Play/Pauze, Volgende) */}
+            <AnimatePresence>
+              {isCarMode && showNavBar && !isSwiping && !isSwipingRelease && (
+                <motion.div
+                  key="car-center-controls"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="relative z-30 flex-1 flex items-center justify-center px-3 sm:px-8 py-2 w-full gap-3 sm:gap-6 my-auto select-none pointer-events-auto"
+                  onClick={(e) => { e.stopPropagation(); resetNavBarTimer(); }}
+                >
+                  {/* Left: Previous Track */}
+                  <button
+                    type="button"
+                    data-car-button="prev"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetNavBarTimer();
+                      handlePrev();
+                    }}
+                    className="flex-1 h-32 sm:h-44 md:h-56 max-h-[60vh] rounded-3xl bg-white/10 hover:bg-white/15 active:bg-white/25 border-2 border-white/15 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.98] select-none shadow-2xl group"
+                    title="Vorige SoundTrack"
+                  >
+                    <SkipBack className="w-12 h-12 sm:w-18 sm:h-18 md:w-24 md:h-24 text-white fill-current drop-shadow-lg group-hover:scale-110 transition-transform pointer-events-none" />
+                    <span className="text-xs sm:text-sm md:text-base font-bold text-white/70 tracking-widest uppercase mt-2 pointer-events-none">
+                      Vorige
+                    </span>
+                  </button>
+
+                  {/* Center: Play / Pause (Earth Gold) */}
+                  <button
+                    type="button"
+                    data-car-button="play"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetNavBarTimer();
+                      togglePlayPause();
+                    }}
+                    className="flex-[1.25] sm:flex-[1.35] h-36 sm:h-48 md:h-64 max-h-[65vh] rounded-3xl bg-earth-gold hover:bg-earth-gold/90 active:bg-earth-gold/80 text-black flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.97] select-none shadow-[0_0_50px_rgba(217,160,54,0.4)] border-2 border-amber-300/40 group"
+                    title={isPlaying ? "Pauzeer" : "Afspelen"}
+                  >
+                    {isPlaying ? (
+                      <Pause className="w-16 h-16 sm:w-24 sm:h-24 md:w-32 md:h-32 fill-black drop-shadow group-hover:scale-110 transition-transform pointer-events-none" />
+                    ) : (
+                      <Play className="w-16 h-16 sm:w-24 sm:h-24 md:w-32 md:h-32 fill-black ml-2 drop-shadow group-hover:scale-110 transition-transform pointer-events-none" />
                     )}
-                    <button
-                      type="button"
-                      onClick={toggleOrientation}
-                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all cursor-pointer"
-                      title={t.topNav.rotateScreen}
-                    >
-                      <RotateCw className="w-4 h-4" />
-                    </button>
-                    {SHOW_TEST_BUTTON && (
-                      <button
-                        type="button"
-                        onClick={() => setShowTestModal(true)}
-                        className="px-2.5 py-1.5 rounded-full bg-earth-gold/20 hover:bg-earth-gold/30 text-earth-gold border border-earth-gold/40 backdrop-blur-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow"
-                        title="Test knoppen zichtbaarheid"
-                      >
-                        <FlaskConical className="w-3.5 h-3.5" />
-                        <span>Test</span>
-                      </button>
-                    )}
-                  </div>
+                    <span className="text-xs sm:text-sm md:text-base font-black text-black tracking-widest uppercase mt-2 pointer-events-none">
+                      {isPlaying ? 'Pauze' : 'Speel af'}
+                    </span>
+                  </button>
+
+                  {/* Right: Next Track */}
+                  <button
+                    type="button"
+                    data-car-button="next"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetNavBarTimer();
+                      handleNext();
+                    }}
+                    className="flex-1 h-32 sm:h-44 md:h-56 max-h-[60vh] rounded-3xl bg-white/10 hover:bg-white/15 active:bg-white/25 border-2 border-white/15 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.98] select-none shadow-2xl group"
+                    title="Volgende SoundTrack"
+                  >
+                    <SkipForward className="w-12 h-12 sm:w-18 sm:h-18 md:w-24 md:h-24 text-white fill-current drop-shadow-lg group-hover:scale-110 transition-transform pointer-events-none" />
+                    <span className="text-xs sm:text-sm md:text-base font-bold text-white/70 tracking-widest uppercase mt-2 pointer-events-none">
+                      Volgende
+                    </span>
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -5071,6 +5025,7 @@ export function Music() {
             <AnimatePresence>
               {Boolean(
                 phase === 'player' &&
+                !isCarMode &&
                 currentTrack &&
                 !isSwiping &&
                 !isSwipingRelease &&
@@ -5393,14 +5348,58 @@ export function Music() {
             {/* Bottom MP3 Navigation Bar (Format switcher, progress bar, play/pause controls, loop mode) */}
             <AnimatePresence>
               {showNavBar && !isSwiping && !isSwipingRelease && (
-                <motion.div
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 30 }}
-                  transition={{ duration: 0.25 }}
-                  className="relative z-30 px-4 sm:px-5 pt-2 sm:pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black via-black/95 to-transparent space-y-2 shrink-0"
-                  onClick={(e) => { e.stopPropagation(); resetNavBarTimer(); }}
-                >
+                isCarMode ? (
+                  <motion.div
+                    key="car-bottom-bar"
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 30 }}
+                    transition={{ duration: 0.25 }}
+                    className="relative z-30 px-4 sm:px-8 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black via-black/90 to-transparent shrink-0"
+                    onClick={(e) => { e.stopPropagation(); resetNavBarTimer(); }}
+                  >
+                    <div 
+                      className="w-full flex items-center gap-3 sm:gap-4"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="font-mono text-xs sm:text-base text-white/80 font-bold min-w-[45px]">
+                        {formatTime(currentTime)}
+                      </span>
+                      <div
+                        data-car-non-swipeable="true"
+                        className="flex-1 h-3.5 sm:h-5 bg-white/20 rounded-full overflow-hidden cursor-pointer relative"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          resetNavBarTimer();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                          const newTime = pct * (duration || 0);
+                          const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
+                          const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
+                          if (el) el.currentTime = newTime;
+                          setCurrentTime(newTime);
+                        }}
+                      >
+                        <div
+                          className="h-full bg-earth-gold transition-all duration-100 rounded-full"
+                          style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-xs sm:text-base text-white/80 font-bold min-w-[45px] text-right">
+                        {formatTime(duration)}
+                      </span>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="normal-bottom-bar"
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 30 }}
+                    transition={{ duration: 0.25 }}
+                    className="relative z-30 px-4 sm:px-5 pt-2 sm:pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black via-black/95 to-transparent space-y-2 shrink-0"
+                    onClick={(e) => { e.stopPropagation(); resetNavBarTimer(); }}
+                  >
                   {/* Format/Version Switcher Pills (Top row of bottom bar, only shown if 2 or more formats exist) */}
                   {currentTrack && (
                     (() => {
@@ -5627,6 +5626,7 @@ export function Music() {
                     </div>
                   </div>
                 </motion.div>
+                )
               )}
             </AnimatePresence>
           </div>
