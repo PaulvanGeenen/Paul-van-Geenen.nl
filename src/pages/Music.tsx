@@ -2668,9 +2668,19 @@ export function Music() {
     setIsPlaying(false);
 
     const targetVol = isMuted ? 0 : volume;
+    const isLoopContinuingAudio =
+      (loopMode === 'all' || loopMode === 'one') &&
+      getEffectiveFormat(
+        loopMode === 'all' ? (tracks[getNextTrackIndex()] || tracks[0]) : tracks[currentTrackIndex],
+        selectedFormat
+      ) !== 'video';
+
+    // Op iOS/iPadOS behouden we bij doorlopende audio (LIJST / 1x) het actieve audio-element
+    // synchroon in de onEnded-context zodat Safari autoplay niet blokkeert na de visuele fade.
+    const activeAudioForIos = isIOS && isLoopContinuingAudio ? getActiveAudioEl() : null;
 
     [audioRefA.current, audioRefB.current].forEach(a => {
-      if (a) {
+      if (a && a !== activeAudioForIos) {
         try {
           a.pause();
           a.currentTime = 0;
@@ -2700,6 +2710,30 @@ export function Music() {
         isDirectVideoRequested.current = false;
       }
 
+      // iOS/iPadOS: laad en start de volgende track synchroon binnen onEnded (gemute tijdens de 3s visuele fade)
+      if (isIOS && targetEffectiveFormat !== 'video' && activeAudioForIos && targetMediaUrl) {
+        try {
+          const encoded = encodeURI(targetMediaUrl);
+          const isDifferent =
+            !activeAudioForIos.src ||
+            (activeAudioForIos.src !== targetMediaUrl &&
+              !activeAudioForIos.src.endsWith(encoded) &&
+              decodeURIComponent(activeAudioForIos.src) !== decodeURIComponent(targetMediaUrl));
+          if (isDifferent) {
+            activeAudioForIos.src = targetMediaUrl;
+          } else {
+            activeAudioForIos.currentTime = 0;
+          }
+          activeAudioForIos.muted = true;
+          const p = activeAudioForIos.play();
+          if (p !== undefined) {
+            p.catch(() => {
+              shouldAutoPlayRef.current = true;
+            });
+          }
+        } catch (e) {}
+      }
+
       cancelEndTransition();
       isEndTransitioningRef.current = true;
       setShowNavBar(false);
@@ -2710,7 +2744,7 @@ export function Music() {
         finalizeTrackSwitch(targetIndex, targetFormat);
         setShowNavBar(false);
 
-        if (targetMediaUrl) {
+        if (targetMediaUrl && !(isIOS && targetEffectiveFormat !== 'video')) {
           const el = targetEffectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
           if (el) {
             const encoded = encodeURI(targetMediaUrl);
@@ -2745,7 +2779,16 @@ export function Music() {
                 el.currentTime = 0;
               } catch (e) {}
               savedTimeRef.current = 0;
-              startPlaybackWithVolumeRamp(el, 900);
+              if (isIOS && targetEffectiveFormat !== 'video') {
+                el.muted = isMuted;
+                if (el.paused) {
+                  startPlaybackWithVolumeRamp(el, 900);
+                } else {
+                  setIsPlaying(true);
+                }
+              } else {
+                startPlaybackWithVolumeRamp(el, 900);
+              }
             }
           }, END_FADE_IN_MS);
           endTransitionTimersRef.current.push(tPlay);
