@@ -72,11 +72,11 @@ export function LogboekPreviewSection() {
               title="Klik om het logboek te openen"
               aria-label="Open het logboek"
             >
-              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-[0_18px_40px_rgba(35,20,10,0.22)]">
+              <div className="relative w-full h-full">
                 <img
                   src={customCover || logboekCoverRed}
                   alt="Rood leren Logboek van Paul van Geenen"
-                  className="w-full h-full object-cover block"
+                  className="w-full h-full object-contain block mix-blend-multiply"
                 />
               </div>
             </button>

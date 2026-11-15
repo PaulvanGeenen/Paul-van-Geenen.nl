@@ -27,9 +27,19 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const returnUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     setLogboekOverlayOpenState(isOpen);
+    if (isOpen) {
+      const currentFull = window.location.pathname + window.location.search + window.location.hash;
+      if (!window.location.pathname.toLowerCase().startsWith('/logboek')) {
+        returnUrlRef.current = currentFull || '/';
+      }
+    } else if (returnUrlRef.current) {
+      window.history.replaceState(null, '', returnUrlRef.current);
+      returnUrlRef.current = null;
+    }
     return () => setLogboekOverlayOpenState(false);
   }, [isOpen]);
 
@@ -103,6 +113,13 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
   const entry = entries[currentIndex];
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < entries.length - 1;
+
+  // Zet de directe URL (/logboek/:id) in de adresbalk zodat je hem direct kunt kopiëren
+  useEffect(() => {
+    if (isOpen && entry?.id) {
+      window.history.replaceState(null, '', `/logboek/${entry.id}`);
+    }
+  }, [isOpen, entry?.id]);
 
   // Speel MP3 automatisch af als dit bericht audio_enabled = true en een audio_url heeft
   useEffect(() => {
