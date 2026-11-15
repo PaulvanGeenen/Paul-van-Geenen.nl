@@ -1435,6 +1435,22 @@ export function Admin() {
                 <span>Sloten & SoundTracks Beheer</span>
               </button>
 
+              {/* LOGBOEK BEHEER SHORTCUT PILL */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('logboek')}
+                className={cn(
+                  "flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer",
+                  activeTab === 'logboek'
+                    ? "bg-rose-600 text-white border-rose-400 font-bold shadow-lg shadow-rose-900/30"
+                    : "bg-white/5 border-rose-400/30 text-white/90 hover:border-rose-400 hover:bg-rose-500/10"
+                )}
+                title="Open het Logboek beheerscherm"
+              >
+                <BookOpen className={cn("w-3.5 h-3.5", activeTab === 'logboek' ? "text-white" : "text-rose-400")} />
+                <span>Logboek Beheer</span>
+              </button>
+
               {/* AFBEELDING / KLEMBOARD -> NOTEBOOKLM PDF CONVERTER */}
               <input
                 ref={notebookPdfInputRef}
@@ -1523,7 +1539,7 @@ export function Admin() {
         </div>
 
         {/* Tab Selection */}
-        <div className="flex border-b border-earth-gold/20 mb-8 overflow-x-auto gap-2 no-scrollbar scrollbar-none pb-0.5">
+        <div className="flex flex-wrap border-b border-earth-gold/20 mb-8 gap-x-2 gap-y-1 pb-0.5">
           <button
             onClick={() => setActiveTab('qrcodes')}
             className={cn(
