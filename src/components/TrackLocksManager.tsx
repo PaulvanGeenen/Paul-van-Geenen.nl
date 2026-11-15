@@ -7,6 +7,7 @@ import { cn } from '../lib/utils';
 import {
   isAdminUser,
   setIsAdminUser,
+  setLockSystemEnabled,
   resetUnlockedTracks,
   getUnlockedTrackKeys,
   isAlbumLocksEnabled,
@@ -595,6 +596,9 @@ export function TrackLocksManager() {
                   disabled={savingId === `book-${selectedBook.id}`}
                   onClick={() => {
                     const nextVal = isAlbumAdminLocksEnabled(selectedBook) ? 0 : 1;
+                    if (nextVal === 1) {
+                      setLockSystemEnabled(true);
+                    }
                     updateBookLockSettings(
                       selectedBook,
                       { admin_locks_enabled: nextVal },

@@ -546,10 +546,14 @@ export function isTrackUnlocked(
   // Rule 2: Admin vs Non-Admin Reader lock switches per book
   const adminVisitor = isAdminUser();
   if (adminVisitor) {
-    // Admin visitor: if global admin lock override is off OR this book's admin_locks_enabled is off, all tracks are open for Admin
-    const globalEnabled = forceLockSystem !== undefined ? forceLockSystem : isLockSystemEnabled();
-    if (!globalEnabled) return true;
-    if (albumConfig && !isAlbumAdminLocksEnabled(albumConfig)) {
+    if (forceLockSystem === false) return true;
+    // Per-book admin_locks_enabled in SQL is authoritative when albumConfig is available;
+    // only fall back to the legacy localStorage toggle when no albumConfig is present.
+    if (albumConfig) {
+      if (!isAlbumAdminLocksEnabled(albumConfig)) {
+        return true;
+      }
+    } else if (!(forceLockSystem !== undefined ? forceLockSystem : isLockSystemEnabled())) {
       return true;
     }
   } else {
