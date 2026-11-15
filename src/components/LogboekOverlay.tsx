@@ -27,6 +27,7 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
   const [isFlipping, setIsFlipping] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isPhotoZoomed, setIsPhotoZoomed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const returnUrlRef = useRef<string | null>(null);
 
@@ -101,15 +102,25 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
   );
 
   useEffect(() => {
+    setIsPhotoZoomed(false);
+  }, [isOpen, currentIndex]);
+
+  useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (isPhotoZoomed) {
+          setIsPhotoZoomed(false);
+        } else {
+          onClose();
+        }
+      }
       if (e.key === 'ArrowRight') turnToPage('next');
       if (e.key === 'ArrowLeft') turnToPage('prev');
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, turnToPage]);
+  }, [isOpen, isPhotoZoomed, onClose, turnToPage]);
 
   const entry = entries[currentIndex];
   const hasPrev = currentIndex > 0;
@@ -313,8 +324,11 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
 
                     {entry.foto ? (
                       <div
+                        onMouseEnter={() => setIsPhotoZoomed(true)}
+                        onClick={() => setIsPhotoZoomed(true)}
+                        title="Beweeg over de foto om te vergroten"
                         className={cn(
-                          'relative bg-[#fcf9f2] p-3 pb-10 shadow-[0_10px_24px_rgba(35,22,10,0.28)] border border-stone-300/70 max-w-[290px] w-full transition-transform duration-300',
+                          'relative bg-[#fcf9f2] p-3 pb-10 shadow-[0_10px_24px_rgba(35,22,10,0.28)] border border-stone-300/70 max-w-[290px] w-full transition-transform duration-300 cursor-zoom-in hover:scale-[1.03]',
                           photoTiltClasses[vIdx]
                         )}
                       >
@@ -475,6 +489,35 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
           </div>
         </div>
       </div>
+
+      {/* Uitvergrote foto bij hover/klik (vult bijna het hele scherm) */}
+      {isPhotoZoomed && entry?.foto && (
+        <div
+          className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fade-in"
+          onClick={() => setIsPhotoZoomed(false)}
+        >
+          <div
+            onMouseLeave={() => setIsPhotoZoomed(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsPhotoZoomed(false);
+            }}
+            className="relative bg-[#fcf9f2] p-3 sm:p-4 pb-10 sm:pb-12 rounded-sm shadow-[0_30px_90px_rgba(0,0,0,0.75)] border border-stone-300/80 max-w-[94vw] max-h-[94vh] flex flex-col items-center cursor-zoom-out transition-transform duration-200"
+          >
+            <img
+              src={entry.foto}
+              alt={`Logboek ${formatLogboekDatum(entry.datum)}`}
+              className="max-w-[88vw] max-h-[82vh] w-auto h-auto object-contain block"
+            />
+            <div
+              style={{ fontFamily: "'Caveat', cursive" }}
+              className="mt-3 text-center text-2xl sm:text-3xl text-stone-700 leading-none"
+            >
+              {formatLogboekDatum(entry.datum)}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
