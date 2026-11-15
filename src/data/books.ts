@@ -101,7 +101,7 @@ Maar in Franciens hart brandde een ander vuur. Een voorspelling die als een zaad
     id: '3',
     slug: 'de-geboorte-van-de-leeuw',
     title: 'De Geboorte van de Leeuw',
-    subtitle: 'Tussen kille toetsen en brandend parket',
+    subtitle: 'Kille toetsen en brandend parket',
     order: 3,
     teaser: 'Soms spreekt een dans luider dan de waarheid — en is de stilte erna onherroepelijk.',
     description: [
