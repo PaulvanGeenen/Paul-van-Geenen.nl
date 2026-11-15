@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen, Plus, Trash2, Edit3, Save, X, Image as ImageIcon,
-  Upload, Loader2, Calendar, CheckCircle2, AlertCircle
+  Upload, Loader2, Calendar, CheckCircle2, AlertCircle, Volume2, VolumeX, KeyRound, Sparkles
 } from 'lucide-react';
 import {
   LogboekEntry,
@@ -9,9 +9,15 @@ import {
   saveLogboekEntry,
   deleteLogboekEntry,
   uploadLogboekPhoto,
+  uploadLogboekAudio,
   formatLogboekDatum,
   openLogboekOverlay,
 } from '../lib/logboek';
+import {
+  generateLogboekMp3DataUrl,
+  getSavedGeminiTtsKey,
+  saveGeminiTtsKey,
+} from '../lib/logboekTts';
 import { cn } from '../lib/utils';
 
 function getTodayIso(): string {
@@ -27,6 +33,7 @@ export function LogboekManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [generatingAudio, setGeneratingAudio] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -34,6 +41,10 @@ export function LogboekManager() {
   const [datum, setDatum] = useState<string>(() => getTodayIso());
   const [foto, setFoto] = useState<string>('');
   const [tekst, setTekst] = useState<string>('');
+  const [audioUrl, setAudioUrl] = useState<string>('');
+  const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
+  const [autoGenerateOnSave, setAutoGenerateOnSave] = useState<boolean>(true);
+  const [geminiKey, setGeminiKey] = useState<string>(() => getSavedGeminiTtsKey());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,7 +65,7 @@ export function LogboekManager() {
 
   const showStatus = (msg: string) => {
     setStatusMsg(msg);
-    window.setTimeout(() => setStatusMsg(null), 4000);
+    window.setTimeout(() => setStatusMsg(null), 5000);
   };
 
   const resetForm = () => {
@@ -62,6 +73,8 @@ export function LogboekManager() {
     setDatum(getTodayIso());
     setFoto('');
     setTekst('');
+    setAudioUrl('');
+    setAudioEnabled(true);
   };
 
   const handleFileOrBlob = async (file: Blob) => {
@@ -81,6 +94,41 @@ export function LogboekManager() {
       setErrorMsg(err?.message || 'Foto uploaden mislukt.');
     } finally {
       setUploadingPhoto(false);
+    }
+  };
+
+  const handleAudioFileUpload = async (file: File) => {
+    setGeneratingAudio(true);
+    setErrorMsg(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Kon audiobestand niet lezen.'));
+        reader.readAsDataURL(file);
+      });
+      const uploadedUrl = await uploadLogboekAudio(dataUrl);
+      setAudioUrl(uploadedUrl);
+      showStatus('MP3 geüpload naar /audio/logboek!');
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'MP3 uploaden mislukt.');
+    } finally {
+      setGeneratingAudio(false);
+    }
+  };
+
+  const handleGenerateMp3 = async (targetDatum: string, targetTekst: string): Promise<string | null> => {
+    if (!geminiKey.trim()) {
+      throw new Error('Vul eerst hieronder je Gemini API-sleutel in om automatisch een mannenstem-MP3 te maken.');
+    }
+    setGeneratingAudio(true);
+    try {
+      const mp3DataUrl = await generateLogboekMp3DataUrl(targetDatum, targetTekst, geminiKey);
+      const uploadedUrl = await uploadLogboekAudio(mp3DataUrl);
+      setAudioUrl(uploadedUrl);
+      return uploadedUrl;
+    } finally {
+      setGeneratingAudio(false);
     }
   };
 
@@ -108,13 +156,31 @@ export function LogboekManager() {
     setSaving(true);
     setErrorMsg(null);
     try {
+      let finalAudioUrl = audioUrl.trim() || null;
+
+      if (autoGenerateOnSave && geminiKey.trim() && (!finalAudioUrl || editingId !== null)) {
+        try {
+          finalAudioUrl = await handleGenerateMp3(datum.trim(), tekst.trim());
+        } catch (ttsErr: any) {
+          setErrorMsg(`Notitie wordt opgeslagen, maar MP3 genereren mislukte: ${ttsErr?.message || ttsErr}`);
+        }
+      }
+
       await saveLogboekEntry({
         id: editingId ?? undefined,
         datum: datum.trim(),
         foto: foto.trim() || null,
         tekst: tekst.trim(),
+        audio_url: finalAudioUrl,
+        audio_enabled: audioEnabled,
       });
-      showStatus(editingId ? 'Notitie bijgewerkt!' : 'Nieuwe logboek-notitie toegevoegd!');
+      showStatus(
+        finalAudioUrl
+          ? 'Notitie + mannenstem-MP3 opgeslagen!'
+          : editingId
+            ? 'Notitie bijgewerkt!'
+            : 'Nieuwe logboek-notitie toegevoegd!'
+      );
       resetForm();
       await load();
     } catch (err: any) {
@@ -124,11 +190,32 @@ export function LogboekManager() {
     }
   };
 
+  const handleToggleEntryAudio = async (entry: LogboekEntry) => {
+    setErrorMsg(null);
+    try {
+      const next = !entry.audio_enabled;
+      await saveLogboekEntry({
+        id: entry.id,
+        datum: entry.datum,
+        foto: entry.foto || null,
+        tekst: entry.tekst,
+        audio_url: entry.audio_url || null,
+        audio_enabled: next,
+      });
+      showStatus(next ? `Audio AAN gezet voor ${formatLogboekDatum(entry.datum)}.` : `Audio UIT gezet voor ${formatLogboekDatum(entry.datum)}.`);
+      await load();
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Kon audio-instelling niet wijzigen.');
+    }
+  };
+
   const handleEdit = (entry: LogboekEntry) => {
     setEditingId(entry.id);
     setDatum(entry.datum);
     setFoto(entry.foto || '');
     setTekst(entry.tekst);
+    setAudioUrl(entry.audio_url || '');
+    setAudioEnabled(entry.audio_enabled);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -147,7 +234,6 @@ export function LogboekManager() {
 
   return (
     <div className="space-y-6" onPaste={handlePaste}>
-      {/* Header */}
       <div className="bg-[#181818] border border-white/10 rounded-2xl p-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="p-3 rounded-xl bg-[#7c2218]/30 border border-[#a83829]/40 text-amber-200">
@@ -156,7 +242,7 @@ export function LogboekManager() {
           <div>
             <h2 className="text-xl font-serif font-bold text-white">Logboek Beheer</h2>
             <p className="text-xs text-earth-light/65">
-              Korte, gedateerde notities (nieuwste eerst). Plak een afbeelding met Ctrl+V of upload een foto.
+              Korte, gedateerde notities (nieuwste eerst). Plak een foto met Ctrl+V of upload er een, en laat automatisch een mannenstem-MP3 inspreken.
             </p>
           </div>
         </div>
@@ -169,6 +255,30 @@ export function LogboekManager() {
           <BookOpen className="w-4 h-4" />
           <span>Bekijk Open Logboek</span>
         </button>
+      </div>
+
+      <div className="bg-[#181818] border border-white/10 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <KeyRound className="w-5 h-5 text-earth-gold shrink-0 mt-0.5" />
+          <div>
+            <div className="text-sm font-bold text-white">Automatische Mannenstem MP3 (Gemini TTS)</div>
+            <p className="text-xs text-earth-light/65">
+              Bij opslaan leest een rustige mannenstem eerst de datum voor, wacht even, en leest daarna het bericht voor als MP3.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 min-w-[280px]">
+          <input
+            type="password"
+            value={geminiKey}
+            onChange={(e) => {
+              setGeminiKey(e.target.value);
+              saveGeminiTtsKey(e.target.value);
+            }}
+            placeholder="Gemini API-sleutel (lokaal bewaard)"
+            className="flex-1 bg-black/40 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-earth-gold"
+          />
+        </div>
       </div>
 
       {statusMsg && (
@@ -185,7 +295,6 @@ export function LogboekManager() {
         </div>
       )}
 
-      {/* Formulier */}
       <form onSubmit={handleSave} className="bg-[#181818] border border-white/10 rounded-2xl p-6 space-y-5">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -281,10 +390,81 @@ export function LogboekManager() {
           />
         </div>
 
+        <div className="p-4 rounded-xl bg-black/30 border border-white/10 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={audioEnabled}
+                onChange={(e) => setAudioEnabled(e.target.checked)}
+                className="w-4 h-4 accent-amber-400 rounded cursor-pointer"
+              />
+              <span className="text-sm font-bold text-white flex items-center gap-1.5">
+                {audioEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-stone-400" />}
+                MP3 afspelen bij dit bericht ({audioEnabled ? 'AAN' : 'UIT'})
+              </span>
+            </label>
+
+            <label className="flex items-center gap-2 text-xs text-earth-light/75 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoGenerateOnSave}
+                onChange={(e) => setAutoGenerateOnSave(e.target.checked)}
+                className="w-3.5 h-3.5 accent-amber-400 rounded cursor-pointer"
+              />
+              <span>Bij opslaan automatisch mannenstem-MP3 genereren</span>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-2 items-center">
+            <input
+              type="text"
+              value={audioUrl}
+              onChange={(e) => setAudioUrl(e.target.value)}
+              placeholder="/audio/logboek/... (wordt automatisch ingevuld bij MP3-generatie)"
+              className="flex-1 min-w-[200px] bg-black/40 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-earth-gold"
+            />
+            <button
+              type="button"
+              disabled={generatingAudio || !tekst.trim()}
+              onClick={async () => {
+                setErrorMsg(null);
+                try {
+                  await handleGenerateMp3(datum, tekst);
+                  showStatus('Mannenstem-MP3 gegenereerd en geüpload!');
+                } catch (err: any) {
+                  setErrorMsg(err?.message || 'Kon MP3 niet genereren.');
+                }
+              }}
+              className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+            >
+              {generatingAudio ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              <span>Genereer MP3 nu</span>
+            </button>
+            <label className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-white/15">
+              <Upload className="w-3.5 h-3.5" />
+              <span>Upload MP3</span>
+              <input
+                type="file"
+                accept="audio/mpeg,audio/mp3,audio/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleAudioFileUpload(f);
+                }}
+              />
+            </label>
+          </div>
+
+          {audioUrl && (
+            <audio controls src={audioUrl} className="w-full h-9 mt-1" />
+          )}
+        </div>
+
         <div className="flex justify-end">
           <button
             type="submit"
-            disabled={saving || uploadingPhoto}
+            disabled={saving || uploadingPhoto || generatingAudio}
             className="px-6 py-2.5 rounded-xl bg-earth-gold hover:bg-earth-gold/90 text-black font-bold text-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -293,7 +473,6 @@ export function LogboekManager() {
         </div>
       </form>
 
-      {/* Overzicht van notities */}
       <div className="bg-[#181818] border border-white/10 rounded-2xl p-6 space-y-4">
         <h3 className="text-base font-bold text-white">
           Alle Aantekeningen ({entries.length}) — Nieuwste eerst
@@ -329,15 +508,46 @@ export function LogboekManager() {
                       <ImageIcon className="w-5 h-5" />
                     </div>
                   )}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-mono text-earth-gold font-bold mb-1">
-                      {formatLogboekDatum(entry.datum)} ({entry.datum})
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-mono text-earth-gold font-bold">
+                        {formatLogboekDatum(entry.datum)} ({entry.datum})
+                      </span>
+                      {entry.audio_url && (
+                        <span
+                          className={cn(
+                            'text-[10px] font-mono px-2 py-0.5 rounded-full border',
+                            entry.audio_enabled
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                              : 'bg-stone-500/15 text-stone-400 border-stone-500/30'
+                          )}
+                        >
+                          {entry.audio_enabled ? '🔊 MP3 AAN' : '🔇 MP3 UIT'}
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-white/90 whitespace-pre-wrap break-words">{entry.tekst}</p>
+                    {entry.audio_url && entry.audio_enabled && (
+                      <audio controls src={entry.audio_url} className="h-8 max-w-xs pt-1" />
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleEntryAudio(entry)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 cursor-pointer border',
+                      entry.audio_enabled
+                        ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
+                        : 'bg-white/5 hover:bg-white/10 text-stone-400 border-white/10'
+                    )}
+                    title="Zet MP3 afspelen aan of uit voor dit bericht"
+                  >
+                    {entry.audio_enabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                    <span>{entry.audio_enabled ? 'Audio AAN' : 'Audio UIT'}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleEdit(entry)}

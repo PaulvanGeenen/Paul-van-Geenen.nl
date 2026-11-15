@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { X, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { X, ChevronLeft, ChevronRight, BookOpen, Volume2, VolumeX } from 'lucide-react';
 import {
   LogboekEntry,
   fetchLogboekEntries,
   formatLogboekDatum,
+  setLogboekOverlayOpenState,
 } from '../lib/logboek';
 import { cn } from '../lib/utils';
 
@@ -21,6 +22,13 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, onClose }: LogboekOve
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [flipDir, setFlipDir] = useState<FlipDirection>(null);
   const [isFlipping, setIsFlipping] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    setLogboekOverlayOpenState(isOpen);
+    return () => setLogboekOverlayOpenState(false);
+  }, [isOpen]);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -90,6 +98,55 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, onClose }: LogboekOve
   const entry = entries[currentIndex];
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < entries.length - 1;
+
+  // Speel MP3 automatisch af als dit bericht audio_enabled = true en een audio_url heeft
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsPlayingAudio(false);
+
+    if (!isOpen || !entry || !entry.audio_enabled || !entry.audio_url) {
+      return;
+    }
+
+    const audio = new Audio(entry.audio_url);
+    audioRef.current = audio;
+    const onPlay = () => setIsPlayingAudio(true);
+    const onEnded = () => setIsPlayingAudio(false);
+    const onPause = () => setIsPlayingAudio(false);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('pause', onPause);
+
+    audio.play().catch(() => {
+      // Autoplay kan door browser worden geblokkeerd als er niet direct geklikt is
+      setIsPlayingAudio(false);
+    });
+
+    return () => {
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('pause', onPause);
+      audio.pause();
+    };
+  }, [isOpen, entry?.id, entry?.audio_url, entry?.audio_enabled]);
+
+  const toggleEntryAudio = () => {
+    if (!entry?.audio_url) return;
+    if (!audioRef.current) {
+      audioRef.current = new Audio(entry.audio_url);
+      audioRef.current.addEventListener('play', () => setIsPlayingAudio(true));
+      audioRef.current.addEventListener('ended', () => setIsPlayingAudio(false));
+      audioRef.current.addEventListener('pause', () => setIsPlayingAudio(false));
+    }
+    if (isPlayingAudio) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => {});
+    }
+  };
 
   // Subtiele variatie per bladzijde zodat het handgeschreven en niet-uitgelijnd aanvoelt
   const tiltClasses = ['-rotate-[0.6deg]', 'rotate-[0.5deg]', '-rotate-[0.3deg]', 'rotate-[0.7deg]'];
@@ -293,12 +350,30 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, onClose }: LogboekOve
                         >
                           {formatLogboekDatum(entry.datum)}
                         </time>
-                        <span
-                          style={{ fontFamily: "'Patrick Hand', cursive" }}
-                          className="text-sm text-stone-500"
-                        >
-                          blz. {currentIndex + 1} / {entries.length}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {entry.audio_enabled && entry.audio_url && (
+                            <button
+                              type="button"
+                              onClick={toggleEntryAudio}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#7c2218]/10 hover:bg-[#7c2218]/20 text-[#7c2218] text-xs transition-colors cursor-pointer"
+                              style={{ fontFamily: "'Patrick Hand', cursive" }}
+                              title={isPlayingAudio ? 'Pauzeer voorlezen' : 'Luister naar deze aantekening'}
+                            >
+                              {isPlayingAudio ? (
+                                <Volume2 className="w-3.5 h-3.5 animate-pulse" />
+                              ) : (
+                                <VolumeX className="w-3.5 h-3.5" />
+                              )}
+                              <span>{isPlayingAudio ? 'Speelt...' : 'Luister'}</span>
+                            </button>
+                          )}
+                          <span
+                            style={{ fontFamily: "'Patrick Hand', cursive" }}
+                            className="text-sm text-stone-500"
+                          >
+                            blz. {currentIndex + 1} / {entries.length}
+                          </span>
+                        </div>
                       </div>
 
                       <div

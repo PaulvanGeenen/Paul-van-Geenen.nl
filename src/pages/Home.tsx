@@ -118,6 +118,9 @@ export function Home() {
 
       </section>
 
+      {/* Logboek Sectie — net voor Het keerpunt */}
+      <LogboekPreviewSection />
+
       {/* Intro Section */}
       <section className="section-padding bg-white relative overflow-hidden">
         <div className="max-w-4xl mx-auto text-center relative z-10">
@@ -135,9 +138,6 @@ export function Home() {
           </div>
         </div>
       </section>
-
-      {/* Logboek Sectie */}
-      <LogboekPreviewSection />
 
     </div>
   );

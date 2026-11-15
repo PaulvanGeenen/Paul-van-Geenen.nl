@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, BookOpen, Maximize2, Minimize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -88,24 +88,27 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-3 lg:gap-10">
           <div className="flex items-center gap-2 lg:gap-8">
             {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "nav-link text-white/50 hover:text-white uppercase text-[9px] lg:text-[10px] tracking-[0.15em] lg:tracking-[0.2em] font-bold transition-all duration-300 relative py-1",
-                  location.pathname === item.path && "text-white"
+              <React.Fragment key={item.path}>
+                <Link
+                  to={item.path}
+                  className={cn(
+                    "nav-link text-white/50 hover:text-white uppercase text-[9px] lg:text-[10px] tracking-[0.15em] lg:tracking-[0.2em] font-bold transition-all duration-300 relative py-1",
+                    location.pathname === item.path && "text-white"
+                  )}
+                >
+                  {item.name}
+                </Link>
+                {item.path === '/de-echo' && (
+                  <button
+                    type="button"
+                    onClick={() => openLogboekOverlay(0)}
+                    className="nav-link text-white/50 hover:text-white uppercase text-[9px] lg:text-[10px] tracking-[0.15em] lg:tracking-[0.2em] font-bold transition-all duration-300 relative py-1 cursor-pointer"
+                  >
+                    Logboek
+                  </button>
                 )}
-              >
-                {item.name}
-              </Link>
+              </React.Fragment>
             ))}
-            <button
-              type="button"
-              onClick={() => openLogboekOverlay(0)}
-              className="nav-link text-white/50 hover:text-white uppercase text-[9px] lg:text-[10px] tracking-[0.15em] lg:tracking-[0.2em] font-bold transition-all duration-300 relative py-1 cursor-pointer"
-            >
-              Logboek
-            </button>
             <div className="flex items-center gap-3 ml-2">
               <button
                 type="button"
@@ -150,28 +153,31 @@ export function Navbar() {
             className="md:hidden bg-earth-dark-soft border-b border-white/10 px-6 py-8 flex flex-col gap-6"
           >
             {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setIsOpen(false)}
-                className={cn(
-                  "text-lg font-medium",
-                  location.pathname === item.path ? "text-earth-gold font-bold" : "text-earth-light"
+              <React.Fragment key={item.path}>
+                <Link
+                  to={item.path}
+                  onClick={() => setIsOpen(false)}
+                  className={cn(
+                    "text-lg font-medium",
+                    location.pathname === item.path ? "text-earth-gold font-bold" : "text-earth-light"
+                  )}
+                >
+                  {item.name}
+                </Link>
+                {item.path === '/de-echo' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      openLogboekOverlay(0);
+                    }}
+                    className="text-lg font-medium text-earth-light text-left cursor-pointer"
+                  >
+                    Logboek
+                  </button>
                 )}
-              >
-                {item.name}
-              </Link>
+              </React.Fragment>
             ))}
-            <button
-              type="button"
-              onClick={() => {
-                setIsOpen(false);
-                openLogboekOverlay(0);
-              }}
-              className="text-lg font-medium text-earth-light text-left cursor-pointer"
-            >
-              Logboek
-            </button>
             <div className="flex items-center justify-between pt-4 border-t border-white/5 opacity-80">
               <button
                 type="button"

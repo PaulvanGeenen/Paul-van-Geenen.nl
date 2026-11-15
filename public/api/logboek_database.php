@@ -71,7 +71,7 @@ if (!$pdo) {
     exit;
 }
 
-// Ensure table exists
+// Ensure table exists & auto-migrate audio columns
 try {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS logboek (
@@ -79,11 +79,21 @@ try {
             datum DATE NOT NULL,
             foto VARCHAR(512) NULL DEFAULT NULL,
             tekst TEXT NOT NULL,
+            audio_url VARCHAR(512) NULL DEFAULT NULL,
+            audio_enabled TINYINT(1) NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_datum (datum, id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $cols = $pdo->query("SHOW COLUMNS FROM logboek")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('audio_url', $cols, true)) {
+        $pdo->exec("ALTER TABLE logboek ADD COLUMN audio_url VARCHAR(512) NULL DEFAULT NULL AFTER tekst");
+    }
+    if (!in_array('audio_enabled', $cols, true)) {
+        $pdo->exec("ALTER TABLE logboek ADD COLUMN audio_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER audio_url");
+    }
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(["success" => false, "error" => "Kon logboek tabel niet aanmaken: " . $e->getMessage()]);
@@ -92,8 +102,11 @@ try {
 
 if ($action === 'get_logboek') {
     try {
-        $stmt = $pdo->query("SELECT id, datum, foto, tekst, created_at, updated_at FROM logboek ORDER BY datum DESC, id DESC");
+        $stmt = $pdo->query("SELECT id, datum, foto, tekst, audio_url, audio_enabled, created_at, updated_at FROM logboek ORDER BY datum DESC, id DESC");
         $entries = $stmt->fetchAll();
+        foreach ($entries as &$row) {
+            $row['audio_enabled'] = isset($row['audio_enabled']) ? ((int)$row['audio_enabled'] !== 0) : true;
+        }
         echo json_encode([
             "success" => true,
             "entries" => $entries
@@ -117,6 +130,8 @@ if ($action === 'save_entry') {
     $datum = trim($input['datum'] ?? '');
     $foto = isset($input['foto']) && trim((string)$input['foto']) !== '' ? trim((string)$input['foto']) : null;
     $tekst = trim($input['tekst'] ?? '');
+    $audioUrl = isset($input['audio_url']) && trim((string)$input['audio_url']) !== '' ? trim((string)$input['audio_url']) : null;
+    $audioEnabled = array_key_exists('audio_enabled', $input) ? (!empty($input['audio_enabled']) ? 1 : 0) : 1;
 
     if ($datum === '' || $tekst === '') {
         http_response_code(400);
@@ -126,11 +141,11 @@ if ($action === 'save_entry') {
 
     try {
         if ($id) {
-            $stmt = $pdo->prepare("UPDATE logboek SET datum = ?, foto = ?, tekst = ? WHERE id = ?");
-            $stmt->execute([$datum, $foto, $tekst, $id]);
+            $stmt = $pdo->prepare("UPDATE logboek SET datum = ?, foto = ?, tekst = ?, audio_url = ?, audio_enabled = ? WHERE id = ?");
+            $stmt->execute([$datum, $foto, $tekst, $audioUrl, $audioEnabled, $id]);
         } else {
-            $stmt = $pdo->prepare("INSERT INTO logboek (datum, foto, tekst) VALUES (?, ?, ?)");
-            $stmt->execute([$datum, $foto, $tekst]);
+            $stmt = $pdo->prepare("INSERT INTO logboek (datum, foto, tekst, audio_url, audio_enabled) VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([$datum, $foto, $tekst, $audioUrl, $audioEnabled]);
             $id = (int)$pdo->lastInsertId();
         }
         echo json_encode(["success" => true, "id" => $id]);
@@ -200,6 +215,50 @@ if ($action === 'upload_photo') {
     echo json_encode([
         "success" => true,
         "url" => "/images/logboek/" . $filename
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if ($action === 'upload_audio') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $dataUrl = $input['dataUrl'] ?? '';
+
+    if (!preg_match('/^data:audio\/(mpeg|mp3|wav|x-wav);base64,(.+)$/i', $dataUrl, $matches)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Ongeldig audioformaat (verwacht MP3)."]);
+        exit;
+    }
+
+    $ext = strtolower($matches[1]);
+    if ($ext === 'mpeg') $ext = 'mp3';
+    if ($ext === 'x-wav') $ext = 'wav';
+    $binary = base64_decode($matches[2]);
+    if ($binary === false) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Kon audiobestand niet decoderen."]);
+        exit;
+    }
+
+    $uploadDir = dirname(__DIR__) . '/audio/logboek';
+    if (!is_dir($uploadDir)) {
+        if (!mkdir($uploadDir, 0755, true)) {
+            http_response_code(500);
+            echo json_encode(["success" => false, "error" => "Kon uploadmap /audio/logboek niet aanmaken."]);
+            exit;
+        }
+    }
+
+    $filename = 'logboek_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    $targetPath = $uploadDir . '/' . $filename;
+    if (file_put_contents($targetPath, $binary) === false) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => "Kon audio niet opslaan op de server."]);
+        exit;
+    }
+
+    echo json_encode([
+        "success" => true,
+        "url" => "/audio/logboek/" . $filename
     ], JSON_UNESCAPED_SLASHES);
     exit;
 }

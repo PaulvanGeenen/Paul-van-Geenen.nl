@@ -3,6 +3,8 @@ export interface LogboekEntry {
   datum: string; // YYYY-MM-DD
   foto?: string | null;
   tekst: string;
+  audio_url?: string | null;
+  audio_enabled: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -58,6 +60,8 @@ export async function fetchLogboekEntries(): Promise<LogboekEntry[]> {
     datum: String(r.datum || ''),
     foto: r.foto ? String(r.foto) : null,
     tekst: String(r.tekst || ''),
+    audio_url: r.audio_url ? String(r.audio_url) : null,
+    audio_enabled: r.audio_enabled === undefined ? true : Boolean(Number(r.audio_enabled) !== 0 && r.audio_enabled !== false),
     created_at: r.created_at,
     updated_at: r.updated_at,
   }));
@@ -68,6 +72,8 @@ export async function saveLogboekEntry(entry: {
   datum: string;
   foto?: string | null;
   tekst: string;
+  audio_url?: string | null;
+  audio_enabled?: boolean;
 }): Promise<number> {
   const data = await callLogboekApi('save_entry', 'POST', entry);
   window.dispatchEvent(new CustomEvent('pvg-logboek-changed'));
@@ -82,6 +88,15 @@ export async function deleteLogboekEntry(id: number): Promise<void> {
 export async function uploadLogboekPhoto(dataUrl: string): Promise<string> {
   const data = await callLogboekApi('upload_photo', 'POST', { dataUrl });
   return String(data.url);
+}
+
+export async function uploadLogboekAudio(dataUrl: string): Promise<string> {
+  const data = await callLogboekApi('upload_audio', 'POST', { dataUrl });
+  return String(data.url);
+}
+
+export function setLogboekOverlayOpenState(isOpen: boolean): void {
+  window.dispatchEvent(new CustomEvent('pvg-logboek-overlay-state', { detail: { isOpen } }));
 }
 
 export function openLogboekOverlay(entryIndex = 0): void {
