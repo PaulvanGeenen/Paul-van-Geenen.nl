@@ -117,9 +117,50 @@ export function openLogboekOverlay(entryIndex = 0, entryId?: number): void {
   window.dispatchEvent(new CustomEvent('pvg-open-logboek', { detail: { entryIndex, entryId } }));
 }
 
+const LOGBOEK_SHARE_SALT = 0x5e8a4d29;
+
+export function encodeLogboekShareCode(entryId: number): string {
+  const raw = `lb~${entryId}`;
+  let encoded = '';
+  for (let i = 0; i < raw.length; i++) {
+    const charCode = raw.charCodeAt(i);
+    const mask = ((i + 1) * 41 + (LOGBOEK_SHARE_SALT >> (i % 8))) & 0xff;
+    encoded += String.fromCharCode(charCode ^ mask);
+  }
+  return btoa(encoded)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+export function decodeLogboekShareCode(code: string): number | null {
+  try {
+    let base64 = code.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) {
+      base64 += '=';
+    }
+    const decodedStr = atob(base64);
+    let raw = '';
+    for (let i = 0; i < decodedStr.length; i++) {
+      const charCode = decodedStr.charCodeAt(i);
+      const mask = ((i + 1) * 41 + (LOGBOEK_SHARE_SALT >> (i % 8))) & 0xff;
+      raw += String.fromCharCode(charCode ^ mask);
+    }
+    if (raw.startsWith('lb~')) {
+      const idStr = raw.slice(3);
+      if (/^\d+$/.test(idStr)) {
+        return Number(idStr);
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function getLogboekShareUrl(entryId: number): string {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://paulvangeenen.nl';
-  return `${origin}/logboek/${entryId}`;
+  return `${origin}/logboek?v=${encodeLogboekShareCode(entryId)}`;
 }
 
 export function formatLogboekDatum(datumStr: string): string {

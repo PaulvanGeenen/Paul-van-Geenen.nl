@@ -56,16 +56,34 @@ function ScrollToTop() {
 import { AudioProvider, useAudio } from './context/AudioContext';
 import { LionBooksIntro } from './components/ui/LionBooksIntro';
 import { LogboekOverlay } from './components/LogboekOverlay';
-import { openLogboekOverlay } from './lib/logboek';
+import { decodeLogboekShareCode, openLogboekOverlay } from './lib/logboek';
 
 function LogboekDirectRoute() {
   const { entryId } = useParams<{ entryId?: string }>();
   const { search } = useLocation();
 
   useEffect(() => {
-    const queryId = new URLSearchParams(search).get('id');
-    const rawId = entryId || queryId;
-    const parsedId = rawId && /^\d+$/.test(rawId) ? Number(rawId) : undefined;
+    const params = new URLSearchParams(search);
+    const vParam = params.get('v');
+    const queryId = params.get('id');
+
+    let parsedId: number | undefined;
+    if (vParam) {
+      const decoded = decodeLogboekShareCode(vParam);
+      if (decoded !== null) parsedId = decoded;
+    }
+    if (parsedId === undefined && entryId) {
+      if (/^\d+$/.test(entryId)) {
+        parsedId = Number(entryId);
+      } else {
+        const decoded = decodeLogboekShareCode(entryId);
+        if (decoded !== null) parsedId = decoded;
+      }
+    }
+    if (parsedId === undefined && queryId && /^\d+$/.test(queryId)) {
+      parsedId = Number(queryId);
+    }
+
     openLogboekOverlay(0, parsedId);
   }, [entryId, search]);
 

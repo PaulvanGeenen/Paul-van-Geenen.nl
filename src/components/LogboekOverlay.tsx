@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { X, ChevronLeft, ChevronRight, BookOpen, Volume2, VolumeX, Share2, Check } from 'lucide-react';
 import {
   LogboekEntry,
+  encodeLogboekShareCode,
   fetchLogboekEntries,
   formatLogboekDatum,
   getLogboekShareUrl,
@@ -114,10 +115,10 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < entries.length - 1;
 
-  // Zet de directe URL (/logboek/:id) in de adresbalk zodat je hem direct kunt kopiëren
+  // Zet de directe YouTube-stijl URL (/logboek?v=...) in de adresbalk zodat je hem direct kunt kopiëren
   useEffect(() => {
     if (isOpen && entry?.id) {
-      window.history.replaceState(null, '', `/logboek/${entry.id}`);
+      window.history.replaceState(null, '', `/logboek?v=${encodeLogboekShareCode(entry.id)}`);
     }
   }, [isOpen, entry?.id]);
 
