@@ -448,9 +448,58 @@ export function LogboekManager() {
         </div>
 
         {foto && (
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-black/30 border border-white/10">
-            <img src={foto} alt="Preview" className="w-20 h-16 object-cover rounded-lg border border-white/15" />
-            <span className="text-xs text-earth-light/70 truncate">{foto}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/10">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <label
+                className="relative group w-24 h-20 rounded-lg overflow-hidden border border-white/15 shrink-0 cursor-pointer"
+                title="Klik om een andere afbeelding te kiezen"
+              >
+                <img src={foto} alt="Preview" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[11px] font-bold text-white">
+                  Wijzig
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFileOrBlob(f);
+                  }}
+                />
+              </label>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-white/90">Geüploade afbeelding</div>
+                <div className="text-xs text-earth-light/60 truncate">{foto}</div>
+                <div className="text-[11px] text-earth-light/45 mt-0.5">
+                  Klik op het voorbeeld of plak met Ctrl+V om te vervangen.
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <label className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-white/15">
+                {uploadingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                <span>Wijzig foto</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFileOrBlob(f);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setFoto('')}
+                className="px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-300 text-xs flex items-center gap-1.5 cursor-pointer border border-red-500/30"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Verwijder</span>
+              </button>
+            </div>
           </div>
         )}
 
