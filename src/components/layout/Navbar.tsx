@@ -20,6 +20,7 @@ const NAV_ITEMS = [
 import { VolumeControl } from './VolumeControl';
 import { IvoryHeartPendant } from '../ui/IvoryHeartPendant';
 import { isLionBooksDomain } from '../../utils/domain';
+import { openLogboekOverlay } from '../../lib/logboek';
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -98,6 +99,13 @@ export function Navbar() {
                 {item.name}
               </Link>
             ))}
+            <button
+              type="button"
+              onClick={() => openLogboekOverlay(0)}
+              className="nav-link text-white/50 hover:text-white uppercase text-[9px] lg:text-[10px] tracking-[0.15em] lg:tracking-[0.2em] font-bold transition-all duration-300 relative py-1 cursor-pointer"
+            >
+              Logboek
+            </button>
             <div className="flex items-center gap-3 ml-2">
               <button
                 type="button"
@@ -154,6 +162,16 @@ export function Navbar() {
                 {item.name}
               </Link>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                openLogboekOverlay(0);
+              }}
+              className="text-lg font-medium text-earth-light text-left cursor-pointer"
+            >
+              Logboek
+            </button>
             <div className="flex items-center justify-between pt-4 border-t border-white/5 opacity-80">
               <button
                 type="button"

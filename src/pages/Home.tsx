@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { useAudio } from '../context/AudioContext';
 import page9Img from '../assets/images/hoofdstuk9.jpg';
+import { LogboekPreviewSection } from '../components/LogboekPreviewSection';
 
 export function Home() {
   const { ambientMuted, toggleAmbientMute, setIsAmbientPlaying, masterVolume } = useAudio();
@@ -134,6 +135,9 @@ export function Home() {
           </div>
         </div>
       </section>
+
+      {/* Logboek Sectie */}
+      <LogboekPreviewSection />
 
     </div>
   );

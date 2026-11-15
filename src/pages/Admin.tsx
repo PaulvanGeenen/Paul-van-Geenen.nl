@@ -38,6 +38,7 @@ import jsQR from 'jsqr';
 import { MapModal } from '../components/MapModal';
 import { MusicDbManager } from '../components/MusicDbManager';
 import { TrackLocksManager } from '../components/TrackLocksManager';
+import { LogboekManager } from '../components/LogboekManager';
 
 interface QRCodeData {
   id: string;
@@ -256,7 +257,7 @@ const isListenInAlbumOrBook = (
 export function Admin() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks'>('qrcodes');
+  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek'>('qrcodes');
   
   // Data lists
   const [qrcodes, setQrcodes] = useState<QRCodeData[]>([]);
@@ -1625,6 +1626,19 @@ export function Admin() {
           >
             <Lock className="w-4 h-4 text-earth-gold" />
             Sloten & SoundTracks
+          </button>
+
+          <button
+            onClick={() => setActiveTab('logboek')}
+            className={cn(
+              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
+              activeTab === 'logboek'
+                ? "border-earth-gold text-white"
+                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
+            )}
+          >
+            <BookOpen className="w-4 h-4 text-rose-400" />
+            Logboek
           </button>
         </div>
 
@@ -3881,6 +3895,11 @@ export function Admin() {
         {/* TAB 8: APARTE BEHEERPAGINA VOOR SLOTEN & SOUNDTRACKS */}
         {activeTab === 'track_locks' && !loading && (
           <TrackLocksManager />
+        )}
+
+        {/* TAB 9: LOGBOEK */}
+        {activeTab === 'logboek' && !loading && (
+          <LogboekManager />
         )}
 
         <p className="mt-8 text-center text-earth-light/20 text-xs">

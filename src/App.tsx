@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import { useEffect, lazy, Suspense, Component, ErrorInfo, ReactNode } from 'react';
+import { useEffect, useState, lazy, Suspense, Component, ErrorInfo, ReactNode } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { AnalyticsTracker } from './components/AnalyticsTracker';
@@ -55,6 +55,30 @@ function ScrollToTop() {
 
 import { AudioProvider, useAudio } from './context/AudioContext';
 import { LionBooksIntro } from './components/ui/LionBooksIntro';
+import { LogboekOverlay } from './components/LogboekOverlay';
+
+function GlobalLogboekOverlay() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [initialIndex, setInitialIndex] = useState(0);
+
+  useEffect(() => {
+    const handleOpen = (e: Event) => {
+      const custom = e as CustomEvent<{ entryIndex?: number }>;
+      setInitialIndex(custom.detail?.entryIndex ?? 0);
+      setIsOpen(true);
+    };
+    window.addEventListener('pvg-open-logboek', handleOpen);
+    return () => window.removeEventListener('pvg-open-logboek', handleOpen);
+  }, []);
+
+  return (
+    <LogboekOverlay
+      isOpen={isOpen}
+      initialIndex={initialIndex}
+      onClose={() => setIsOpen(false)}
+    />
+  );
+}
 
 function AdminAmbientSuppressor() {
   const { pathname } = useLocation();
@@ -115,6 +139,7 @@ export default function App() {
     <AudioProvider>
       <Router>
         <LionBooksIntro />
+        <GlobalLogboekOverlay />
         <ScrollToTop />
         <AdminAmbientSuppressor />
         <AnalyticsTracker />
