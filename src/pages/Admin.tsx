@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload } from 'lucide-react';
+import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText } from 'lucide-react';
+import { convertImageFileToNotebookLmPdf } from '../utils/notebookLmPdf';
 import {
   BOOK_DEFAULT_QR_STYLE,
   buildRedirectQrUrl,
@@ -278,6 +279,22 @@ export function Admin() {
   const [isScanMapOpen, setIsScanMapOpen] = useState(false);
   const [isMusicMapOpen, setIsMusicMapOpen] = useState(false);
   const [musicMapRegion, setMusicMapRegion] = useState<'NL' | 'EU' | 'WORLD'>('NL');
+  const [convertingNotebookPdf, setConvertingNotebookPdf] = useState(false);
+  const notebookPdfInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleNotebookLmPdfFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setConvertingNotebookPdf(true);
+    try {
+      await convertImageFileToNotebookLmPdf(file);
+    } catch (err: any) {
+      alert(err?.message || 'Fout bij het converteren van de afbeelding naar NotebookLM PDF.');
+    } finally {
+      setConvertingNotebookPdf(false);
+    }
+  };
   const [isTransipModalOpen, setIsTransipModalOpen] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
   
@@ -1356,6 +1373,25 @@ export function Admin() {
               >
                 <Lock className={cn("w-3.5 h-3.5", activeTab === 'track_locks' ? "text-black" : "text-earth-gold")} />
                 <span>Sloten & SoundTracks Beheer</span>
+              </button>
+
+              {/* AFBEELDING -> NOTEBOOKLM PDF CONVERTER */}
+              <input
+                ref={notebookPdfInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleNotebookLmPdfFileChange}
+                className="hidden"
+              />
+              <button
+                type="button"
+                disabled={convertingNotebookPdf}
+                onClick={() => notebookPdfInputRef.current?.click()}
+                className="flex items-center gap-2 border border-earth-gold/30 bg-white/5 text-white/90 hover:border-earth-gold hover:bg-earth-gold/10 disabled:opacity-50 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer"
+                title="Converteer een afbeelding (JPG/PNG/WebP) naar een sRGB-PDF met tekstlaag voor Google NotebookLM"
+              >
+                <FileText className="w-3.5 h-3.5 text-earth-gold" />
+                <span>{convertingNotebookPdf ? 'Converteren...' : 'Afbeelding → NotebookLM PDF'}</span>
               </button>
 
               {/* QR-CODE STUDIO SHORTCUT PILL (OPENT NIEUW VENSTER/TABBLAD) */}

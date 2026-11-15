@@ -30,16 +30,16 @@ export interface QrStyleConfig {
 }
 
 export const BOOK_DEFAULT_QR_STYLE: Omit<QrStyleConfig, 'url' | 'image'> = {
-  size: 246,
+  size: 500,
   fgColor: '#000000',
   bgColor: '#FFFFFF',
   dotType: 'square',
   cornerSquareType: 'square',
   cornerDotType: 'square',
-  errorCorrectionLevel: 'H',
+  errorCorrectionLevel: 'Q',
   imageSize: 0.45,
   imageMarginRatio: 0.004,
-  quietZoneRatio: 0.0488,
+  quietZoneRatio: 0.1,
 };
 
 /**
@@ -154,13 +154,13 @@ export async function verifyQrBlobScanability(blob: Blob): Promise<{
 }
 
 /**
- * Genereert een scherpe 246x246 PNG data-URL van een QR-code (exacte boekstijl)
+ * Genereert een scherpe 500x500 PNG data-URL van een QR-code (600 dpi op 20x20 mm, exacte boekstijl)
  * voor opslag bij Redirect Mappings en verifieert direct met jsQR.
  */
 export async function generateRedirectQrDataUrl(
   redirectCode: string,
   centerLogo?: string | null,
-  size = 246
+  size = 500
 ): Promise<{ dataUrl: string; targetUrl: string; verified: boolean }> {
   const targetUrl = buildRedirectQrUrl(redirectCode);
   const config: QrStyleConfig = {
@@ -185,6 +185,7 @@ export async function generateRedirectQrDataUrl(
   if (!ctx) {
     throw new Error('Canvas context niet beschikbaar.');
   }
+  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0);
@@ -272,6 +273,7 @@ export async function downloadDataUrlAsPng(dataUrl: string, fileName: string): P
   canvas.height = img.height || 400;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas context niet beschikbaar.');
+  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0);
