@@ -113,8 +113,13 @@ export function setLogboekOverlayOpenState(isOpen: boolean): void {
   window.dispatchEvent(new CustomEvent('pvg-logboek-overlay-state', { detail: { isOpen } }));
 }
 
-export function openLogboekOverlay(entryIndex = 0): void {
-  window.dispatchEvent(new CustomEvent('pvg-open-logboek', { detail: { entryIndex } }));
+export function openLogboekOverlay(entryIndex = 0, entryId?: number): void {
+  window.dispatchEvent(new CustomEvent('pvg-open-logboek', { detail: { entryIndex, entryId } }));
+}
+
+export function getLogboekShareUrl(entryId: number): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://paulvangeenen.nl';
+  return `${origin}/logboek/${entryId}`;
 }
 
 export function formatLogboekDatum(datumStr: string): string {

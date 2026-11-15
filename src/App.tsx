@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useParams } from 'react-router-dom';
 import { useEffect, useState, lazy, Suspense, Component, ErrorInfo, ReactNode } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
@@ -59,20 +59,29 @@ import { LogboekOverlay } from './components/LogboekOverlay';
 import { openLogboekOverlay } from './lib/logboek';
 
 function LogboekDirectRoute() {
+  const { entryId } = useParams<{ entryId?: string }>();
+  const { search } = useLocation();
+
   useEffect(() => {
-    openLogboekOverlay(0);
-  }, []);
+    const queryId = new URLSearchParams(search).get('id');
+    const rawId = entryId || queryId;
+    const parsedId = rawId && /^\d+$/.test(rawId) ? Number(rawId) : undefined;
+    openLogboekOverlay(0, parsedId);
+  }, [entryId, search]);
+
   return <Home />;
 }
 
 function GlobalLogboekOverlay() {
   const [isOpen, setIsOpen] = useState(false);
   const [initialIndex, setInitialIndex] = useState(0);
+  const [initialEntryId, setInitialEntryId] = useState<number | null>(null);
 
   useEffect(() => {
     const handleOpen = (e: Event) => {
-      const custom = e as CustomEvent<{ entryIndex?: number }>;
+      const custom = e as CustomEvent<{ entryIndex?: number; entryId?: number }>;
       setInitialIndex(custom.detail?.entryIndex ?? 0);
+      setInitialEntryId(custom.detail?.entryId ?? null);
       setIsOpen(true);
     };
     window.addEventListener('pvg-open-logboek', handleOpen);
@@ -83,6 +92,7 @@ function GlobalLogboekOverlay() {
     <LogboekOverlay
       isOpen={isOpen}
       initialIndex={initialIndex}
+      initialEntryId={initialEntryId}
       onClose={() => setIsOpen(false)}
     />
   );
@@ -164,6 +174,7 @@ export default function App() {
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/mri-scan" element={<MRIScan />} />
                 <Route path="/logboek" element={<LogboekDirectRoute />} />
+                <Route path="/logboek/:entryId" element={<LogboekDirectRoute />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/beheer" element={<Admin />} />
                 <Route path="/beheer/qr-studio" element={<QRStudio />} />

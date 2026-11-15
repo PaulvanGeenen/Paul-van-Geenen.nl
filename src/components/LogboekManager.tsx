@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen, Plus, Trash2, Edit3, Save, X, Image as ImageIcon,
-  Upload, Loader2, Calendar, CheckCircle2, AlertCircle, Volume2, VolumeX, KeyRound, Sparkles, RotateCcw
+  Upload, Loader2, Calendar, CheckCircle2, AlertCircle, Volume2, VolumeX, KeyRound, Sparkles, RotateCcw, Link2, Check
 } from 'lucide-react';
 import {
   LogboekEntry,
@@ -12,6 +12,7 @@ import {
   uploadLogboekPhoto,
   uploadLogboekAudio,
   formatLogboekDatum,
+  getLogboekShareUrl,
   openLogboekOverlay,
 } from '../lib/logboek';
 import logboekCoverRed from '../assets/images/logboek-cover-red.jpg';
@@ -49,6 +50,7 @@ export function LogboekManager() {
   const [geminiKey, setGeminiKey] = useState<string>(() => getSavedGeminiTtsKey());
   const [coverImage, setCoverImage] = useState<string>('');
   const [savingCover, setSavingCover] = useState<boolean>(false);
+  const [copiedEntryId, setCopiedEntryId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -661,6 +663,22 @@ export function LogboekManager() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = getLogboekShareUrl(entry.id);
+                      navigator.clipboard?.writeText(url).then(() => {
+                        setCopiedEntryId(entry.id);
+                        showStatus(`Directe link gekopieerd: ${url}`);
+                        window.setTimeout(() => setCopiedEntryId(null), 2000);
+                      });
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-400/30 text-xs flex items-center gap-1.5 cursor-pointer"
+                    title="Kopieer directe URL om door te sturen"
+                  >
+                    {copiedEntryId === entry.id ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Link2 className="w-3.5 h-3.5" />}
+                    <span>{copiedEntryId === entry.id ? 'Gekopieerd!' : 'Kopieer link'}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleToggleEntryAudio(entry)}

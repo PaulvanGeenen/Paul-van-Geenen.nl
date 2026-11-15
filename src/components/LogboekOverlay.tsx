@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, BookOpen, Volume2, VolumeX } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, BookOpen, Volume2, VolumeX, Share2, Check } from 'lucide-react';
 import {
   LogboekEntry,
   fetchLogboekEntries,
   formatLogboekDatum,
+  getLogboekShareUrl,
   setLogboekOverlayOpenState,
 } from '../lib/logboek';
 import { cn } from '../lib/utils';
@@ -11,18 +12,20 @@ import { cn } from '../lib/utils';
 interface LogboekOverlayProps {
   isOpen: boolean;
   initialIndex?: number;
+  initialEntryId?: number | null;
   onClose: () => void;
 }
 
 type FlipDirection = 'next' | 'prev' | null;
 
-export function LogboekOverlay({ isOpen, initialIndex = 0, onClose }: LogboekOverlayProps) {
+export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null, onClose }: LogboekOverlayProps) {
   const [entries, setEntries] = useState<LogboekEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [flipDir, setFlipDir] = useState<FlipDirection>(null);
   const [isFlipping, setIsFlipping] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -37,6 +40,10 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, onClose }: LogboekOve
       setEntries(data);
       setCurrentIndex((prev) => {
         if (data.length === 0) return 0;
+        if (initialEntryId) {
+          const foundIdx = data.findIndex((item) => item.id === initialEntryId);
+          if (foundIdx !== -1) return foundIdx;
+        }
         return Math.min(Math.max(0, prev), data.length - 1);
       });
     } catch (err) {
@@ -44,7 +51,7 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, onClose }: LogboekOve
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialEntryId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -367,6 +374,21 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, onClose }: LogboekOve
                               <span>{isPlayingAudio ? 'Speelt...' : 'Luister'}</span>
                             </button>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(getLogboekShareUrl(entry.id)).then(() => {
+                                setCopiedLink(true);
+                                window.setTimeout(() => setCopiedLink(false), 2000);
+                              });
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-stone-900/10 hover:bg-stone-900/20 text-stone-700 text-xs transition-colors cursor-pointer"
+                            style={{ fontFamily: "'Patrick Hand', cursive" }}
+                            title="Kopieer directe link naar deze aantekening"
+                          >
+                            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-700" /> : <Share2 className="w-3.5 h-3.5" />}
+                            <span>{copiedLink ? 'Link gekopieerd!' : 'Deel'}</span>
+                          </button>
                           <span
                             style={{ fontFamily: "'Patrick Hand', cursive" }}
                             className="text-sm text-stone-500"
