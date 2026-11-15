@@ -93,8 +93,6 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, onClose }: LogboekOve
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose, turnToPage]);
 
-  if (!isOpen) return null;
-
   const entry = entries[currentIndex];
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < entries.length - 1;
@@ -132,6 +130,8 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, onClose }: LogboekOve
       audio.pause();
     };
   }, [isOpen, entry?.id, entry?.audio_url, entry?.audio_enabled]);
+
+  if (!isOpen) return null;
 
   const toggleEntryAudio = () => {
     if (!entry?.audio_url) return;
