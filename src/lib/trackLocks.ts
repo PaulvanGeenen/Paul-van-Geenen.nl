@@ -4,6 +4,7 @@
 const UNLOCKED_TRACKS_STORAGE_KEY = 'pvg_unlocked_tracks_v1';
 const LOCK_SYSTEM_ENABLED_KEY = 'pvg_lock_system_enabled_v1';
 const ADMIN_USER_FLAG_KEY = 'pvg_is_admin_user_v1';
+const ADMIN_FRESH_READER_MODE_KEY = 'pvg_admin_fresh_reader_v1';
 const BOOK_GUIDS_STORAGE_KEY = 'pvg_book_guids_v1';
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
@@ -92,6 +93,29 @@ export function setIsAdminUser(isAdmin: boolean): void {
     window.dispatchEvent(new CustomEvent('pvg-locks-changed'));
   } catch (e) {
     console.warn('Could not save admin user flag:', e);
+  }
+}
+
+/**
+ * When testing with admin locks ON, whether to simulate a fresh reader
+ * (ignoring local QR unlocks & GUIDs) or keep previously unlocked tracks.
+ */
+export function isAdminFreshReaderMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(ADMIN_FRESH_READER_MODE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setAdminFreshReaderMode(fresh: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(ADMIN_FRESH_READER_MODE_KEY, fresh ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('pvg-locks-changed'));
+  } catch (e) {
+    console.warn('Could not save admin fresh reader mode:', e);
   }
 }
 
@@ -555,6 +579,11 @@ export function isTrackUnlocked(
       }
     } else if (!(forceLockSystem !== undefined ? forceLockSystem : isLockSystemEnabled())) {
       return true;
+    }
+
+    // If Admin chose "Alles initieel op slot (nieuwe lezer)", skip local GUID/QR unlocks
+    if (isAdminFreshReaderMode()) {
+      return false;
     }
   } else {
     // Non-Admin reader: check this book's locks_enabled in SQL

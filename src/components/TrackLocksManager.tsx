@@ -7,6 +7,8 @@ import { cn } from '../lib/utils';
 import {
   isAdminUser,
   setIsAdminUser,
+  isAdminFreshReaderMode,
+  setAdminFreshReaderMode,
   setLockSystemEnabled,
   resetUnlockedTracks,
   getUnlockedTrackKeys,
@@ -61,6 +63,7 @@ export function TrackLocksManager() {
 
   // Local browser role & unlocked keys state
   const [browserIsAdmin, setBrowserIsAdmin] = useState<boolean>(() => isAdminUser());
+  const [adminFreshReader, setAdminFreshReader] = useState<boolean>(() => isAdminFreshReaderMode());
   const [unlockedKeysCount, setUnlockedKeysCount] = useState<number>(() => getUnlockedTrackKeys().length);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -76,6 +79,7 @@ export function TrackLocksManager() {
     }
     const syncLocal = () => {
       setBrowserIsAdmin(isAdminUser());
+      setAdminFreshReader(isAdminFreshReaderMode());
       setUnlockedKeysCount(getUnlockedTrackKeys().length);
     };
     window.addEventListener('pvg-locks-changed', syncLocal);
@@ -585,6 +589,67 @@ export function TrackLocksManager() {
                 )}>
                   Hiermee zet je de slootjes aan of uit voor <strong>alleen admin-lezers</strong>. Zet dit <strong>UIT</strong> om voor admins alle songs van dit boek open te zetten (terwijl gewone lezers gewoon de slootjes zien), of zet dit <strong>AAN</strong> zodat een admin de slootjes-functionaliteit zelf kan testen.
                 </p>
+
+                {/* Keuze voor Admin Testmodus: Initieel alles op slot vs. Verder met reeds ontgrendelde nummers */}
+                <div className={cn(
+                  "mt-3 p-3 rounded-xl border space-y-2",
+                  !isAlbumAdminLocksEnabled(selectedBook)
+                    ? "bg-black/25 border-emerald-500/25"
+                    : "bg-black/30 border-white/10"
+                )}>
+                  <div className="text-[11px] font-mono uppercase tracking-wider text-earth-light/70 font-bold">
+                    Testgedrag bij slootjes AAN:
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminFreshReaderMode(true);
+                        setAdminFreshReader(true);
+                        playLockRattleSound();
+                        showTempStatus('Testmodus: alles wat initieel op slot staat, is nu vergrendeld (nieuwe lezer). Je eigen ontgrendelingen blijven bewaard.');
+                      }}
+                      className={cn(
+                        "text-left p-2.5 rounded-lg border text-xs transition-all cursor-pointer",
+                        adminFreshReader
+                          ? "bg-amber-500/20 border-amber-400/70 text-amber-100 shadow-sm"
+                          : "bg-white/5 border-white/10 text-earth-light/70 hover:bg-white/10"
+                      )}
+                    >
+                      <div className="font-bold flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>Alles initieel op slot</span>
+                      </div>
+                      <div className="text-[10px] opacity-80 mt-0.5 leading-snug">
+                        Ervaar exact wat een nieuwe lezer ziet (alleen &ldquo;Nooit op slot&rdquo; is open).
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminFreshReaderMode(false);
+                        setAdminFreshReader(false);
+                        playLockUnlockSound();
+                        showTempStatus('Testmodus: je gaat verder met de nummers die je al via QR/GUID had ontgrendeld.');
+                      }}
+                      className={cn(
+                        "text-left p-2.5 rounded-lg border text-xs transition-all cursor-pointer",
+                        !adminFreshReader
+                          ? "bg-emerald-500/20 border-emerald-400/70 text-emerald-100 shadow-sm"
+                          : "bg-white/5 border-white/10 text-earth-light/70 hover:bg-white/10"
+                      )}
+                    >
+                      <div className="font-bold flex items-center gap-1.5">
+                        <LockOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Verder met ontgrendeld</span>
+                      </div>
+                      <div className="text-[10px] opacity-80 mt-0.5 leading-snug">
+                        Behoud nummers die je zelf al via QR-code of GUID hebt geopend.
+                      </div>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className={cn(
