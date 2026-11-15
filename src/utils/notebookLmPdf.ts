@@ -1,16 +1,19 @@
 import { jsPDF } from 'jspdf';
 
 /**
- * Converteert een afbeeldingsbestand (JPG, PNG, WebP, enz.) naar een schone sRGB-PDF
+ * Converteert een afbeelding (File of Clipboard Blob: JPG, PNG, WebP, enz.) naar een schone sRGB-PDF
  * met een selecteerbare tekstlaag, zodat Google NotebookLM de PDF zonder foutmelding accepteert.
  */
-export async function convertImageFileToNotebookLmPdf(file: File): Promise<string> {
-  const objectUrl = URL.createObjectURL(file);
+export async function convertImageFileToNotebookLmPdf(
+  imageInput: Blob,
+  explicitName?: string
+): Promise<string> {
+  const objectUrl = URL.createObjectURL(imageInput);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const el = new Image();
       el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error('Kon de geselecteerde afbeelding niet laden.'));
+      el.onerror = () => reject(new Error('Kon de afbeelding niet laden.'));
       el.src = objectUrl;
     });
 
@@ -35,7 +38,10 @@ export async function convertImageFileToNotebookLmPdf(file: File): Promise<strin
 
     const wMm = Math.min(350, Math.max(120, (width * 25.4) / 150));
     const hMm = wMm * (height / width);
-    const baseName = file.name.replace(/\.[^.]+$/, '') || 'afbeelding';
+    const rawName = explicitName || (imageInput instanceof File ? imageInput.name : '');
+    const now = new Date();
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const baseName = (rawName ? rawName.replace(/\.[^.]+$/, '') : `knipsel_${stamp}`) || 'afbeelding';
 
     const doc = new jsPDF({
       orientation: wMm >= hMm ? 'landscape' : 'portrait',

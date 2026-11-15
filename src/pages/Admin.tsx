@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText } from 'lucide-react';
+import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText, ClipboardPaste } from 'lucide-react';
 import { convertImageFileToNotebookLmPdf } from '../utils/notebookLmPdf';
 import {
   BOOK_DEFAULT_QR_STYLE,
@@ -295,6 +295,65 @@ export function Admin() {
       setConvertingNotebookPdf(false);
     }
   };
+
+  const handlePasteNotebookLmPdf = async () => {
+    if (!navigator.clipboard?.read) {
+      alert('Direct plakken via knop wordt door deze browser niet ondersteund. Druk gewoon op Ctrl+V op deze pagina!');
+      return;
+    }
+    setConvertingNotebookPdf(true);
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imgType = item.types.find((t) => t.startsWith('image/'));
+        if (imgType) {
+          const blob = await item.getType(imgType);
+          await convertImageFileToNotebookLmPdf(blob);
+          return;
+        }
+      }
+      alert('Geen afbeelding gevonden op het klembord. Maak eerst een knipsel (Win+Shift+S) of kopieer een afbeelding.');
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError') {
+        alert('Klembord-toegang geweigerd. Tip: druk gewoon op Ctrl+V op deze pagina om je knipsel te plakken!');
+      } else {
+        alert(err?.message || 'Fout bij het lezen van het klembord. Probeer Ctrl+V op deze pagina.');
+      }
+    } finally {
+      setConvertingNotebookPdf(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAuthorized) return;
+    const onPaste = async (e: ClipboardEvent) => {
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) {
+        return;
+      }
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const blob = item.getAsFile();
+          if (blob) {
+            e.preventDefault();
+            setConvertingNotebookPdf(true);
+            try {
+              await convertImageFileToNotebookLmPdf(blob);
+            } catch (err: any) {
+              alert(err?.message || 'Fout bij het converteren van geplakte afbeelding naar NotebookLM PDF.');
+            } finally {
+              setConvertingNotebookPdf(false);
+            }
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [isAuthorized]);
   const [isTransipModalOpen, setIsTransipModalOpen] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
   
@@ -1375,7 +1434,7 @@ export function Admin() {
                 <span>Sloten & SoundTracks Beheer</span>
               </button>
 
-              {/* AFBEELDING -> NOTEBOOKLM PDF CONVERTER */}
+              {/* AFBEELDING / KLEMBOARD -> NOTEBOOKLM PDF CONVERTER */}
               <input
                 ref={notebookPdfInputRef}
                 type="file"
@@ -1383,16 +1442,29 @@ export function Admin() {
                 onChange={handleNotebookLmPdfFileChange}
                 className="hidden"
               />
-              <button
-                type="button"
-                disabled={convertingNotebookPdf}
-                onClick={() => notebookPdfInputRef.current?.click()}
-                className="flex items-center gap-2 border border-earth-gold/30 bg-white/5 text-white/90 hover:border-earth-gold hover:bg-earth-gold/10 disabled:opacity-50 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer"
-                title="Converteer een afbeelding (JPG/PNG/WebP) naar een sRGB-PDF met tekstlaag voor Google NotebookLM"
-              >
-                <FileText className="w-3.5 h-3.5 text-earth-gold" />
-                <span>{convertingNotebookPdf ? 'Converteren...' : 'Afbeelding → NotebookLM PDF'}</span>
-              </button>
+              <div className="flex items-center rounded-full border border-earth-gold/30 bg-white/5 overflow-hidden">
+                <button
+                  type="button"
+                  disabled={convertingNotebookPdf}
+                  onClick={() => notebookPdfInputRef.current?.click()}
+                  className="flex items-center gap-2 text-white/90 hover:bg-earth-gold/10 disabled:opacity-50 px-3.5 py-1.5 text-xs font-medium transition-all cursor-pointer"
+                  title="Kies een afbeeldingsbestand (JPG/PNG/WebP) en download als NotebookLM PDF"
+                >
+                  <FileText className="w-3.5 h-3.5 text-earth-gold" />
+                  <span>{convertingNotebookPdf ? 'Converteren...' : 'Afbeelding → NotebookLM PDF'}</span>
+                </button>
+                <div className="w-[1px] h-4 bg-earth-gold/25" />
+                <button
+                  type="button"
+                  disabled={convertingNotebookPdf}
+                  onClick={handlePasteNotebookLmPdf}
+                  className="flex items-center gap-1.5 text-earth-gold hover:bg-earth-gold/10 disabled:opacity-50 px-3 py-1.5 text-xs font-medium transition-all cursor-pointer"
+                  title="Plak een schermafdruk/knipsel uit het klembord (of druk op Ctrl+V op deze pagina)"
+                >
+                  <ClipboardPaste className="w-3.5 h-3.5" />
+                  <span>Plak (Ctrl+V)</span>
+                </button>
+              </div>
 
               {/* QR-CODE STUDIO SHORTCUT PILL (OPENT NIEUW VENSTER/TABBLAD) */}
               <button
