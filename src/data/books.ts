@@ -2,7 +2,7 @@ import { Book, EchoChapter } from '../types';
 import koesterWeg from '../assets/images/boek1.jpg';
 import koester21 from '../assets/images/book2.jpg';
 import deEcho from '../assets/images/book3.jpg';
-import deBestemming from '../assets/images/book4.jpg';
+import deLeeuw from '../assets/images/book-leeuw.jpg';
 import homeImg from '../assets/images/home.jpg';
 import page9Img from '../assets/images/hoofdstuk9.jpg';
 
@@ -99,10 +99,29 @@ Maar in Franciens hart brandde een ander vuur. Een voorspelling die als een zaad
 
   {
     id: '3',
+    slug: 'de-geboorte-van-de-leeuw',
+    title: 'De Geboorte van de Leeuw',
+    subtitle: 'Tussen kille toetsen en brandend parket',
+    order: 3,
+    teaser: 'Soms spreekt een dans luider dan de waarheid — en is de stilte erna onherroepelijk.',
+    description: [
+      'Op het parket waar hout en huid elkaar raken, leert een jongen van negentien dansen.',
+      'Thuis heerst de verstikkende stilte van zijn vader; op school de kille zekerheid van techniek en formules. Zijn wereld bestaat uit printplaten en de veilige toetsen van het orgel. Haar wereld is vloeibaar ritme, Latijns-Amerikaanse passie en een dans die ontembaar is.',
+      'Twee jonge mensen, vier decennia geleden, in een dansschool waar het nog rook naar talkpoeder en boenwas. Tussen schroom en overgave leert een verlegen jongen zijn rug te rechten — en ontwaakt de leeuw.',
+      'Een waargebeurd verhaal, geschreven als een roman.',
+    ],
+    coverUrl: deLeeuw,
+    bannerUrl: '/images/banner-boek-3.jpg',
+    buyUrl: 'https://www.bravenewbooks.nl/paulvangeenen',
+    whyThisOrder: `In Koester het Leven ontwikkelt Paul voornamelijk zijn ratio. In dit boek ontwikkelt hij zijn hart en het is de opmaat naar De Echo.`,
+  },
+
+  {
+    id: '4',
     slug: 'de-echo',
     title: 'De Echo',
     subtitle: 'Veertig jaar van zwijgen',
-    order: 3,
+    order: 4,
     teaser: 'De emotionele kern. Een 21-jarige achter het orgel en de onuitgesproken liefde voor Luna.',
     
     description: [
@@ -135,32 +154,29 @@ Ik til de stoel op. Niet langzaam. Niet voorzichtig. Met een ruk. Met een brul. 
 En dan gooi ik. Niet zomaar gooien. Vernietigen. De stoel vliegt door de kamer. Hij raakt de muur met een explosie van hout en splinters. Een poot breekt af. De rugleuning splijt. Scherven vliegen alle kanten op. Een scherf raakt de lamp. Glas knalt. De lamp valt. De gloeilamp spettert en dooft. Duisternis slokt de kamer half op. Alleen nog het schemerlicht van de straatlantaarn buiten valt door het raam."`,
     fragmentVideoUrl: '/videos/fragment-boek-3.mp4',
     whyThisOrder: `Mijn stem is eindelijk ontwaakt. Maar dan volgt de werkelijke beklemming. Dit is het moment waarop je genadeloos hard wordt meegetrokken in de absolute, rauwe kern van mijn zwijgen.`
-  },
-
-  {
-    id: '4',
-    slug: 'de-bestemming',
-    title: 'De Bestemming',
-    subtitle: 'De terugkeer',
-    order: 4,
-    teaser: 'Het heden. De terugkeer en de confrontatie met de sloopdreiging van mijn kerk.',
-    
-    description: [
-      "Op een ijskoude februari avond in 1984 stapte ik als eenentwintigjarige jongen een majestueus gebouw binnen. Hoog op het oksaal, achter een machtig instrument met zilveren en gouden pijpen, brak ik de stiltes van mijn jeugd open. Ik temde het donkere beest en liet de stenen gewelven zingen. Hier vond ik geen kille religie, maar een warme gemeenschap en een allesverterende passie. Ik was koning, en het gebouw ademde met mij mee.",
-      "Maar de tijd is meedogenloos. Veertig jaar later sta ik opnieuw voor dezelfde zware eikenhouten deuren. De warme droom van mijn jeugd heeft plaatsgemaakt voor een ijzingwekkende realiteit. Een wereld geregeerd door kille spreadsheets en zielloze efficiëntie is ook mijn oude koninkrijk binnengedrongen.",
-      "De Bestemming is het rauwe, viscerale verhaal van mijn ultieme confrontatie met mijn verleden. Gevangen tussen magische herinneringen en een hartverscheurend heden, word ik overspoeld door een onvoorstelbare dreiging. Terwijl in de verte een zwaar, mechanisch geronk aanzwelt dat de aarde doet beven, rest er nog maar één vraag:",
-      "Hoever reikt de echo van je jeugd, voordat een absolute oerkracht alles voorgoed vermorzelt?"
-    ],
-    
-    coverUrl: deBestemming,
-    bannerUrl: '/images/banner-boek-4.jpg',
-    buyUrl: 'https://www.bravenewbooks.nl/paulvangeenen',
-    fragmentText: "Een muur van ijskoude, muffe lucht slaat me vol in het gezicht. Waar ik zojuist in mijn herinnering nog de zoete, zware geur van wierook en warm kaarsvet snoof, ruik ik nu alleen nog maar verlatenheid. Stof. Vocht. Dood.\n\nIk zet een stap over de drempel en sta in het middenschip. Mijn adem stokt in mijn keel. Mijn maag trekt samen tot een harde, pijnlijke knoop die me bijna dubbel doet klappen. Ik wist dat dit zou komen. Ik had me erop voorbereid. Ik wíst dat ze het gebouw hadden gestript. Maar je kunt je niet voorbereiden op de fysieke klap van een vermoorde ziel.\n\nDe ruimte voor me is gigantisch, hol en karkas-achtig. De statige pilaren van baksteen en beton staan er nog, ze reiken nog steeds naar de hemel, maar ze dragen niets meer. Geen gezang, geen warmte, geen gemeenschap. Ze dragen alleen nog een oorverdovende, drukkende leegte die de lucht uit mijn longen perst.\n\nDe kerkmeester zegt niets. Hij snapt het. Hij loopt zwijgend naast me terwijl we via het middenpad naar voren lopen. Mijn schoenen raken de stoffige tegelvloer, de echo is nu dof en eenzaam, als voetstappen in een immense graftombe. Het licht valt nog steeds door de hoge boogramen, maar het vangt geen stofdeeltjes meer die dansen boven de hoofden van de mensen. Er ís niemand meer. De donker stoffige eiken banken staan in strakke rijen, koud en dood, als vergeten grafstenen op een verlaten kerkhof.\n\nMijn blik glijdt naar het altaar. Het staat er kaal, koud en gestript bij. Geen strakke witte doeken meer. Geen flakkerende kaarsen in rode glazen. Geen gouden kandelaars of bloemen. Het hart is eruit gerukt. Maar als ik omhoogkijk, stopt de wereld even met draaien.\n\nHij hangt er nog. Het grote, donkere, ruwe kruis.\n\nJezus.\n\nNog steeds net zo rauw, pijnlijk en onbarmhartig echt als veertig jaar geleden. Zijn hoofd voorovergebogen, gestold bloed dat over zijn ribben en benen loopt, de open wond in zijn zij.\n\nMaar waar Hij toen voor een volle, levende kerk hing, hangt Hij nu in een volstrekte, ijzige verlatenheid. Achtergelaten. Vergeten door de mensen en instanties die dit gebouw zonder pardon hebben opgegeven en onttrokken aan het leven. Hij hangt daar, starend in de holle leegte, net zo eenzaam en verraden als ik me nu voel.\n\nMijn knieën beginnen te trillen. De zwaartekracht trekt aan me. Langzaam, alsof ik breekbaar ben geworden, laat ik me in de eerste eikenhouten bank glijden. Het hout is ijskoud. Ik leg mijn bevende handen in mijn schoot. Ik haal diep, heel diep adem in de dode ruimte.\n\nIk sluit mijn ogen in de ijskoude, muffe stilte van het heden. De kou trekt door mijn jas, door mijn spieren, tot diep in mijn botten.",
-    fragmentVideoUrl: '/videos/fragment-boek-4.mp4',
-    whyThisOrder: `Dit is het ultieme, bombastische slotakkoord van de reeks.
-    Veertig jaar nadat mijn ziel ontwaakte, keer ik terug.
-    Het is de perfecte, majestueuze finale.`
   }
+];
+
+const ECHO_RETURNING_FRAGMENT: Book = {
+  id: 'echo-slot',
+  slug: 'de-echo',
+  title: 'De Echo',
+  subtitle: 'De terugkeer',
+  order: 4,
+  teaser: 'Het heden. De terugkeer en de confrontatie met de sloopdreiging van mijn kerk.',
+  description: [],
+  coverUrl: deEcho,
+  bannerUrl: '/images/banner-boek-4.jpg',
+  buyUrl: 'https://www.bravenewbooks.nl/paulvangeenen',
+  fragmentText: "Een muur van ijskoude, muffe lucht slaat me vol in het gezicht. Waar ik zojuist in mijn herinnering nog de zoete, zware geur van wierook en warm kaarsvet snoof, ruik ik nu alleen nog maar verlatenheid. Stof. Vocht. Dood.\n\nIk zet een stap over de drempel en sta in het middenschip. Mijn adem stokt in mijn keel. Mijn maag trekt samen tot een harde, pijnlijke knoop die me bijna dubbel doet klappen. Ik wist dat dit zou komen. Ik had me erop voorbereid. Ik wíst dat ze het gebouw hadden gestript. Maar je kunt je niet voorbereiden op de fysieke klap van een vermoorde ziel.\n\nDe ruimte voor me is gigantisch, hol en karkas-achtig. De statige pilaren van baksteen en beton staan er nog, ze reiken nog steeds naar de hemel, maar ze dragen niets meer. Geen gezang, geen warmte, geen gemeenschap. Ze dragen alleen nog een oorverdovende, drukkende leegte die de lucht uit mijn longen perst.\n\nDe kerkmeester zegt niets. Hij snapt het. Hij loopt zwijgend naast me terwijl we via het middenpad naar voren lopen. Mijn schoenen raken de stoffige tegelvloer, de echo is nu dof en eenzaam, als voetstappen in een immense graftombe. Het licht valt nog steeds door de hoge boogramen, maar het vangt geen stofdeeltjes meer die dansen boven de hoofden van de mensen. Er ís niemand meer. De donker stoffige eiken banken staan in strakke rijen, koud en dood, als vergeten grafstenen op een verlaten kerkhof.\n\nMijn blik glijdt naar het altaar. Het staat er kaal, koud en gestript bij. Geen strakke witte doeken meer. Geen flakkerende kaarsen in rode glazen. Geen gouden kandelaars of bloemen. Het hart is eruit gerukt. Maar als ik omhoogkijk, stopt de wereld even met draaien.\n\nHij hangt er nog. Het grote, donkere, ruwe kruis.\n\nJezus.\n\nNog steeds net zo rauw, pijnlijk en onbarmhartig echt als veertig jaar geleden. Zijn hoofd voorovergebogen, gestold bloed dat over zijn ribben en benen loopt, de open wond in zijn zij.\n\nMaar waar Hij toen voor een volle, levende kerk hing, hangt Hij nu in een volstrekte, ijzige verlatenheid. Achtergelaten. Vergeten door de mensen en instanties die dit gebouw zonder pardon hebben opgegeven en onttrokken aan het leven. Hij hangt daar, starend in de holle leegte, net zo eenzaam en verraden als ik me nu voel.\n\nMijn knieën beginnen te trillen. De zwaartekracht trekt aan me. Langzaam, alsof ik breekbaar ben geworden, laat ik me in de eerste eikenhouten bank glijden. Het hout is ijskoud. Ik leg mijn bevende handen in mijn schoot. Ik haal diep, heel diep adem in de dode ruimte.\n\nIk sluit mijn ogen in de ijskoude, muffe stilte van het heden. De kou trekt door mijn jas, door mijn spieren, tot diep in mijn botten.",
+  fragmentVideoUrl: '/videos/fragment-boek-4.mp4',
+};
+
+export const BOOK_FRAGMENTS: Book[] = [
+  BOOKS[0],
+  BOOKS[1],
+  BOOKS[3],
+  ECHO_RETURNING_FRAGMENT,
 ];
 
 export const ECHO_CHAPTERS: EchoChapter[] = [

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BOOKS } from '../data/books';
+import { BOOK_FRAGMENTS } from '../data/books';
 import { motion, AnimatePresence } from 'motion/react';
 import { Quote, BookOpen, Volume2, VolumeX, Info, RotateCcw } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -404,7 +404,7 @@ export function Fragments() {
 
         {/* Fragments List */}
         <div className="space-y-48">
-          {BOOKS.map((book, index) => (
+          {BOOK_FRAGMENTS.map((book, index) => (
             <VideoFragment 
               key={book.id} 
               book={book} 

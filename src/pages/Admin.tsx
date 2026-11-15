@@ -855,14 +855,14 @@ export function Admin() {
       const defaultBooks = [
         { id: '1', volgnummer: 1, boektitel: 'Koester het Leven: de weg ernaartoe' },
         { id: '2', volgnummer: 2, boektitel: 'Koester het Leven: mijn eerste 21 jaar' },
-        { id: '3', volgnummer: 3, boektitel: 'De Echo' },
-        { id: '4', volgnummer: 4, boektitel: 'De Bestemming' }
+        { id: '3', volgnummer: 3, boektitel: 'De Geboorte van de Leeuw' },
+        { id: '4', volgnummer: 4, boektitel: 'De Echo' }
       ];
 
       const defaultChapters = [
-        { boekId: '3', volgnummer: 1, omschrijving: 'De leeuw in de kerk' },
-        { boekId: '3', volgnummer: 2, omschrijving: 'Luna als eigen personage' },
-        { boekId: '3', volgnummer: 3, omschrijving: 'Hoofdstuk 10 – De Demon ontwaakt' }
+        { boekId: '4', volgnummer: 1, omschrijving: 'De leeuw in de kerk' },
+        { boekId: '4', volgnummer: 2, omschrijving: 'Luna als eigen personage' },
+        { boekId: '4', volgnummer: 3, omschrijving: 'Hoofdstuk 10 – De Demon ontwaakt' }
       ];
 
       // POST books sequentially
