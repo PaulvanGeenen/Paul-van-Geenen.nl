@@ -94,6 +94,14 @@ try {
     if (!in_array('audio_enabled', $cols, true)) {
         $pdo->exec("ALTER TABLE logboek ADD COLUMN audio_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER audio_url");
     }
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS logboek_settings (
+            setting_key VARCHAR(64) PRIMARY KEY,
+            setting_value VARCHAR(512) NULL DEFAULT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(["success" => false, "error" => "Kon logboek tabel niet aanmaken: " . $e->getMessage()]);
@@ -107,10 +115,32 @@ if ($action === 'get_logboek') {
         foreach ($entries as &$row) {
             $row['audio_enabled'] = isset($row['audio_enabled']) ? ((int)$row['audio_enabled'] !== 0) : true;
         }
+        $coverStmt = $pdo->prepare("SELECT setting_value FROM logboek_settings WHERE setting_key = 'cover_image' LIMIT 1");
+        $coverStmt->execute();
+        $coverImage = $coverStmt->fetchColumn();
         echo json_encode([
             "success" => true,
-            "entries" => $entries
+            "entries" => $entries,
+            "cover_image" => $coverImage ? (string)$coverImage : null
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'save_cover_image') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $coverUrl = isset($input['cover_image']) && trim((string)$input['cover_image']) !== '' ? trim((string)$input['cover_image']) : null;
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO logboek_settings (setting_key, setting_value)
+            VALUES ('cover_image', ?)
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        ");
+        $stmt->execute([$coverUrl]);
+        echo json_encode(["success" => true, "cover_image" => $coverUrl], JSON_UNESCAPED_SLASHES);
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["success" => false, "error" => $e->getMessage()]);

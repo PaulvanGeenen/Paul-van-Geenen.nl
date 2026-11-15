@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   LogboekEntry,
-  fetchLogboekEntries,
+  fetchLogboekWithCover,
   formatLogboekDatum,
   openLogboekOverlay,
 } from '../lib/logboek';
@@ -10,13 +10,15 @@ import logboekCoverRed from '../assets/images/logboek-cover-red.jpg';
 export function LogboekPreviewSection() {
   const [latestEntry, setLatestEntry] = useState<LogboekEntry | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
+  const [customCover, setCustomCover] = useState<string | null>(null);
   const [overlayOpen, setOverlayOpen] = useState<boolean>(false);
 
   const loadLatest = async () => {
     try {
-      const entries = await fetchLogboekEntries();
+      const { entries, coverImage } = await fetchLogboekWithCover();
       setTotalCount(entries.length);
       setLatestEntry(entries[0] || null);
+      setCustomCover(coverImage);
     } catch {
       // Negeer stil op homepage als API even niet bereikbaar is
     }
@@ -110,7 +112,7 @@ export function LogboekPreviewSection() {
                 style={{ transformOrigin: '18% center', transformStyle: 'preserve-3d' }}
               >
                 <img
-                  src={logboekCoverRed}
+                  src={customCover || logboekCoverRed}
                   alt="Rood leren Logboek van Paul van Geenen"
                   className="w-full h-full object-cover block"
                 />

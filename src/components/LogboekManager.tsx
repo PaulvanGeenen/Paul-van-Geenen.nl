@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen, Plus, Trash2, Edit3, Save, X, Image as ImageIcon,
-  Upload, Loader2, Calendar, CheckCircle2, AlertCircle, Volume2, VolumeX, KeyRound, Sparkles
+  Upload, Loader2, Calendar, CheckCircle2, AlertCircle, Volume2, VolumeX, KeyRound, Sparkles, RotateCcw
 } from 'lucide-react';
 import {
   LogboekEntry,
-  fetchLogboekEntries,
+  fetchLogboekWithCover,
   saveLogboekEntry,
+  saveLogboekCover,
   deleteLogboekEntry,
   uploadLogboekPhoto,
   uploadLogboekAudio,
   formatLogboekDatum,
   openLogboekOverlay,
 } from '../lib/logboek';
+import logboekCoverRed from '../assets/images/logboek-cover-red.jpg';
 import {
   generateLogboekMp3DataUrl,
   getSavedGeminiTtsKey,
@@ -45,13 +47,16 @@ export function LogboekManager() {
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
   const [autoGenerateOnSave, setAutoGenerateOnSave] = useState<boolean>(true);
   const [geminiKey, setGeminiKey] = useState<string>(() => getSavedGeminiTtsKey());
+  const [coverImage, setCoverImage] = useState<string>('');
+  const [savingCover, setSavingCover] = useState<boolean>(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const data = await fetchLogboekEntries();
-      setEntries(data);
+      const data = await fetchLogboekWithCover();
+      setEntries(data.entries);
+      setCoverImage(data.coverImage || '');
     } catch (err: any) {
       setErrorMsg(err?.message || 'Kon logboek niet laden.');
     } finally {
@@ -278,6 +283,79 @@ export function LogboekManager() {
             placeholder="Gemini API-sleutel (lokaal bewaard)"
             className="flex-1 bg-black/40 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-earth-gold"
           />
+        </div>
+      </div>
+
+      {/* Omslagafbeelding van het Logboek zelf wijzigen */}
+      <div className="bg-[#181818] border border-white/10 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <img
+            src={coverImage || logboekCoverRed}
+            alt="Logboek omslag"
+            className="w-16 h-16 rounded-xl object-cover border border-white/15 shrink-0"
+          />
+          <div>
+            <div className="text-sm font-bold text-white">Omslagafbeelding van het Logboek</div>
+            <p className="text-xs text-earth-light/65">
+              {coverImage ? 'Aangepaste omslagfoto actief.' : 'Standaard rode leren logboek-kaft actief.'}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-white/15">
+            {savingCover ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            <span>Wijzig Omslagfoto</span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setSavingCover(true);
+                setErrorMsg(null);
+                try {
+                  const dataUrl = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(String(reader.result || ''));
+                    reader.onerror = () => reject(new Error('Kon bestand niet lezen.'));
+                    reader.readAsDataURL(file);
+                  });
+                  const uploadedUrl = await uploadLogboekPhoto(dataUrl);
+                  await saveLogboekCover(uploadedUrl);
+                  setCoverImage(uploadedUrl);
+                  showStatus('Logboek omslagafbeelding bijgewerkt!');
+                } catch (err: any) {
+                  setErrorMsg(err?.message || 'Kon omslagafbeelding niet wijzigen.');
+                } finally {
+                  setSavingCover(false);
+                }
+              }}
+            />
+          </label>
+          {coverImage && (
+            <button
+              type="button"
+              disabled={savingCover}
+              onClick={async () => {
+                setSavingCover(true);
+                setErrorMsg(null);
+                try {
+                  await saveLogboekCover(null);
+                  setCoverImage('');
+                  showStatus('Standaard rode leren kaft hersteld!');
+                } catch (err: any) {
+                  setErrorMsg(err?.message || 'Kon standaard kaft niet herstellen.');
+                } finally {
+                  setSavingCover(false);
+                }
+              }}
+              className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-400/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Herstel Rode Kaft</span>
+            </button>
+          )}
         </div>
       </div>
 

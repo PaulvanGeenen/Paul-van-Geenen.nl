@@ -52,10 +52,10 @@ async function callLogboekApi(action: string, method: 'GET' | 'POST' = 'GET', bo
 /**
  * Haal alle logboek-notities op (vaste sorteervolgorde: nieuwste eerst).
  */
-export async function fetchLogboekEntries(): Promise<LogboekEntry[]> {
+export async function fetchLogboekWithCover(): Promise<{ entries: LogboekEntry[]; coverImage: string | null }> {
   const data = await callLogboekApi('get_logboek', 'GET');
   const rows: any[] = Array.isArray(data?.entries) ? data.entries : [];
-  return rows.map((r) => ({
+  const entries = rows.map((r) => ({
     id: Number(r.id),
     datum: String(r.datum || ''),
     foto: r.foto ? String(r.foto) : null,
@@ -65,6 +65,20 @@ export async function fetchLogboekEntries(): Promise<LogboekEntry[]> {
     created_at: r.created_at,
     updated_at: r.updated_at,
   }));
+  return {
+    entries,
+    coverImage: data?.cover_image ? String(data.cover_image) : null,
+  };
+}
+
+export async function fetchLogboekEntries(): Promise<LogboekEntry[]> {
+  const { entries } = await fetchLogboekWithCover();
+  return entries;
+}
+
+export async function saveLogboekCover(coverImage: string | null): Promise<void> {
+  await callLogboekApi('save_cover_image', 'POST', { cover_image: coverImage });
+  window.dispatchEvent(new CustomEvent('pvg-logboek-changed'));
 }
 
 export async function saveLogboekEntry(entry: {
