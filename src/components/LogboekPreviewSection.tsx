@@ -59,7 +59,7 @@ export function LogboekPreviewSection() {
 
       <div className="max-w-6xl mx-auto px-6 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 lg:gap-14 items-center">
-          {/* Links: Interactief Rood Leren Logboek (Hover opent leren wrapper + kaft, Klik = fullpage, verdwijnt zolang open) */}
+          {/* Links: Rood Leren Logboek (iets met de klok mee gedraaid, klik opent fullpage) */}
           <div
             className={`md:col-span-5 flex flex-col items-center transition-all duration-300 ${
               overlayOpen ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
@@ -68,73 +68,24 @@ export function LogboekPreviewSection() {
             <button
               type="button"
               onClick={() => openLogboekOverlay(0)}
-              className="group relative w-[270px] sm:w-[310px] aspect-square cursor-pointer focus:outline-none text-left"
-              style={{ perspective: '1400px' }}
+              className="group relative w-[270px] sm:w-[310px] aspect-square cursor-pointer focus:outline-none rotate-[4deg] hover:scale-[1.02] transition-transform duration-300"
               title="Klik om het logboek te openen"
               aria-label="Open het logboek"
             >
-              {/* Vergeelde binnenpagina die zichtbaar wordt zodra de leren wrapper & kaft op hover opengaan */}
-              <div
-                className="absolute inset-y-[5%] left-[19%] right-[17%] rounded-r-md shadow-inner border border-stone-300/80 p-4 flex flex-col justify-between overflow-hidden"
-                style={{
-                  backgroundColor: '#f3e8ce',
-                  backgroundImage:
-                    'repeating-linear-gradient(transparent, transparent 21px, rgba(130, 108, 82, 0.14) 21px, rgba(130, 108, 82, 0.14) 22px)',
-                }}
-              >
-                <div className="pl-3">
-                  <span
-                    style={{ fontFamily: "'Patrick Hand', cursive" }}
-                    className="text-xs text-[#7c2218] block mb-1"
-                  >
-                    {latestEntry ? formatLogboekDatum(latestEntry.datum) : 'Logboek'}
-                  </span>
-                  <p
-                    style={{ fontFamily: "'Caveat', cursive" }}
-                    className="text-base leading-snug text-stone-800 line-clamp-5"
-                  >
-                    {latestEntry
-                      ? latestEntry.tekst
-                      : 'Vluchtige momenten, gedachten onderweg en korte notities...'}
-                  </p>
-                </div>
-                <span
-                  style={{ fontFamily: "'Patrick Hand', cursive" }}
-                  className="text-[11px] text-stone-500 self-end"
-                >
-                  klik om te bladeren →
-                </span>
-              </div>
-
-              {/* Rode leren kaft die op hover in 3D opendraait (nadat de leren wrapper loskomt) */}
-              <div
-                className="relative w-full h-full rounded-xl overflow-hidden shadow-[0_18px_40px_rgba(35,20,10,0.22)] transition-transform duration-500 delay-75 ease-out group-hover:[transform:rotateY(-38deg)_translateX(-4px)]"
-                style={{ transformOrigin: '18% center', transformStyle: 'preserve-3d' }}
-              >
+              <div className="relative w-full h-full rounded-xl overflow-hidden shadow-[0_18px_40px_rgba(35,20,10,0.22)]">
                 <img
                   src={customCover || logboekCoverRed}
                   alt="Rood leren Logboek van Paul van Geenen"
                   className="w-full h-full object-cover block"
                 />
               </div>
-
-              {/* Leren wrapper (sluitband) die het boekje dicht houdt en bij hover losklikt/opengaat */}
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute top-[49%] left-[14%] right-[16%] h-6 -translate-y-1/2 z-20 transition-all duration-300 ease-out group-hover:opacity-0 group-hover:-translate-x-6 group-hover:scale-x-75 group-hover:-rotate-3"
-              >
-                <div className="w-full h-2.5 rounded-full bg-gradient-to-r from-[#5a160e] via-[#8c2d1f] to-[#4e120b] shadow-[0_3px_8px_rgba(0,0,0,0.45)] border-y border-[#b84c3a]/40" />
-                <div className="absolute left-[26%] top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-gradient-to-br from-[#6e1e14] to-[#3f0e08] border border-[#c79d52]/60 shadow-md flex items-center justify-center">
-                  <div className="w-2 h-2 rounded-full bg-[#c79d52]/80" />
-                </div>
-              </div>
             </button>
 
             <span
               style={{ fontFamily: "'Patrick Hand', cursive" }}
-              className="mt-3 text-sm text-stone-500 tracking-wide"
+              className="mt-5 text-sm text-stone-500 tracking-wide"
             >
-              Beweeg om open te slaan · klik om te lezen
+              Klik op het logboek om te lezen
             </span>
           </div>
 
