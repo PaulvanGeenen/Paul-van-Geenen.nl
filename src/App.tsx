@@ -56,6 +56,14 @@ function ScrollToTop() {
 import { AudioProvider, useAudio } from './context/AudioContext';
 import { LionBooksIntro } from './components/ui/LionBooksIntro';
 import { LogboekOverlay } from './components/LogboekOverlay';
+import { openLogboekOverlay } from './lib/logboek';
+
+function LogboekDirectRoute() {
+  useEffect(() => {
+    openLogboekOverlay(0);
+  }, []);
+  return <Home />;
+}
 
 function GlobalLogboekOverlay() {
   const [isOpen, setIsOpen] = useState(false);
@@ -113,7 +121,7 @@ function LayoutWrapper({ children }: LayoutWrapperProps) {
     pathname.startsWith('/qrcode/') || 
     pathname.startsWith('/scan/') ||
     (pathname !== '/' && 
-     !['/boeken', '/de-echo', '/fragmenten', '/over-mij', '/contact', '/mri-scan', '/beheer', '/privacy'].some(p => pathname.toLowerCase().startsWith(p)));
+     !['/boeken', '/de-echo', '/fragmenten', '/over-mij', '/contact', '/mri-scan', '/beheer', '/privacy', '/logboek'].some(p => pathname.toLowerCase().startsWith(p)));
 
   if (isRedirectPage) {
     return (
@@ -155,6 +163,7 @@ export default function App() {
                 <Route path="/over-mij" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/mri-scan" element={<MRIScan />} />
+                <Route path="/logboek" element={<LogboekDirectRoute />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/beheer" element={<Admin />} />
                 <Route path="/beheer/qr-studio" element={<QRStudio />} />
