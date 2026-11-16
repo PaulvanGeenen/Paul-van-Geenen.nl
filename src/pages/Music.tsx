@@ -2721,8 +2721,10 @@ export function Music() {
         isDirectVideoRequested.current = false;
       }
 
-      // iOS/iPadOS: laad en start de volgende track synchroon binnen onEnded (gemute tijdens de 3s visuele fade)
+      // iOS/iPadOS: laad en start de volgende track direct ONGEMUTE binnen onEnded.
+      // (Niet eerst muted=true afspelen en 3s later unmuten + currentTime=0 doen, want dat breekt iOS Bluetooth audio!)
       if (isIOS && targetEffectiveFormat !== 'video' && activeAudioForIos && targetMediaUrl) {
+        savedTimeRef.current = 0;
         try {
           const encoded = encodeURI(targetMediaUrl);
           const isDifferent =
@@ -2735,12 +2737,16 @@ export function Music() {
           } else {
             activeAudioForIos.currentTime = 0;
           }
-          activeAudioForIos.muted = true;
+          activeAudioForIos.muted = isMuted;
           const p = activeAudioForIos.play();
           if (p !== undefined) {
-            p.catch(() => {
+            p.then(() => {
+              setIsPlaying(true);
+            }).catch(() => {
               shouldAutoPlayRef.current = true;
             });
+          } else {
+            setIsPlaying(true);
           }
         } catch (e) {}
       }
@@ -2786,18 +2792,18 @@ export function Music() {
             endTransitionTimersRef.current = [];
             const el = targetEffectiveFormat === 'video' ? videoRef.current : getActiveAudioEl();
             if (el && targetMediaUrl) {
-              try {
-                el.currentTime = 0;
-              } catch (e) {}
-              savedTimeRef.current = 0;
               if (isIOS && targetEffectiveFormat !== 'video') {
-                el.muted = isMuted;
+                // Op iOS speelt het nummer al ongemute vanaf onEnded; niet opnieuw seeken naar 0 of muten!
                 if (el.paused) {
                   startPlaybackWithVolumeRamp(el, 900);
                 } else {
                   setIsPlaying(true);
                 }
               } else {
+                try {
+                  el.currentTime = 0;
+                } catch (e) {}
+                savedTimeRef.current = 0;
                 startPlaybackWithVolumeRamp(el, 900);
               }
             }
