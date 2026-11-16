@@ -97,6 +97,9 @@ function resolvePlayerTargetUrl(rawLink: string, songTitle: string, matchedTrack
         urlObj.searchParams.set('single', '1');
         urlObj.searchParams.set('ceremony', 'done');
         urlObj.searchParams.set('qr', '1');
+        if (songTitle && songTitle !== 'Onbekend nummer') {
+          urlObj.searchParams.set('songTitle', songTitle.trim());
+        }
         return `${urlObj.pathname}${urlObj.search}`;
       }
     }
@@ -104,7 +107,11 @@ function resolvePlayerTargetUrl(rawLink: string, songTitle: string, matchedTrack
 
   const targetIdentifier = matchedTrackId || (songTitle && songTitle !== 'Onbekend nummer' ? songTitle.trim() : '');
   if (targetIdentifier) {
-    return `/music?track=${encodeURIComponent(targetIdentifier)}&single=1&ceremony=done&qr=1`;
+    const titleQuery =
+      songTitle && songTitle !== 'Onbekend nummer'
+        ? `&songTitle=${encodeURIComponent(songTitle.trim())}`
+        : '';
+    return `/music?track=${encodeURIComponent(targetIdentifier)}&single=1&ceremony=done&qr=1${titleQuery}`;
   }
 
   if (cleanLink) {

@@ -955,6 +955,7 @@ export function Music() {
 
   // Song Credit Badge overlay state (shows at track start, rotation, or user tap)
   const [songCreditVisible, setSongCreditVisible] = useState(false);
+  const [qrSongTitleOverride, setQrSongTitleOverride] = useState<{ trackId: string; title: string } | null>(null);
   const songCreditTimeoutRef = useRef<any>(null);
 
   const triggerSongCredit = (durationMs = 6000) => {
@@ -1355,6 +1356,11 @@ export function Music() {
       // Replace ugly URL parameters in the browser address bar with clean route URL
       const matchedTrack = tracks[matchedIdx];
       let shouldRunUnlockCeremony = hasUnlockParam && !hasCeremonyDone;
+
+      const songTitleParam = urlParams.get('songTitle')?.trim();
+      if (songTitleParam && matchedTrack) {
+        setQrSongTitleOverride({ trackId: matchedTrack.id, title: songTitleParam });
+      }
 
       if (matchedTrack) {
         if (matchedTrack.album) {
@@ -5132,7 +5138,11 @@ export function Music() {
                 (songCreditVisible || (currentTime >= 1.5 && currentTime <= 9.0))
               ) && (() => {
                 const matchingAlbumObj = albums.find(a => a.id === selectedAlbum || a.title === currentTrack?.album);
-                const songTitle = currentTrack.title ? `"${currentTrack.title}"` : '';
+                const effectiveSongTitle =
+                  qrSongTitleOverride && qrSongTitleOverride.trackId === currentTrack.id
+                    ? qrSongTitleOverride.title
+                    : currentTrack.title;
+                const songTitle = effectiveSongTitle ? `"${effectiveSongTitle}"` : '';
                 const rawAlbum = currentTrack.album || matchingAlbumObj?.title || 'De Echo';
                 const albumDisplay = rawAlbum === 'De Echo' ? 'De Echo Soundtrack' : rawAlbum;
 
