@@ -304,6 +304,21 @@ export const sanitizeCoverImageUrl = (url?: string): string | undefined => {
   return sanitized;
 };
 
+export const getTrackCoverCandidates = (
+  t?: Partial<Track> | null,
+  orient: 'portrait' | 'landscape' = 'portrait'
+): string[] => {
+  const raw = [
+    getTrackCoverJpg(t),
+    orient === 'landscape' ? sanitizeCoverImageUrl(t?.landscapeJpg) : sanitizeCoverImageUrl(t?.portraitJpg),
+    sanitizeCoverImageUrl(t?.portraitJpg),
+    sanitizeCoverImageUrl(t?.landscapeJpg),
+    sanitizeCoverImageUrl(t?.thumbnailJpg),
+    '/@music/_albums/De%20Geboorte%20van%20de%20Leeuw%20Album.jpg',
+  ].filter(Boolean) as string[];
+  return Array.from(new Set(raw));
+};
+
 export const getTrackCoverJpg = (t?: Partial<Track> | null): string | undefined => {
   if (!t) return undefined;
   const cleanCover = sanitizeCoverImageUrl(t.coverJpg);
@@ -4430,10 +4445,19 @@ export function Music() {
                     >
                       <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-2xl overflow-hidden border-2 border-earth-gold/60 shadow-[0_25px_70px_rgba(0,0,0,0.95)] bg-black">
                         <img
-                          src={getTrackCoverJpg(currentTrack) || currentTrack?.portraitJpg || currentTrack?.thumbnailJpg || '/@music/_albums/De%20Geboorte%20van%20de%20Leeuw%20Album.jpg'}
+                          src={getTrackCoverCandidates(currentTrack, effectiveOrientation)[0]}
                           alt={currentTrack?.title || 'SoundTrack'}
                           className="w-full h-full object-contain"
                           referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            const candidates = getTrackCoverCandidates(currentTrack, effectiveOrientation);
+                            const nextIdx = Number(img.dataset.fallbackIdx || '0') + 1;
+                            if (nextIdx < candidates.length) {
+                              img.dataset.fallbackIdx = String(nextIdx);
+                              img.src = candidates[nextIdx];
+                            }
+                          }}
                         />
                       </div>
                       <div className="space-y-1">
@@ -4522,10 +4546,19 @@ export function Music() {
               {showEndedSoundtrackCover && currentTrack && (
                 <div className="absolute inset-0 w-full h-full bg-black z-[15] flex items-center justify-center pointer-events-none">
                   <img
-                    src={getTrackCoverJpg(currentTrack) || currentTrack.portraitJpg || currentTrack.thumbnailJpg || '/@music/_albums/De%20Geboorte%20van%20de%20Leeuw%20Album.jpg'}
+                    src={getTrackCoverCandidates(currentTrack, effectiveOrientation)[0]}
                     alt={currentTrack.title || 'SoundTrack'}
                     className="w-full h-full object-contain select-none"
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      const candidates = getTrackCoverCandidates(currentTrack, effectiveOrientation);
+                      const nextIdx = Number(img.dataset.fallbackIdx || '0') + 1;
+                      if (nextIdx < candidates.length) {
+                        img.dataset.fallbackIdx = String(nextIdx);
+                        img.src = candidates[nextIdx];
+                      }
+                    }}
                   />
                 </div>
               )}
