@@ -352,6 +352,12 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
                               controls
                               playsInline
                               preload="metadata"
+                              onPlay={() => {
+                                if (audioRef.current && !audioRef.current.paused) {
+                                  audioRef.current.pause();
+                                  setIsPlayingAudio(false);
+                                }
+                              }}
                               className="w-full h-full object-contain"
                             />
                           </div>
@@ -555,6 +561,12 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
                 controls
                 autoPlay
                 playsInline
+                onPlay={() => {
+                  if (audioRef.current && !audioRef.current.paused) {
+                    audioRef.current.pause();
+                    setIsPlayingAudio(false);
+                  }
+                }}
                 className="max-w-[88vw] max-h-[82vh] w-auto h-auto object-contain block bg-black"
               />
               <div

@@ -549,7 +549,7 @@ export function LogboekManager() {
               />
               <span className="text-sm font-bold text-white flex items-center gap-1.5">
                 {audioEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-stone-400" />}
-                MP3 afspelen bij dit bericht ({audioEnabled ? 'AAN' : 'UIT'})
+                Tekst voorlezen bij dit bericht ({audioEnabled ? 'AAN' : 'UIT'})
               </span>
             </label>
 
