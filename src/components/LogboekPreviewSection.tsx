@@ -128,12 +128,14 @@ export function LogboekPreviewSection() {
                       {formatLogboekDatum(latestEntry.datum)}
                     </time>
 
-                    <p
-                      style={{ fontFamily: "'Caveat', cursive" }}
-                      className="text-2xl leading-[1.4] text-[#171412] line-clamp-3 whitespace-pre-wrap break-words"
-                    >
-                      {latestEntry.tekst}
-                    </p>
+                    {latestEntry.tekst && (
+                      <p
+                        style={{ fontFamily: "'Caveat', cursive" }}
+                        className="text-2xl leading-[1.4] text-[#171412] line-clamp-3 whitespace-pre-wrap break-words"
+                      >
+                        {latestEntry.tekst}
+                      </p>
+                    )}
 
                     {isLongText ? (
                       <button

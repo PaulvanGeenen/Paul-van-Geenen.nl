@@ -163,9 +163,9 @@ if ($action === 'save_entry') {
     $audioUrl = isset($input['audio_url']) && trim((string)$input['audio_url']) !== '' ? trim((string)$input['audio_url']) : null;
     $audioEnabled = array_key_exists('audio_enabled', $input) ? (!empty($input['audio_enabled']) ? 1 : 0) : 1;
 
-    if ($datum === '' || $tekst === '') {
+    if ($datum === '' || ($tekst === '' && $foto === null)) {
         http_response_code(400);
-        echo json_encode(["success" => false, "error" => "Datum en tekst zijn verplicht."]);
+        echo json_encode(["success" => false, "error" => "Vul een datum en een notitie of foto/filmpje in."]);
         exit;
     }
 

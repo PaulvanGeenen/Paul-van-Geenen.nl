@@ -170,8 +170,8 @@ export function LogboekManager() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!datum.trim() || !tekst.trim()) {
-      setErrorMsg('Vul zowel een datum als een korte notitie in.');
+    if (!datum.trim() || (!tekst.trim() && !foto.trim())) {
+      setErrorMsg('Vul een datum in en voeg een notitie of foto/filmpje toe.');
       return;
     }
     setSaving(true);
@@ -179,7 +179,7 @@ export function LogboekManager() {
     try {
       let finalAudioUrl = audioUrl.trim() || null;
 
-      if (autoGenerateOnSave && geminiKey.trim() && (!finalAudioUrl || editingId !== null)) {
+      if (autoGenerateOnSave && geminiKey.trim() && tekst.trim() && (!finalAudioUrl || editingId !== null)) {
         try {
           finalAudioUrl = await handleGenerateMp3(datum.trim(), tekst.trim());
         } catch (ttsErr: any) {
@@ -502,10 +502,10 @@ export function LogboekManager() {
             <div className="flex items-center gap-2 shrink-0">
               <label className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-white/15">
                 {uploadingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                <span>Wijzig foto</span>
+                <span>Wijzig media</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -527,14 +527,13 @@ export function LogboekManager() {
 
         <div>
           <label className="block text-xs font-mono uppercase tracking-wider text-earth-light/70 mb-1.5">
-            Notitie (korte vluchtige gedachte, upload, testdruk...)
+            Notitie (optioneel bij foto/filmpje — korte gedachte, upload, testdruk...)
           </label>
           <textarea
             rows={4}
             value={tekst}
             onChange={(e) => setTekst(e.target.value)}
-            required
-            placeholder="Schrijf hier een korte aantekening..."
+            placeholder="Schrijf hier een korte aantekening (optioneel als je een foto of filmpje hebt toegevoegd)..."
             className="w-full bg-black/40 border border-white/15 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-earth-gold"
           />
         </div>
