@@ -249,6 +249,47 @@ if ($action === 'upload_photo') {
     exit;
 }
 
+if ($action === 'upload_video') {
+    if (!isset($_FILES['video']) || $_FILES['video']['error'] !== UPLOAD_ERR_OK) {
+        $errCode = $_FILES['video']['error'] ?? -1;
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Geen geldig videobestand ontvangen (code {$errCode})."]);
+        exit;
+    }
+
+    $origName = (string)($_FILES['video']['name'] ?? 'video.mp4');
+    $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+    $allowedExts = ['mp4', 'mov', 'webm', 'm4v', 'ogv'];
+    if (!in_array($ext, $allowedExts, true)) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Ongeldig videoformaat (gebruik MP4, MOV, WebM of M4V)."]);
+        exit;
+    }
+
+    $uploadDir = dirname(__DIR__) . '/videos/logboek';
+    if (!is_dir($uploadDir)) {
+        if (!mkdir($uploadDir, 0755, true)) {
+            http_response_code(500);
+            echo json_encode(["success" => false, "error" => "Kon uploadmap /videos/logboek niet aanmaken."]);
+            exit;
+        }
+    }
+
+    $filename = 'logboek_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    $targetPath = $uploadDir . '/' . $filename;
+    if (!move_uploaded_file($_FILES['video']['tmp_name'], $targetPath)) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => "Kon videobestand niet opslaan op de server."]);
+        exit;
+    }
+
+    echo json_encode([
+        "success" => true,
+        "url" => "/videos/logboek/" . $filename
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 if ($action === 'upload_audio') {
     $input = json_decode(file_get_contents('php://input'), true);
     $dataUrl = $input['dataUrl'] ?? '';

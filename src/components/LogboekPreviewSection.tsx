@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { Play } from 'lucide-react';
 import {
   LogboekEntry,
   fetchLogboekWithCover,
   formatLogboekDatum,
+  isLogboekVideoUrl,
   openLogboekOverlay,
 } from '../lib/logboek';
 import logboekCoverRed from '../assets/images/logboek-cover-red.jpg';
@@ -163,11 +165,28 @@ export function LogboekPreviewSection() {
                   {latestEntry.foto && (
                     <div className="shrink-0 bg-white p-1.5 pb-4 shadow-md border border-stone-200 rotate-2 w-28 sm:w-32 relative">
                       <div className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 w-12 h-3.5 bg-[#e7d6a8]/80 -rotate-3" />
-                      <img
-                        src={latestEntry.foto}
-                        alt=""
-                        className="w-full aspect-square object-cover sepia-[0.1]"
-                      />
+                      {isLogboekVideoUrl(latestEntry.foto) ? (
+                        <div className="relative w-full aspect-square bg-black overflow-hidden">
+                          <video
+                            src={latestEntry.foto}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                            <div className="w-8 h-8 rounded-full bg-white/90 text-[#7c2218] flex items-center justify-center shadow-md">
+                              <Play className="w-4 h-4 fill-current ml-0.5" />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <img
+                          src={latestEntry.foto}
+                          alt=""
+                          className="w-full aspect-square object-cover sepia-[0.1]"
+                        />
+                      )}
                     </div>
                   )}
                 </div>

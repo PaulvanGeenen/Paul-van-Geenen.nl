@@ -99,9 +99,46 @@ export async function deleteLogboekEntry(id: number): Promise<void> {
   window.dispatchEvent(new CustomEvent('pvg-logboek-changed'));
 }
 
+export function isLogboekVideoUrl(url?: string | null): boolean {
+  if (!url) return false;
+  const trimmed = url.trim().toLowerCase();
+  if (trimmed.startsWith('data:video/')) return true;
+  const clean = trimmed.split('?')[0].split('#')[0];
+  return /\.(mp4|mov|webm|m4v|ogv)$/.test(clean);
+}
+
 export async function uploadLogboekPhoto(dataUrl: string): Promise<string> {
   const data = await callLogboekApi('upload_photo', 'POST', { dataUrl });
   return String(data.url);
+}
+
+export async function uploadLogboekVideo(file: File): Promise<string> {
+  let lastError: Error | null = null;
+  for (const base of API_CANDIDATES) {
+    try {
+      const formData = new FormData();
+      formData.append('video', file);
+      const url = `${base}?action=upload_video`;
+      const res = await fetch(url, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'X-API-Key': getApiKey(),
+        },
+        body: formData,
+      });
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) continue;
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      return String(data.url);
+    } catch (err: any) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  throw lastError || new Error('Kon filmpje niet uploaden.');
 }
 
 export async function uploadLogboekAudio(dataUrl: string): Promise<string> {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  BookOpen, Plus, Trash2, Edit3, Save, X, Image as ImageIcon,
+  BookOpen, Plus, Trash2, Edit3, Save, X, Image as ImageIcon, Film,
   Upload, Loader2, Calendar, CheckCircle2, AlertCircle, Volume2, VolumeX, KeyRound, Sparkles, RotateCcw, Link2, Check
 } from 'lucide-react';
 import {
@@ -10,7 +10,9 @@ import {
   saveLogboekCover,
   deleteLogboekEntry,
   uploadLogboekPhoto,
+  uploadLogboekVideo,
   uploadLogboekAudio,
+  isLogboekVideoUrl,
   formatLogboekDatum,
   getLogboekShareUrl,
   openLogboekOverlay,
@@ -88,6 +90,18 @@ export function LogboekManager() {
     setUploadingPhoto(true);
     setErrorMsg(null);
     try {
+      const fileName = file instanceof File ? file.name.toLowerCase() : '';
+      const isVideo =
+        file.type.startsWith('video/') ||
+        /\.(mp4|mov|webm|m4v|ogv)$/.test(fileName);
+
+      if (isVideo && file instanceof File) {
+        const uploadedUrl = await uploadLogboekVideo(file);
+        setFoto(uploadedUrl);
+        showStatus('Filmpje geüpload naar /videos/logboek!');
+        return;
+      }
+
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ''));
@@ -98,7 +112,7 @@ export function LogboekManager() {
       setFoto(uploadedUrl);
       showStatus('Foto geüpload naar /images/logboek!');
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Foto uploaden mislukt.');
+      setErrorMsg(err?.message || 'Media uploaden mislukt.');
     } finally {
       setUploadingPhoto(false);
     }
@@ -412,14 +426,14 @@ export function LogboekManager() {
 
           <div className="md:col-span-2">
             <label className="block text-xs font-mono uppercase tracking-wider text-earth-light/70 mb-1.5">
-              Foto (optioneel — upload, plak met Ctrl+V of plak URL)
+              Foto of filmpje (optioneel — upload, plak met Ctrl+V of plak URL)
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={foto}
                 onChange={(e) => setFoto(e.target.value)}
-                placeholder="/images/logboek/... of laat leeg"
+                placeholder="/images/logboek/... of /videos/logboek/... (of laat leeg)"
                 className="flex-1 bg-black/40 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-earth-gold"
               />
               <label className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold flex items-center gap-2 cursor-pointer border border-white/15 shrink-0">
@@ -427,7 +441,7 @@ export function LogboekManager() {
                 <span>Upload</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -453,16 +467,20 @@ export function LogboekManager() {
           <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/10">
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <label
-                className="relative group w-24 h-20 rounded-lg overflow-hidden border border-white/15 shrink-0 cursor-pointer"
-                title="Klik om een andere afbeelding te kiezen"
+                className="relative group w-24 h-20 rounded-lg overflow-hidden border border-white/15 shrink-0 cursor-pointer bg-black"
+                title="Klik om een andere foto of video te kiezen"
               >
-                <img src={foto} alt="Preview" className="w-full h-full object-cover" />
+                {isLogboekVideoUrl(foto) ? (
+                  <video src={foto} muted playsInline className="w-full h-full object-cover" />
+                ) : (
+                  <img src={foto} alt="Preview" className="w-full h-full object-cover" />
+                )}
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[11px] font-bold text-white">
                   Wijzig
                 </div>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -471,7 +489,9 @@ export function LogboekManager() {
                 />
               </label>
               <div className="min-w-0">
-                <div className="text-xs font-bold text-white/90">Geüploade afbeelding</div>
+                <div className="text-xs font-bold text-white/90">
+                  {isLogboekVideoUrl(foto) ? 'Geüpload filmpje' : 'Geüploade afbeelding'}
+                </div>
                 <div className="text-xs text-earth-light/60 truncate">{foto}</div>
                 <div className="text-[11px] text-earth-light/45 mt-0.5">
                   Klik op het voorbeeld of plak met Ctrl+V om te vervangen.
@@ -627,11 +647,25 @@ export function LogboekManager() {
               >
                 <div className="flex gap-4 items-start flex-1 min-w-0">
                   {entry.foto ? (
-                    <img
-                      src={entry.foto}
-                      alt=""
-                      className="w-16 h-16 object-cover rounded-lg border border-white/15 shrink-0"
-                    />
+                    isLogboekVideoUrl(entry.foto) ? (
+                      <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/15 shrink-0 bg-black">
+                        <video
+                          src={entry.foto}
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute bottom-1 right-1 bg-black/75 rounded px-1 py-0.5 flex items-center">
+                          <Film className="w-3 h-3 text-earth-gold" />
+                        </div>
+                      </div>
+                    ) : (
+                      <img
+                        src={entry.foto}
+                        alt=""
+                        className="w-16 h-16 object-cover rounded-lg border border-white/15 shrink-0"
+                      />
+                    )
                   ) : (
                     <div className="w-16 h-16 rounded-lg border border-dashed border-white/15 flex items-center justify-center text-white/25 shrink-0">
                       <ImageIcon className="w-5 h-5" />

@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, BookOpen, Volume2, VolumeX, Share2, Check } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, BookOpen, Volume2, VolumeX, Share2, Check, Maximize2 } from 'lucide-react';
 import {
   LogboekEntry,
   encodeLogboekShareCode,
   fetchLogboekEntries,
   formatLogboekDatum,
   getLogboekShareUrl,
+  isLogboekVideoUrl,
   setLogboekOverlayOpenState,
 } from '../lib/logboek';
 import { cn } from '../lib/utils';
@@ -323,36 +324,76 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
                     </span>
 
                     {entry.foto ? (
-                      <div
-                        onMouseEnter={() => setIsPhotoZoomed(true)}
-                        onClick={() => setIsPhotoZoomed(true)}
-                        title="Beweeg over de foto om te vergroten"
-                        className={cn(
-                          'relative bg-[#fcf9f2] p-3 pb-10 shadow-[0_10px_24px_rgba(35,22,10,0.28)] border border-stone-300/70 max-w-[290px] w-full transition-transform duration-300 cursor-zoom-in hover:scale-[1.03]',
-                          photoTiltClasses[vIdx]
-                        )}
-                      >
-                        {/* Slordig plakbandje bovenaan */}
+                      isLogboekVideoUrl(entry.foto) ? (
                         <div
                           className={cn(
-                            'absolute -top-3.5 left-1/2 -translate-x-1/2 w-24 h-7 bg-[#e7d6a8]/80 border-x border-[#c9b480]/50 shadow-sm backdrop-blur-[1px]',
-                            tapeTiltClasses[vIdx]
+                            'relative bg-[#fcf9f2] p-3 pb-10 shadow-[0_10px_24px_rgba(35,22,10,0.28)] border border-stone-300/70 max-w-[310px] w-full transition-transform duration-300',
+                            photoTiltClasses[vIdx]
                           )}
-                        />
-                        <div className="aspect-[4/3] w-full overflow-hidden bg-stone-200">
-                          <img
-                            src={entry.foto}
-                            alt={`Logboek ${formatLogboekDatum(entry.datum)}`}
-                            className="w-full h-full object-cover sepia-[0.12] contrast-[1.03]"
-                          />
-                        </div>
-                        <div
-                          style={{ fontFamily: "'Caveat', cursive" }}
-                          className="mt-2.5 text-center text-lg text-stone-700 leading-none"
                         >
-                          {formatLogboekDatum(entry.datum)}
+                          {/* Slordig plakbandje bovenaan */}
+                          <div
+                            className={cn(
+                              'absolute -top-3.5 left-1/2 -translate-x-1/2 w-24 h-7 bg-[#e7d6a8]/80 border-x border-[#c9b480]/50 shadow-sm backdrop-blur-[1px] pointer-events-none',
+                              tapeTiltClasses[vIdx]
+                            )}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setIsPhotoZoomed(true)}
+                            title="Vergroot filmpje"
+                            className="absolute top-1.5 right-1.5 z-10 w-7 h-7 rounded-full bg-black/65 hover:bg-black/85 text-white flex items-center justify-center shadow transition-colors cursor-pointer"
+                          >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                          </button>
+                          <div className="aspect-[4/3] w-full overflow-hidden bg-black">
+                            <video
+                              src={entry.foto}
+                              controls
+                              playsInline
+                              preload="metadata"
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                          <div
+                            style={{ fontFamily: "'Caveat', cursive" }}
+                            className="mt-2.5 text-center text-lg text-stone-700 leading-none"
+                          >
+                            {formatLogboekDatum(entry.datum)}
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div
+                          onMouseEnter={() => setIsPhotoZoomed(true)}
+                          onClick={() => setIsPhotoZoomed(true)}
+                          title="Beweeg over de foto om te vergroten"
+                          className={cn(
+                            'relative bg-[#fcf9f2] p-3 pb-10 shadow-[0_10px_24px_rgba(35,22,10,0.28)] border border-stone-300/70 max-w-[290px] w-full transition-transform duration-300 cursor-zoom-in hover:scale-[1.03]',
+                            photoTiltClasses[vIdx]
+                          )}
+                        >
+                          {/* Slordig plakbandje bovenaan */}
+                          <div
+                            className={cn(
+                              'absolute -top-3.5 left-1/2 -translate-x-1/2 w-24 h-7 bg-[#e7d6a8]/80 border-x border-[#c9b480]/50 shadow-sm backdrop-blur-[1px]',
+                              tapeTiltClasses[vIdx]
+                            )}
+                          />
+                          <div className="aspect-[4/3] w-full overflow-hidden bg-stone-200">
+                            <img
+                              src={entry.foto}
+                              alt={`Logboek ${formatLogboekDatum(entry.datum)}`}
+                              className="w-full h-full object-cover sepia-[0.12] contrast-[1.03]"
+                            />
+                          </div>
+                          <div
+                            style={{ fontFamily: "'Caveat', cursive" }}
+                            className="mt-2.5 text-center text-lg text-stone-700 leading-none"
+                          >
+                            {formatLogboekDatum(entry.datum)}
+                          </div>
+                        </div>
+                      )
                     ) : (
                       <div className="w-full max-w-[260px] py-12 px-6 border border-dashed border-stone-500/25 rounded-lg text-center -rotate-1">
                         <p
@@ -490,32 +531,61 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
         </div>
       </div>
 
-      {/* Uitvergrote foto bij hover/klik (vult bijna het hele scherm) */}
+      {/* Uitvergrote foto of video (vult bijna het hele scherm) */}
       {isPhotoZoomed && entry?.foto && (
         <div
           className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fade-in"
           onClick={() => setIsPhotoZoomed(false)}
         >
-          <div
-            onMouseLeave={() => setIsPhotoZoomed(false)}
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsPhotoZoomed(false);
-            }}
-            className="relative bg-[#fcf9f2] p-3 sm:p-4 pb-10 sm:pb-12 rounded-sm shadow-[0_30px_90px_rgba(0,0,0,0.75)] border border-stone-300/80 max-w-[94vw] max-h-[94vh] flex flex-col items-center cursor-zoom-out transition-transform duration-200"
-          >
-            <img
-              src={entry.foto}
-              alt={`Logboek ${formatLogboekDatum(entry.datum)}`}
-              className="max-w-[88vw] max-h-[82vh] w-auto h-auto object-contain block"
-            />
+          {isLogboekVideoUrl(entry.foto) ? (
             <div
-              style={{ fontFamily: "'Caveat', cursive" }}
-              className="mt-3 text-center text-2xl sm:text-3xl text-stone-700 leading-none"
+              onClick={(e) => e.stopPropagation()}
+              className="relative bg-[#fcf9f2] p-3 sm:p-4 pb-10 sm:pb-12 rounded-sm shadow-[0_30px_90px_rgba(0,0,0,0.75)] border border-stone-300/80 max-w-[94vw] max-h-[94vh] flex flex-col items-center"
             >
-              {formatLogboekDatum(entry.datum)}
+              <button
+                type="button"
+                onClick={() => setIsPhotoZoomed(false)}
+                className="absolute -top-3 -right-3 z-10 w-9 h-9 rounded-full bg-[#241612] text-[#f3e8ce] border border-[#8e2d20] shadow-xl flex items-center justify-center hover:bg-[#8e2d20] cursor-pointer"
+                title="Sluiten (Esc)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <video
+                src={entry.foto}
+                controls
+                autoPlay
+                playsInline
+                className="max-w-[88vw] max-h-[82vh] w-auto h-auto object-contain block bg-black"
+              />
+              <div
+                style={{ fontFamily: "'Caveat', cursive" }}
+                className="mt-3 text-center text-2xl sm:text-3xl text-stone-700 leading-none"
+              >
+                {formatLogboekDatum(entry.datum)}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div
+              onMouseLeave={() => setIsPhotoZoomed(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPhotoZoomed(false);
+              }}
+              className="relative bg-[#fcf9f2] p-3 sm:p-4 pb-10 sm:pb-12 rounded-sm shadow-[0_30px_90px_rgba(0,0,0,0.75)] border border-stone-300/80 max-w-[94vw] max-h-[94vh] flex flex-col items-center cursor-zoom-out transition-transform duration-200"
+            >
+              <img
+                src={entry.foto}
+                alt={`Logboek ${formatLogboekDatum(entry.datum)}`}
+                className="max-w-[88vw] max-h-[82vh] w-auto h-auto object-contain block"
+              />
+              <div
+                style={{ fontFamily: "'Caveat', cursive" }}
+                className="mt-3 text-center text-2xl sm:text-3xl text-stone-700 leading-none"
+              >
+                {formatLogboekDatum(entry.datum)}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
