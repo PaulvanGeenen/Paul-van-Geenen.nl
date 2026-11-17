@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Lock, LockOpen, RefreshCw, Sparkles, Copy, Check, RotateCcw,
-  Clock, Shield, Music, BookOpen, KeyRound, AlertCircle, CheckCircle2, Trash2, ExternalLink
+  Clock, Shield, Music, BookOpen, KeyRound, AlertCircle, AlertTriangle, CheckCircle2, Trash2, ExternalLink
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
@@ -66,6 +66,7 @@ export function TrackLocksManager() {
   const [adminFreshReader, setAdminFreshReader] = useState<boolean>(() => isAdminFreshReaderMode());
   const [unlockedKeysCount, setUnlockedKeysCount] = useState<number>(() => getUnlockedTrackKeys().length);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [confirmUnlockBook, setConfirmUnlockBook] = useState<DbAlbum | null>(null);
 
   // Editable GUID inputs for the currently selected book
   const [guid24hInput, setGuid24hInput] = useState<string>('');
@@ -526,12 +527,14 @@ export function TrackLocksManager() {
                   disabled={savingId === `book-${selectedBook.id}`}
                   onClick={() => {
                     const nextVal = isAlbumLocksEnabled(selectedBook) ? 0 : 1;
+                    if (nextVal === 0) {
+                      setConfirmUnlockBook(selectedBook);
+                      return;
+                    }
                     updateBookLockSettings(
                       selectedBook,
-                      { locks_enabled: nextVal },
-                      nextVal === 1
-                        ? `Slootjes voor niet-admin lezers zijn AANGEZET voor "${selectedBook.title}".`
-                        : `Slootjes voor niet-admin lezers zijn UITGEZET voor "${selectedBook.title}" (alles open voor lezers).`
+                      { locks_enabled: 1 },
+                      `Slootjes voor niet-admin lezers zijn AANGEZET voor "${selectedBook.title}".`
                     );
                   }}
                   className={cn(
@@ -1057,6 +1060,61 @@ export function TrackLocksManager() {
             )}
           </div>
         </>
+      )}
+
+      {/* Waarschuwingsmodal bij het openen van alle slootjes voor lezers */}
+      {confirmUnlockBook && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setConfirmUnlockBook(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-[#1a130e] border border-amber-500/50 shadow-2xl p-6 space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 text-amber-400" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-lg font-serif font-bold text-white">
+                  Waarschuwing: Slootjes openen voor alle lezers?
+                </h3>
+                <p className="text-xs sm:text-sm text-earth-light/80 leading-relaxed">
+                  Je staat op het punt om alle slootjes voor{' '}
+                  <strong className="text-white">&ldquo;{confirmUnlockBook.title}&rdquo;</strong>{' '}
+                  uit te zetten. Alle SoundTracks van dit boek worden dan direct vrij toegankelijk voor{' '}
+                  <strong className="text-amber-300">alle lezers</strong> zonder QR-code of GUID.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setConfirmUnlockBook(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-earth-light/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 transition-colors cursor-pointer"
+              >
+                Annuleren
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const bookToUnlock = confirmUnlockBook;
+                  setConfirmUnlockBook(null);
+                  updateBookLockSettings(
+                    bookToUnlock,
+                    { locks_enabled: 0 },
+                    `Slootjes voor niet-admin lezers zijn UITGEZET voor "${bookToUnlock.title}" (alles open voor lezers).`
+                  );
+                }}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black border border-amber-400 shadow-lg transition-colors cursor-pointer"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
