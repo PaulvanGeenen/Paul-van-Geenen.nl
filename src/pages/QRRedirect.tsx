@@ -234,6 +234,18 @@ export function QRRedirect() {
 
         const catalogData = await catalogPromise;
 
+        // Fallback: als een barcode/QR-code niet herkend wordt, speel altijd "Ginger’s Prologue.mp3" in "078 Ginger’s Prologue"
+        if (!data) {
+          data = {
+            code: cleanCode,
+            boekId: '3',
+            boekTitel: 'De Geboorte van de Leeuw',
+            hoofdstuk: '078 Ginger’s Prologue',
+            song: 'Ginger’s Prologue',
+            spotifyLink: `/music?track=${encodeURIComponent('078 Ginger’s Prologue')}&format=mp3`
+          };
+        }
+
         if (data) {
           let foundBook: BookType | null = null;
           if (data.boekId) {
@@ -247,13 +259,16 @@ export function QRRedirect() {
             ) || null;
           }
 
-          const songTitle = data.song || 'Onbekend nummer';
+          const songTitle = data.song || 'Ginger’s Prologue';
           const catalogTracks: any[] = catalogData?.tracks || [];
           const catalogAlbums: any[] = catalogData?.albums || [];
 
           const matchedTrack =
             findMatchingCatalogTrack(catalogTracks, songTitle) ||
-            (data.hoofdstuk ? findMatchingCatalogTrack(catalogTracks, data.hoofdstuk) : null);
+            (data.hoofdstuk ? findMatchingCatalogTrack(catalogTracks, data.hoofdstuk) : null) ||
+            findMatchingCatalogTrack(catalogTracks, '078 Ginger’s Prologue') ||
+            findMatchingCatalogTrack(catalogTracks, "Ginger's Prologue") ||
+            findMatchingCatalogTrack(catalogTracks, '078');
 
           let matchedAlbum: any = null;
           if (matchedTrack) {
@@ -361,9 +376,18 @@ export function QRRedirect() {
           }
         }
       } catch (err) {
-        console.error('[QR Redirect] Database fetch error:', err);
+        console.error('[QR Redirect] Database fetch error, falling back to Ginger’s Prologue:', err);
         if (active) {
-          setError('Kan geen verbinding maken met de database. Controleer uw verbinding.');
+          const fallbackBook = BOOKS.find(b => b.id === '3') || null;
+          setMatchedBook(fallbackBook);
+          setSongInfo({
+            song: 'Ginger’s Prologue',
+            targetUrl: `/music?track=${encodeURIComponent('078 Ginger’s Prologue')}&format=mp3&single=1&ceremony=done&qr=1&songTitle=${encodeURIComponent('Ginger’s Prologue')}`,
+            hoofdstuk: '078 Ginger’s Prologue',
+            boekId: '3',
+            boekTitel: 'De Geboorte van de Leeuw',
+            soundtrackCoverUrl: GEBOORTE_VAN_DE_LEEUW_ALBUM_FALLBACK
+          });
           setLoading(false);
         }
       }

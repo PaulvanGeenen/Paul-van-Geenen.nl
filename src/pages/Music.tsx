@@ -1357,6 +1357,18 @@ export function Music() {
       }
     }
 
+    // 4. Fallback bij onbekende QR-/barcode-scan of niet-herkende trackparameter:
+    // speel altijd "Ginger’s Prologue.mp3" in "078 Ginger’s Prologue"
+    if (matchedIdx === -1 && (encryptedVParam || trackParam || urlParams.get('qr') === '1')) {
+      let fallbackIdx = findTrackMatch('078 Ginger’s Prologue');
+      if (fallbackIdx === -1) fallbackIdx = findTrackMatch("Ginger's Prologue");
+      if (fallbackIdx === -1) fallbackIdx = findTrackMatch('078');
+      if (fallbackIdx !== -1) {
+        matchedIdx = fallbackIdx;
+        matchedFormat = 'mp3';
+      }
+    }
+
     if (matchedIdx !== -1) {
       initialSharedHandledRef.current = true;
       setAwaitingDirectTrackMatch(false);
