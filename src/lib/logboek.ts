@@ -52,7 +52,11 @@ async function callLogboekApi(action: string, method: 'GET' | 'POST' = 'GET', bo
 /**
  * Haal alle logboek-notities op (vaste sorteervolgorde: nieuwste eerst).
  */
-export async function fetchLogboekWithCover(): Promise<{ entries: LogboekEntry[]; coverImage: string | null }> {
+export async function fetchLogboekWithCover(): Promise<{
+  entries: LogboekEntry[];
+  coverImage: string | null;
+  geminiApiKey?: string | null;
+}> {
   const data = await callLogboekApi('get_logboek', 'GET');
   const rows: any[] = Array.isArray(data?.entries) ? data.entries : [];
   const entries = rows.map((r) => ({
@@ -68,7 +72,12 @@ export async function fetchLogboekWithCover(): Promise<{ entries: LogboekEntry[]
   return {
     entries,
     coverImage: data?.cover_image ? String(data.cover_image) : null,
+    geminiApiKey: data?.gemini_api_key ? String(data.gemini_api_key) : null,
   };
+}
+
+export async function saveLogboekGeminiKeyToServer(geminiApiKey: string | null): Promise<void> {
+  await callLogboekApi('save_gemini_key', 'POST', { gemini_api_key: geminiApiKey });
 }
 
 export async function fetchLogboekEntries(): Promise<LogboekEntry[]> {

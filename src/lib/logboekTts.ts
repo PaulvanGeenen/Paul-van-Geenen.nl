@@ -114,10 +114,9 @@ export async function generateLogboekMp3DataUrl(
   const ai = new GoogleGenAI({ apiKey: key });
   const spokenDate = formatLogboekDatum(datum) || datum;
 
-  const [datePcm, bodyPcm] = await Promise.all([
-    synthesizeDutchMalePcm(ai, spokenDate),
-    synthesizeDutchMalePcm(ai, tekst),
-  ]);
+  // Voer de 2 TTS-aanroepen na elkaar uit (niet gelijktijdig via Promise.all) om Gemini 429 rate-limits te voorkomen
+  const datePcm = await synthesizeDutchMalePcm(ai, spokenDate);
+  const bodyPcm = await synthesizeDutchMalePcm(ai, tekst);
 
   // 0,9 seconde stilte op 24.000 Hz tussen datum en bericht
   const pauseSamples = new Int16Array(Math.round(24000 * 0.9));

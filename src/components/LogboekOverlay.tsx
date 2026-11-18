@@ -134,15 +134,43 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
     }
   }, [isOpen, entry?.id]);
 
-  // Speel MP3 automatisch af als dit bericht audio_enabled = true en een audio_url heeft
+  const speakWithBrowserFallback = useCallback((targetEntry: LogboekEntry) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const spokenDate = formatLogboekDatum(targetEntry.datum) || targetEntry.datum;
+    const utterance = new SpeechSynthesisUtterance(`${spokenDate}. ${targetEntry.tekst}`);
+    utterance.lang = 'nl-NL';
+    utterance.rate = 0.95;
+    const voices = window.speechSynthesis.getVoices();
+    const dutchVoice =
+      voices.find((v) => v.lang.toLowerCase().startsWith('nl') && /maarten|frank|male|man/i.test(v.name)) ||
+      voices.find((v) => v.lang.toLowerCase().startsWith('nl'));
+    if (dutchVoice) utterance.voice = dutchVoice;
+    utterance.onstart = () => setIsPlayingAudio(true);
+    utterance.onend = () => setIsPlayingAudio(false);
+    utterance.onerror = () => setIsPlayingAudio(false);
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  // Speel MP3 (of spraaksynthese-fallback) automatisch af als dit bericht audio_enabled = true heeft
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
     setIsPlayingAudio(false);
 
-    if (!isOpen || !entry || !entry.audio_enabled || !entry.audio_url) {
+    if (!isOpen || !entry || !entry.audio_enabled) {
+      return;
+    }
+
+    if (!entry.audio_url) {
+      if (entry.tekst?.trim()) {
+        speakWithBrowserFallback(entry);
+      }
       return;
     }
 
@@ -155,23 +183,51 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
     audio.addEventListener('ended', onEnded);
     audio.addEventListener('pause', onPause);
 
+    let unlockCleanup: (() => void) | null = null;
     audio.play().catch(() => {
-      // Autoplay kan door browser worden geblokkeerd als er niet direct geklikt is
+      // Autoplay kan bij directe link (/logboek?v=...) door de browser worden geblokkeerd tot de eerste klik
       setIsPlayingAudio(false);
+      const resumeOnInteraction = () => {
+        if (unlockCleanup) {
+          unlockCleanup();
+          unlockCleanup = null;
+        }
+        if (audioRef.current === audio && audio.paused) {
+          audio.play().catch(() => {});
+        }
+      };
+      unlockCleanup = () => {
+        window.removeEventListener('click', resumeOnInteraction);
+        window.removeEventListener('touchend', resumeOnInteraction);
+      };
+      window.addEventListener('click', resumeOnInteraction, { once: true });
+      window.addEventListener('touchend', resumeOnInteraction, { once: true });
     });
 
     return () => {
+      if (unlockCleanup) unlockCleanup();
       audio.removeEventListener('play', onPlay);
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('pause', onPause);
       audio.pause();
     };
-  }, [isOpen, entry?.id, entry?.audio_url, entry?.audio_enabled]);
+  }, [isOpen, entry?.id, entry?.audio_url, entry?.audio_enabled, entry?.tekst, speakWithBrowserFallback]);
 
   if (!isOpen) return null;
 
   const toggleEntryAudio = () => {
-    if (!entry?.audio_url) return;
+    if (!entry) return;
+    if (!entry.audio_url) {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        if (isPlayingAudio) {
+          window.speechSynthesis.cancel();
+          setIsPlayingAudio(false);
+        } else if (entry.tekst?.trim()) {
+          speakWithBrowserFallback(entry);
+        }
+      }
+      return;
+    }
     if (!audioRef.current) {
       audioRef.current = new Audio(entry.audio_url);
       audioRef.current.addEventListener('play', () => setIsPlayingAudio(true));
@@ -437,7 +493,7 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
                           {formatLogboekDatum(entry.datum)}
                         </time>
                         <div className="flex items-center gap-2">
-                          {entry.audio_enabled && entry.audio_url && (
+                          {entry.audio_enabled && (entry.audio_url || entry.tekst?.trim()) && (
                             <button
                               type="button"
                               onClick={toggleEntryAudio}

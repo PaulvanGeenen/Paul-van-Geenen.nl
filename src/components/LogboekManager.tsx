@@ -8,6 +8,7 @@ import {
   fetchLogboekWithCover,
   saveLogboekEntry,
   saveLogboekCover,
+  saveLogboekGeminiKeyToServer,
   deleteLogboekEntry,
   uploadLogboekPhoto,
   uploadLogboekVideo,
@@ -54,13 +55,20 @@ export function LogboekManager() {
   const [savingCover, setSavingCover] = useState<boolean>(false);
   const [copiedEntryId, setCopiedEntryId] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (clearError = true) => {
     setLoading(true);
-    setErrorMsg(null);
+    if (clearError) setErrorMsg(null);
     try {
       const data = await fetchLogboekWithCover();
       setEntries(data.entries);
       setCoverImage(data.coverImage || '');
+      const localKey = getSavedGeminiTtsKey();
+      if (data.geminiApiKey && !localKey) {
+        setGeminiKey(data.geminiApiKey);
+        saveGeminiTtsKey(data.geminiApiKey);
+      } else if (localKey && !data.geminiApiKey) {
+        saveLogboekGeminiKeyToServer(localKey).catch(() => {});
+      }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Kon logboek niet laden.');
     } finally {
@@ -179,11 +187,15 @@ export function LogboekManager() {
     try {
       let finalAudioUrl = audioUrl.trim() || null;
 
-      if (autoGenerateOnSave && geminiKey.trim() && tekst.trim() && (!finalAudioUrl || editingId !== null)) {
-        try {
-          finalAudioUrl = await handleGenerateMp3(datum.trim(), tekst.trim());
-        } catch (ttsErr: any) {
-          setErrorMsg(`Notitie wordt opgeslagen, maar MP3 genereren mislukte: ${ttsErr?.message || ttsErr}`);
+      if (autoGenerateOnSave && tekst.trim() && (!finalAudioUrl || editingId !== null)) {
+        if (!geminiKey.trim()) {
+          setErrorMsg('Notitie is opgeslagen, maar er kon geen mannenstem-MP3 worden gemaakt omdat de Gemini API-sleutel bovenaan nog niet is ingevuld.');
+        } else {
+          try {
+            finalAudioUrl = await handleGenerateMp3(datum.trim(), tekst.trim());
+          } catch (ttsErr: any) {
+            setErrorMsg(`Notitie is opgeslagen, maar MP3 genereren mislukte: ${ttsErr?.message || ttsErr}`);
+          }
         }
       }
 
@@ -203,7 +215,7 @@ export function LogboekManager() {
             : 'Nieuwe logboek-notitie toegevoegd!'
       );
       resetForm();
-      await load();
+      await load(false);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Opslaan mislukt.');
     } finally {
@@ -296,7 +308,10 @@ export function LogboekManager() {
               setGeminiKey(e.target.value);
               saveGeminiTtsKey(e.target.value);
             }}
-            placeholder="Gemini API-sleutel (lokaal bewaard)"
+            onBlur={(e) => {
+              saveLogboekGeminiKeyToServer(e.target.value.trim() || null).catch(() => {});
+            }}
+            placeholder="Gemini API-sleutel (automatisch gesynchroniseerd)"
             className="flex-1 bg-black/40 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-earth-gold"
           />
         </div>

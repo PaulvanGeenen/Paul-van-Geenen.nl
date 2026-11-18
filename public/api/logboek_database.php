@@ -118,11 +118,38 @@ if ($action === 'get_logboek') {
         $coverStmt = $pdo->prepare("SELECT setting_value FROM logboek_settings WHERE setting_key = 'cover_image' LIMIT 1");
         $coverStmt->execute();
         $coverImage = $coverStmt->fetchColumn();
+
+        $geminiKeyVal = null;
+        if ($receivedKey === $API_KEY) {
+            $keyStmt = $pdo->prepare("SELECT setting_value FROM logboek_settings WHERE setting_key = 'gemini_api_key' LIMIT 1");
+            $keyStmt->execute();
+            $geminiKeyVal = $keyStmt->fetchColumn();
+        }
+
         echo json_encode([
             "success" => true,
             "entries" => $entries,
-            "cover_image" => $coverImage ? (string)$coverImage : null
+            "cover_image" => $coverImage ? (string)$coverImage : null,
+            "gemini_api_key" => $geminiKeyVal ? (string)$geminiKeyVal : null
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'save_gemini_key') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $keyVal = isset($input['gemini_api_key']) && trim((string)$input['gemini_api_key']) !== '' ? trim((string)$input['gemini_api_key']) : null;
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO logboek_settings (setting_key, setting_value)
+            VALUES ('gemini_api_key', ?)
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        ");
+        $stmt->execute([$keyVal]);
+        echo json_encode(["success" => true], JSON_UNESCAPED_SLASHES);
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(["success" => false, "error" => $e->getMessage()]);
