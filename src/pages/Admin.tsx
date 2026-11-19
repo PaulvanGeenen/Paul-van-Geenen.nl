@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText, ClipboardPaste } from 'lucide-react';
+import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText, ClipboardPaste, HardDrive, Share2 } from 'lucide-react';
 import { convertImageFileToNotebookLmPdf } from '../utils/notebookLmPdf';
 import {
   BOOK_DEFAULT_QR_STYLE,
@@ -39,6 +39,8 @@ import { MapModal } from '../components/MapModal';
 import { MusicDbManager } from '../components/MusicDbManager';
 import { TrackLocksManager } from '../components/TrackLocksManager';
 import { LogboekManager } from '../components/LogboekManager';
+import { FileManager } from '../components/FileManager';
+import { SocialComposer } from '../components/SocialComposer';
 
 interface QRCodeData {
   id: string;
@@ -257,7 +259,7 @@ const isListenInAlbumOrBook = (
 export function Admin() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek'>('qrcodes');
+  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social'>('qrcodes');
   
   // Data lists
   const [qrcodes, setQrcodes] = useState<QRCodeData[]>([]);
@@ -1451,6 +1453,38 @@ export function Admin() {
                 <span>Logboek Beheer</span>
               </button>
 
+              {/* BESTANDSBEHEER SHORTCUT PILL */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('files')}
+                className={cn(
+                  "flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer",
+                  activeTab === 'files'
+                    ? "bg-amber-500 text-black border-amber-300 font-bold shadow-lg shadow-amber-900/30"
+                    : "bg-white/5 border-amber-400/30 text-white/90 hover:border-amber-400 hover:bg-amber-500/10"
+                )}
+                title="Open Bestandsbeheer & Mediabibliotheek"
+              >
+                <HardDrive className={cn("w-3.5 h-3.5", activeTab === 'files' ? "text-black" : "text-amber-400")} />
+                <span>Bestandsbeheer</span>
+              </button>
+
+              {/* SOCIAL MEDIA SCHRIJVER SHORTCUT PILL */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('social')}
+                className={cn(
+                  "flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer",
+                  activeTab === 'social'
+                    ? "bg-blue-600 text-white border-blue-400 font-bold shadow-lg shadow-blue-900/30"
+                    : "bg-white/5 border-blue-400/30 text-white/90 hover:border-blue-400 hover:bg-blue-500/10"
+                )}
+                title="Open Social Media (Facebook Schrijverspagina & Instagram)"
+              >
+                <Share2 className={cn("w-3.5 h-3.5", activeTab === 'social' ? "text-white" : "text-blue-400")} />
+                <span>Socials (Schrijver)</span>
+              </button>
+
               {/* AFBEELDING / KLEMBOARD -> NOTEBOOKLM PDF CONVERTER */}
               <input
                 ref={notebookPdfInputRef}
@@ -1655,6 +1689,32 @@ export function Admin() {
           >
             <BookOpen className="w-4 h-4 text-rose-400" />
             Logboek
+          </button>
+
+          <button
+            onClick={() => setActiveTab('files')}
+            className={cn(
+              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
+              activeTab === 'files'
+                ? "border-earth-gold text-white"
+                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
+            )}
+          >
+            <HardDrive className="w-4 h-4 text-amber-400" />
+            Bestandsbeheer
+          </button>
+
+          <button
+            onClick={() => setActiveTab('social')}
+            className={cn(
+              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
+              activeTab === 'social'
+                ? "border-earth-gold text-white"
+                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
+            )}
+          >
+            <Share2 className="w-4 h-4 text-blue-400" />
+            Social Media (Schrijver)
           </button>
         </div>
 
@@ -3916,6 +3976,16 @@ export function Admin() {
         {/* TAB 9: LOGBOEK */}
         {activeTab === 'logboek' && !loading && (
           <LogboekManager />
+        )}
+
+        {/* TAB 10: BESTANDSBEHEER & MEDIABIBLIOTHEEK */}
+        {activeTab === 'files' && !loading && (
+          <FileManager mode="manager" />
+        )}
+
+        {/* TAB 11: SOCIAL MEDIA (FACEBOOK SCHRIJVERSPAGINA & INSTAGRAM) */}
+        {activeTab === 'social' && !loading && (
+          <SocialComposer />
         )}
 
         <p className="mt-8 text-center text-earth-light/20 text-xs">

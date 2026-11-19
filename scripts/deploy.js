@@ -2,6 +2,7 @@ import SftpClient from 'ssh2-sftp-client';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import { syncMedia } from './sync-media.js';
 
 // Laad instellingen uit .env.local indien aanwezig
 const envLocalPath = path.join(process.cwd(), '.env.local');
@@ -22,6 +23,13 @@ const REMOTE_ROOT = '/data/sites/web/paulvangeenennl/www';
 const DIST_DIR = path.join(process.cwd(), 'dist');
 
 async function deploy() {
+  // Synchroniseer eerst geüploade foto's, mappen en logboek-media vanaf TransIP naar lokaal + Git
+  try {
+    await syncMedia(true);
+  } catch (err) {
+    console.warn('⚠️ Kon uploads niet vooraf synchroniseren:', err.message);
+  }
+
   console.log('🚀 Start deploy naar live server (TransIP)...');
   console.log(`📡 Host: ${SFTP_CONFIG.host} (${SFTP_CONFIG.username})`);
   console.log(`📁 Doelmap: ${REMOTE_ROOT}`);
