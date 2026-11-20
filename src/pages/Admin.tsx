@@ -39,6 +39,7 @@ import { MapModal } from '../components/MapModal';
 import { MusicDbManager } from '../components/MusicDbManager';
 import { TrackLocksManager } from '../components/TrackLocksManager';
 import { LogboekManager } from '../components/LogboekManager';
+import { InkijkStatsManager } from '../components/InkijkStatsManager';
 import { FileManager } from '../components/FileManager';
 import { SocialComposer } from '../components/SocialComposer';
 
@@ -259,7 +260,7 @@ const isListenInAlbumOrBook = (
 export function Admin() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social'>('qrcodes');
+  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social' | 'inkijk'>('qrcodes');
   
   // Data lists
   const [qrcodes, setQrcodes] = useState<QRCodeData[]>([]);
@@ -1715,6 +1716,19 @@ export function Admin() {
           >
             <Share2 className="w-4 h-4 text-blue-400" />
             Social Media (Schrijver)
+          </button>
+
+          <button
+            onClick={() => setActiveTab('inkijk')}
+            className={cn(
+              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
+              activeTab === 'inkijk'
+                ? "border-earth-gold text-white"
+                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
+            )}
+          >
+            <BookOpen className="w-4 h-4 text-emerald-400" />
+            Inkijkexemplaar
           </button>
         </div>
 
@@ -3986,6 +4000,11 @@ export function Admin() {
         {/* TAB 11: SOCIAL MEDIA (FACEBOOK SCHRIJVERSPAGINA & INSTAGRAM) */}
         {activeTab === 'social' && !loading && (
           <SocialComposer />
+        )}
+
+        {/* TAB 12: INKIJKEXEMPLAAR STATISTIEKEN */}
+        {activeTab === 'inkijk' && !loading && (
+          <InkijkStatsManager />
         )}
 
         <p className="mt-8 text-center text-earth-light/20 text-xs">

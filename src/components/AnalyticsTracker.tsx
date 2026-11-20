@@ -56,7 +56,7 @@ export function AnalyticsTracker() {
 
   useEffect(() => {
     // Als de beheerpagina wordt geopend, markeer dit apparaat direct als beheerder
-    if (location.pathname.startsWith('/admin')) {
+    if (location.pathname.toLowerCase().startsWith('/beheer') || location.pathname.toLowerCase().startsWith('/admin')) {
       markDeviceAsAdmin();
       return;
     }

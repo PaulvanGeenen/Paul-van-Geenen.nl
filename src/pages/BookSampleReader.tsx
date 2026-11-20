@@ -22,6 +22,8 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { BOOKS } from '../data/books';
+import { isOwnAnalyticsIgnored, getUserGeoLocation } from '../lib/analytics';
+import { transipPost } from '../lib/transip';
 
 type ReaderTheme = 'day' | 'sepia' | 'night';
 
@@ -239,6 +241,44 @@ export function BookSampleReader() {
       stage.removeEventListener('touchcancel', onTouchEnd, { capture: true });
     };
   }, []);
+
+  // Track Inkijkexemplaar view (location, date & time) — automatically skips admin devices & admin IPs
+  const loggedViewRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (loggedViewRef.current) return;
+    loggedViewRef.current = true;
+
+    if (isOwnAnalyticsIgnored()) return;
+
+    const detectDevice = (ua: string): string => {
+      if (/iphone/i.test(ua)) return 'iPhone';
+      if (/ipad/i.test(ua)) return 'iPad';
+      if (/android/i.test(ua)) return /mobile/i.test(ua) ? 'Android Telefoon' : 'Android Tablet';
+      if (/windows/i.test(ua)) return 'Windows PC';
+      if (/macintosh/i.test(ua)) return 'Mac';
+      if (/linux/i.test(ua)) return 'Linux';
+      return 'Computer';
+    };
+
+    (async () => {
+      try {
+        const geo = await getUserGeoLocation();
+        const sessionId = sessionStorage.getItem('boeken_analytics_session_id') || '';
+        await transipPost('inkijk_view', {
+          sessionId,
+          bookSlug: book?.slug ?? 'de-geboorte-van-de-leeuw',
+          bookTitle: book?.title ?? 'De Geboorte van de Leeuw',
+          city: geo.city || 'Onbekend',
+          country: geo.country || 'Nederland',
+          lat: geo.lat ?? null,
+          lng: geo.lng ?? null,
+          deviceType: detectDevice(navigator.userAgent),
+        });
+      } catch {
+        // Silent fail: never interrupt reading experience
+      }
+    })();
+  }, [book?.slug, book?.title]);
 
   // Block Ctrl+S / Ctrl+P / Cmd+S / Cmd+P to protect sample pages
   useEffect(() => {

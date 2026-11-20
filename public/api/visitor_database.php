@@ -1633,4 +1633,123 @@ if ($action === 'delete_qrcode') {
 }
 
 http_response_code(400);
+// =========================================================================
+// 11. INKIJKEXEMPLAAR WEERGAVEN (LOCATIE, DATUM & TIJD — ZONDER BEHEERDER)
+// =========================================================================
+function ensure_inkijk_table($pdo) {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `inkijk_views` (
+          `id` INT AUTO_INCREMENT PRIMARY KEY,
+          `session_id` VARCHAR(100) NULL,
+          `ip_address` VARCHAR(64) NULL,
+          `book_slug` VARCHAR(150) NOT NULL,
+          `book_title` VARCHAR(255) NOT NULL,
+          `city` VARCHAR(100) NOT NULL DEFAULT 'Onbekend',
+          `country` VARCHAR(100) NOT NULL DEFAULT 'Nederland',
+          `latitude` DOUBLE NULL,
+          `longitude` DOUBLE NULL,
+          `device_type` VARCHAR(80) NULL,
+          `user_agent` TEXT NULL,
+          `viewed_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX `idx_book_slug` (`book_slug`),
+          INDEX `idx_viewed_at` (`viewed_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    ");
+}
+
+if ($action === 'inkijk_view') {
+    $rawIp = get_client_ip_clean();
+    if (is_known_admin_ip($pdo, $rawIp)) {
+        echo json_encode(["success" => true, "skipped_admin" => true]);
+        exit;
+    }
+
+    try {
+        ensure_inkijk_table($pdo);
+
+        $sessionId = trim((string)($input['sessionId'] ?? ''));
+        $bookSlug = trim((string)($input['bookSlug'] ?? 'de-geboorte-van-de-leeuw'));
+        $bookTitle = trim((string)($input['bookTitle'] ?? 'De Geboorte van de Leeuw'));
+        $city = trim((string)($input['city'] ?? 'Onbekend'));
+        $country = trim((string)($input['country'] ?? 'Nederland'));
+        $lat = isset($input['lat']) && is_numeric($input['lat']) ? (float)$input['lat'] : null;
+        $lng = isset($input['lng']) && is_numeric($input['lng']) ? (float)$input['lng'] : null;
+        $deviceType = trim((string)($input['deviceType'] ?? 'Onbekend'));
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        $anonIp = anonymize_ip($rawIp);
+
+        $stmt = $pdo->prepare("
+            INSERT INTO `inkijk_views`
+            (`session_id`, `ip_address`, `book_slug`, `book_title`, `city`, `country`, `latitude`, `longitude`, `device_type`, `user_agent`, `viewed_at`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+        $stmt->execute([
+            $sessionId !== '' ? $sessionId : null,
+            $anonIp,
+            $bookSlug,
+            $bookTitle,
+            $city !== '' ? $city : 'Onbekend',
+            $country !== '' ? $country : 'Nederland',
+            $lat,
+            $lng,
+            $deviceType !== '' ? $deviceType : 'Onbekend',
+            $userAgent
+        ]);
+
+        echo json_encode(["success" => true, "id" => (int)$pdo->lastInsertId()]);
+    } catch (Throwable $e) {
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'get_inkijk_views') {
+    try {
+        ensure_inkijk_table($pdo);
+        $bookSlug = trim((string)($_GET['book_slug'] ?? ($input['bookSlug'] ?? '')));
+
+        if ($bookSlug !== '') {
+            $stmt = $pdo->prepare("SELECT id, book_slug, book_title, city, country, device_type, viewed_at FROM `inkijk_views` WHERE `book_slug` = ? ORDER BY `viewed_at` DESC LIMIT 500");
+            $stmt->execute([$bookSlug]);
+        } else {
+            $stmt = $pdo->query("SELECT id, book_slug, book_title, city, country, device_type, viewed_at FROM `inkijk_views` ORDER BY `viewed_at` DESC LIMIT 500");
+        }
+
+        $rows = $stmt->fetchAll();
+        $views = array_map(function ($r) {
+            return [
+                'id' => (int)$r['id'],
+                'bookSlug' => (string)$r['book_slug'],
+                'bookTitle' => (string)$r['book_title'],
+                'city' => (string)$r['city'],
+                'country' => (string)$r['country'],
+                'deviceType' => (string)($r['device_type'] ?? 'Onbekend'),
+                'viewedAt' => (string)$r['viewed_at'],
+            ];
+        }, $rows);
+
+        echo json_encode(["success" => true, "views" => $views]);
+    } catch (Throwable $e) {
+        echo json_encode(["success" => false, "error" => $e->getMessage(), "views" => []]);
+    }
+    exit;
+}
+
+if ($action === 'delete_inkijk_view') {
+    $id = (int)($input['id'] ?? ($_GET['id'] ?? 0));
+    if ($id > 0) {
+        try {
+            ensure_inkijk_table($pdo);
+            $stmt = $pdo->prepare("DELETE FROM `inkijk_views` WHERE `id` = ?");
+            $stmt->execute([$id]);
+            echo json_encode(["success" => true]);
+        } catch (Throwable $e) {
+            echo json_encode(["success" => false, "error" => $e->getMessage()]);
+        }
+    } else {
+        echo json_encode(["success" => false, "error" => "Ongeldig ID"]);
+    }
+    exit;
+}
+
 echo json_encode(["success" => false, "error" => "Onbekende actie: {$action}"]);
