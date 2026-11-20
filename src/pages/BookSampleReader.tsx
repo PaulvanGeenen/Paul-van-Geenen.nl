@@ -274,6 +274,12 @@ function paginateEpubSections(
         best = 1;
       }
 
+      // Widow prevention: avoid spilling just 1–3 lone words (like "pianosnaar.") onto the top of the next page
+      const leftover = remaining.length - best;
+      if (leftover > 0 && leftover <= 3 && best > 8) {
+        best = best - (4 - leftover);
+      }
+
       const isSplit = best < remaining.length;
       const chunkHtml = `<p${isSplit ? ' class="epub-p-split"' : ''}>${joinTokens(
         remaining.slice(0, best)
@@ -893,7 +899,6 @@ export function BookSampleReader() {
 
         .epub-page-content p.epub-p-split {
           margin-bottom: 0;
-          text-align-last: justify;
         }
 
         .epub-page-content em {
