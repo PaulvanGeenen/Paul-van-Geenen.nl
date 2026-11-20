@@ -121,7 +121,8 @@ function AdminAmbientSuppressor() {
   const { pathname } = useLocation();
   const { setIsAdminRoute } = useAudio();
   useEffect(() => {
-    setIsAdminRoute(pathname.toLowerCase().startsWith('/beheer'));
+    const p = pathname.toLowerCase();
+    setIsAdminRoute(p.startsWith('/beheer') || p.startsWith('/inkijkexemplaar'));
   }, [pathname, setIsAdminRoute]);
   return null;
 }

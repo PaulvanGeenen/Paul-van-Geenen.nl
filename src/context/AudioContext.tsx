@@ -23,7 +23,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [videoMuted, setVideoMuted] = useState(true);
   const [isAmbientPlaying, setIsAmbientPlaying] = useState(true);
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
-    return typeof window !== 'undefined' && window.location.pathname.toLowerCase().startsWith('/beheer');
+    if (typeof window === 'undefined') return false;
+    const p = window.location.pathname.toLowerCase();
+    return p.startsWith('/beheer') || p.startsWith('/inkijkexemplaar');
   });
   const [masterVolume, setMasterVolume] = useState(0.4);
   const [currentAmbientVolume, setCurrentAmbientVolume] = useState(0.4);
