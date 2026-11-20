@@ -3285,8 +3285,7 @@ export function Music() {
     }
   }, [volume, isMuted]);
 
-  // iOS / Android Lock Screen & Control Center MediaSession Integration
-  // Ensures album cover, song title, artist, and playback controls appear on iPhone Lock Screen / Dynamic Island / Apple Watch
+  // iOS / Android Lock Screen, Control Center & Car Radio (Bluetooth AVRCP / CarPlay / Android Auto) MediaSession Integration
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
 
@@ -3296,28 +3295,64 @@ export function Music() {
     }
 
     const rawArtworkUrl = getTrackBgImage(currentTrack, 'portrait') || '/apple-touch-icon.png';
-    const absoluteArtworkUrl = typeof window !== 'undefined'
+    const rawAbsolute = typeof window !== 'undefined'
       ? (rawArtworkUrl?.startsWith('http') ? rawArtworkUrl : `${window.location.origin}${rawArtworkUrl || '/apple-touch-icon.png'}`)
       : rawArtworkUrl;
-
+    let absoluteArtworkUrl = rawAbsolute || '';
     try {
-      const bookTitle = currentTrack.album || 'SoundTrack';
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentTrack.title || 'SoundTrack',
-        artist: bookTitle,
-        album: bookTitle,
-        artwork: [
-          { src: absoluteArtworkUrl, sizes: '512x512', type: 'image/jpeg' },
-          { src: absoluteArtworkUrl, sizes: '384x384', type: 'image/jpeg' },
-          { src: absoluteArtworkUrl, sizes: '256x256', type: 'image/jpeg' },
-          { src: absoluteArtworkUrl, sizes: '128x128', type: 'image/jpeg' },
-          { src: absoluteArtworkUrl, sizes: '96x96', type: 'image/jpeg' }
-        ]
-      });
-    } catch (e) {
-      console.log('[MediaSession] metadata setup error:', e);
+      if (absoluteArtworkUrl) absoluteArtworkUrl = encodeURI(decodeURI(absoluteArtworkUrl));
+    } catch {
+      absoluteArtworkUrl = encodeURI(absoluteArtworkUrl);
     }
-  }, [currentTrack]);
+
+    const trackTitle = currentTrack.title || 'SoundTrack';
+    const bookTitle = currentTrack.album || 'Paul van Geenen';
+
+    const applyMediaSessionMetadata = () => {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: trackTitle,
+          artist: bookTitle,
+          album: bookTitle,
+          artwork: absoluteArtworkUrl
+            ? [
+                { src: absoluteArtworkUrl, sizes: '512x512', type: 'image/jpeg' },
+                { src: absoluteArtworkUrl, sizes: '384x384', type: 'image/jpeg' },
+                { src: absoluteArtworkUrl, sizes: '256x256', type: 'image/jpeg' },
+                { src: absoluteArtworkUrl, sizes: '128x128', type: 'image/jpeg' },
+                { src: absoluteArtworkUrl, sizes: '96x96', type: 'image/jpeg' },
+              ]
+            : [],
+        });
+        navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+      } catch (e) {
+        console.log('[MediaSession] metadata setup error:', e);
+      }
+    };
+
+    // Fallback voor oudere Bluetooth autoradio's die ook document.title uitlezen
+    const prevDocTitle = document.title;
+    document.title = `${trackTitle} — ${bookTitle}`;
+
+    applyMediaSessionMetadata();
+
+    // iOS Safari & Bluetooth AVRCP resetten soms Now Playing direct na het starten van <audio>:
+    // herbevestig metadata kort nadat afspelen actief is.
+    let refreshTimer: number | null = null;
+    if (isPlaying) {
+      refreshTimer = window.setTimeout(applyMediaSessionMetadata, 350);
+    }
+
+    const activeAudio = getActiveAudioEl();
+    const onAudioPlaying = () => applyMediaSessionMetadata();
+    activeAudio?.addEventListener('playing', onAudioPlaying);
+
+    return () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      activeAudio?.removeEventListener('playing', onAudioPlaying);
+      document.title = prevDocTitle;
+    };
+  }, [currentTrack, isPlaying]);
 
   // Update MediaSession playback state & action handlers (enables lockscreen skip, pause, play, seek)
   useEffect(() => {
