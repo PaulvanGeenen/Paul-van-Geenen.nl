@@ -170,37 +170,89 @@ function paginateEpubSections(
     return blocks;
   };
 
-  // Split an oversized plain/inline-formatted paragraph across pages cleanly on word boundaries
-  const splitOversizedParagraph = (
+  // Tokenize a <p> element into word-level HTML atoms while preserving <em>, <strong>, dropcap spans, etc.
+  const tokenizeParagraph = (pEl: HTMLElement): string[] => {
+    const tokens: string[] = [];
+
+    const walkNode = (node: Node, wrappers: string[]) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || '';
+        const words = text.split(/\s+/).filter(Boolean);
+        for (const w of words) {
+          const escaped = w
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          let out = escaped;
+          for (let i = wrappers.length - 1; i >= 0; i--) {
+            out = `<${wrappers[i]}>${out}</${wrappers[i]}>`;
+          }
+          tokens.push(out);
+        }
+        return;
+      }
+
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        const tag = el.tagName.toLowerCase();
+        const cls = el.className || '';
+        if (tag === 'span' && (cls.includes('dropcap') || cls.includes('lead_word'))) {
+          tokens.push(el.outerHTML);
+          return;
+        }
+        if (tag === 'em' || tag === 'i' || tag === 'strong' || tag === 'b') {
+          Array.from(el.childNodes).forEach((ch) => walkNode(ch, [...wrappers, tag]));
+          return;
+        }
+        Array.from(el.childNodes).forEach((ch) => walkNode(ch, wrappers));
+      }
+    };
+
+    Array.from(pEl.childNodes).forEach((ch) => walkNode(ch, []));
+    return tokens;
+  };
+
+  const joinTokens = (toks: string[]): string => {
+    // Join tokens with spaces, except keep dropcap tightly attached to the following lead_word
+    let res = '';
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i];
+      if (i > 0 && !toks[i - 1].includes('class="dropcap')) {
+        res += ' ';
+      }
+      res += t;
+    }
+    // Merge adjacent identical inline tags like </em> <em> -> space
+    return res
+      .replace(/<\/em>\s+<em>/g, ' ')
+      .replace(/<\/i>\s+<i>/g, ' ')
+      .replace(/<\/strong>\s+<strong>/g, ' ');
+  };
+
+  // Flow a paragraph cleanly across page boundaries so text always fills each page down to the bottom margin
+  const flowParagraphAcrossPages = (
     pEl: HTMLElement,
     sec: EpubSection,
     currentHtmlParts: string[]
   ): string[] => {
-    const text = pEl.textContent || '';
-    const words = text.split(/\s+/).filter(Boolean);
-    if (words.length <= 8) {
-      // Too short to split meaningfully; put on its own page
-      if (currentHtmlParts.length > 0) {
-        pushPage(sec, 'text', currentHtmlParts.join(''));
-        measure.innerHTML = '';
-      }
-      pushPage(sec, 'text', pEl.outerHTML);
-      return [];
-    }
+    const tokens = tokenizeParagraph(pEl);
+    if (tokens.length === 0) return currentHtmlParts;
 
-    let remainingWords = words;
+    let remaining = tokens;
     let parts = [...currentHtmlParts];
 
-    while (remainingWords.length > 0) {
-      // Binary search how many words fit in the remaining space of measure
+    while (remaining.length > 0) {
       let low = 1;
-      let high = remainingWords.length;
+      let high = remaining.length;
       let best = 0;
 
       const baseHtml = parts.join('');
       while (low <= high) {
         const mid = Math.floor((low + high) / 2);
-        const candidate = `<p>${remainingWords.slice(0, mid).join(' ')}</p>`;
+        const isSplit = mid < remaining.length;
+        const candidate = `<p${isSplit ? ' class="epub-p-split"' : ''}>${joinTokens(
+          remaining.slice(0, mid)
+        )}</p>`;
         measure.innerHTML = baseHtml + candidate;
         if (measure.scrollHeight <= maxContentH) {
           best = mid;
@@ -210,23 +262,26 @@ function paginateEpubSections(
         }
       }
 
-      if (best === 0) {
-        if (parts.length > 0) {
-          pushPage(sec, 'text', parts.join(''));
-          parts = [];
-          measure.innerHTML = '';
-          continue;
-        } else {
-          // Even 1 word overflows (extreme edge case) — force at least 1 word
-          best = 1;
-        }
+      // If fewer than 6 words fit at the bottom of a non-empty page, move the whole paragraph to the next page (avoid 1-line orphans)
+      if (parts.length > 0 && best < Math.min(6, remaining.length)) {
+        pushPage(sec, 'text', parts.join(''));
+        parts = [];
+        measure.innerHTML = '';
+        continue;
       }
 
-      const chunkHtml = `<p>${remainingWords.slice(0, best).join(' ')}</p>`;
-      parts.push(chunkHtml);
-      remainingWords = remainingWords.slice(best);
+      if (best === 0) {
+        best = 1;
+      }
 
-      if (remainingWords.length > 0) {
+      const isSplit = best < remaining.length;
+      const chunkHtml = `<p${isSplit ? ' class="epub-p-split"' : ''}>${joinTokens(
+        remaining.slice(0, best)
+      )}</p>`;
+      parts.push(chunkHtml);
+      remaining = remaining.slice(best);
+
+      if (remaining.length > 0) {
         pushPage(sec, 'text', parts.join(''));
         parts = [];
         measure.innerHTML = '';
@@ -272,27 +327,17 @@ function paginateEpubSections(
 
         if (measure.scrollHeight <= maxContentH) {
           currentParts.push(blockHtml);
+        } else if (block.tagName.toLowerCase() === 'p' && !block.querySelector('img')) {
+          // Always flow paragraphs seamlessly across the page bottom (like a real book / Apple Books)
+          currentParts = flowParagraphAcrossPages(block, sec, currentParts);
         } else if (currentParts.length === 0) {
-          // Single block is taller than a full page
-          if (block.tagName.toLowerCase() === 'p') {
-            currentParts = splitOversizedParagraph(block, sec, []);
-          } else {
-            pushPage(sec, 'text', blockHtml);
-            measure.innerHTML = '';
-          }
+          pushPage(sec, 'text', blockHtml);
+          measure.innerHTML = '';
         } else {
-          // Flush current page and start next page with this block
+          // Non-paragraph block (heading, image, TOC item): move to next page
           pushPage(sec, 'text', currentParts.join(''));
-          currentParts = [];
+          currentParts = [blockHtml];
           measure.innerHTML = blockHtml;
-          if (measure.scrollHeight <= maxContentH) {
-            currentParts.push(blockHtml);
-          } else if (block.tagName.toLowerCase() === 'p') {
-            currentParts = splitOversizedParagraph(block, sec, []);
-          } else {
-            pushPage(sec, 'text', blockHtml);
-            measure.innerHTML = '';
-          }
         }
       }
 
@@ -844,6 +889,11 @@ export function BookSampleReader() {
 
         .epub-page-content p {
           margin: 0 0 0.72em 0;
+        }
+
+        .epub-page-content p.epub-p-split {
+          margin-bottom: 0;
+          text-align-last: justify;
         }
 
         .epub-page-content em {
