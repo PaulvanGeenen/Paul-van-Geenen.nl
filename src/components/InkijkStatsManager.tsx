@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { BookOpen, MapPin, Calendar, Clock, RefreshCw, Trash2, Smartphone, Monitor, Filter, ShieldCheck } from 'lucide-react';
+import { BookOpen, MapPin, Calendar, Clock, RefreshCw, Trash2, Smartphone, Monitor, Filter, ShieldCheck, Globe } from 'lucide-react';
 import { transipGet, transipPost } from '../lib/transip';
+import { MapModal, type MapItem } from './MapModal';
 
 export interface InkijkViewRecord {
   id: number;
@@ -8,6 +9,8 @@ export interface InkijkViewRecord {
   bookTitle: string;
   city: string;
   country: string;
+  lat?: number | null;
+  lng?: number | null;
   deviceType: string;
   viewedAt: string;
 }
@@ -38,6 +41,7 @@ export function InkijkStatsManager() {
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedBook, setSelectedBook] = useState<string>('ALL');
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [isMapOpen, setIsMapOpen] = useState<boolean>(false);
 
   const loadViews = useCallback(async () => {
     setLoading(true);
@@ -82,6 +86,22 @@ export function InkijkStatsManager() {
   }, [filteredViews]);
 
   const latestView = filteredViews[0] ?? null;
+
+  const mapItems: MapItem[] = useMemo(() => {
+    return filteredViews.map((v) => ({
+      id: `inkijk-${v.id}`,
+      city: v.city || 'Onbekend',
+      country: v.country || 'Nederland',
+      lat: typeof v.lat === 'number' ? v.lat : undefined,
+      lng: typeof v.lng === 'number' ? v.lng : undefined,
+      chapter: v.bookTitle || v.bookSlug,
+      trackTitle: `Inkijkexemplaar: ${v.bookTitle || v.bookSlug}`,
+      deviceType: v.deviceType || 'Onbekend',
+      timestamp: v.viewedAt,
+      startedAt: v.viewedAt,
+      referrer: v.bookTitle || v.bookSlug,
+    }));
+  }, [filteredViews]);
 
   const handleDelete = async (id: number) => {
     if (!window.confirm('Weet je zeker dat je deze inkijkexemplaar-weergave wilt verwijderen?')) return;
@@ -132,6 +152,16 @@ export function InkijkStatsManager() {
               </select>
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => setIsMapOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-sm font-medium transition-colors"
+            title="Bekijk alle inkijkexemplaar-locaties op de interactieve kaart"
+          >
+            <Globe className="w-4 h-4" />
+            <span>Bekijk op kaart</span>
+          </button>
 
           <button
             type="button"
@@ -263,6 +293,15 @@ export function InkijkStatsManager() {
           </div>
         )}
       </div>
+
+      {/* Interactieve Kaart Modal (zelfde stijl als Soundtracks & Bezoekers) */}
+      <MapModal
+        isOpen={isMapOpen}
+        onClose={() => setIsMapOpen(false)}
+        title="Inkijkexemplaar Locaties Kaartoverzicht"
+        items={mapItems}
+        type="music"
+      />
     </div>
   );
 }

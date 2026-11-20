@@ -1709,10 +1709,10 @@ if ($action === 'get_inkijk_views') {
         $bookSlug = trim((string)($_GET['book_slug'] ?? ($input['bookSlug'] ?? '')));
 
         if ($bookSlug !== '') {
-            $stmt = $pdo->prepare("SELECT id, book_slug, book_title, city, country, device_type, viewed_at FROM `inkijk_views` WHERE `book_slug` = ? ORDER BY `viewed_at` DESC LIMIT 500");
+            $stmt = $pdo->prepare("SELECT id, book_slug, book_title, city, country, latitude, longitude, device_type, viewed_at FROM `inkijk_views` WHERE `book_slug` = ? ORDER BY `viewed_at` DESC LIMIT 500");
             $stmt->execute([$bookSlug]);
         } else {
-            $stmt = $pdo->query("SELECT id, book_slug, book_title, city, country, device_type, viewed_at FROM `inkijk_views` ORDER BY `viewed_at` DESC LIMIT 500");
+            $stmt = $pdo->query("SELECT id, book_slug, book_title, city, country, latitude, longitude, device_type, viewed_at FROM `inkijk_views` ORDER BY `viewed_at` DESC LIMIT 500");
         }
 
         $rows = $stmt->fetchAll();
@@ -1723,6 +1723,8 @@ if ($action === 'get_inkijk_views') {
                 'bookTitle' => (string)$r['book_title'],
                 'city' => (string)$r['city'],
                 'country' => (string)$r['country'],
+                'lat' => isset($r['latitude']) && $r['latitude'] !== null ? (float)$r['latitude'] : null,
+                'lng' => isset($r['longitude']) && $r['longitude'] !== null ? (float)$r['longitude'] : null,
                 'deviceType' => (string)($r['device_type'] ?? 'Onbekend'),
                 'viewedAt' => (string)$r['viewed_at'],
             ];
