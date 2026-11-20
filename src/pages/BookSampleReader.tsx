@@ -99,7 +99,8 @@ export function BookSampleReader() {
       img.src = getPageSrc(p);
       img.alt = `Pagina ${p}`;
       img.draggable = false;
-      img.loading = p <= 6 ? 'eager' : 'lazy';
+      img.loading = 'eager';
+      img.decoding = 'async';
       img.className = 'inkijk-page-img';
 
       const shield = document.createElement('div');
@@ -305,9 +306,6 @@ export function BookSampleReader() {
         }
 
         .inkijk-page {
-          position: relative;
-          width: 100%;
-          height: 100%;
           background: #ffffff;
           overflow: hidden;
           box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.04);
