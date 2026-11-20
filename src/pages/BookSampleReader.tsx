@@ -27,7 +27,7 @@ interface ChapterEntry {
 }
 
 const TOTAL_PAGES = 37;
-const ILLUSTRATION_PAGES = new Set([1, 9, 10, 22, 27, 32, 37]);
+const ILLUSTRATION_PAGES = new Set([1, 10, 22, 27, 32, 37]);
 
 const SAMPLE_CHAPTERS: ChapterEntry[] = [
   { title: 'Omslag', page: 1 },
