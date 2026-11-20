@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { BOOKS } from '../data/books';
 import appConfig from '../data/appConfig.json';
 import { motion } from 'motion/react';
-import { ArrowLeft, ShoppingCart, ChevronRight, ChevronLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, ChevronRight, ChevronLeft, ArrowRight, BookOpen } from 'lucide-react';
 import { useEffect } from 'react';
 import { MRIScanCTA } from '../components/ui/MRIScanCTA';
 
@@ -117,11 +117,20 @@ export function BookDetail() {
                   <h1 className="text-4xl md:text-5xl font-serif font-bold text-earth-dark mt-2 mb-4">{book.title}</h1>
                 )}
                 <p className="text-xl text-earth-warm italic">{book.subtitle}</p>
-                <div className="mt-4 flex items-center gap-3">
+                <div className="mt-4 flex flex-wrap items-center gap-3">
                   <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-earth-clay/10 border border-earth-clay/20 text-xs text-earth-dark font-medium">
                     <img src="/images/lion-books-emblem.jpg" alt="Lion Books" className="w-6 h-6 rounded-md object-cover border border-earth-clay/30" />
                     <span>Uitgeverij: <strong>Lion Books Publishing</strong></span>
                   </div>
+                  {book.slug === 'de-geboorte-van-de-leeuw' && (
+                    <Link
+                      to="/inkijkexemplaar/de-geboorte-van-de-leeuw"
+                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-earth-clay/25 bg-earth-clay/[0.04] hover:bg-earth-clay/10 text-xs font-medium text-earth-dark hover:text-earth-clay transition-all"
+                    >
+                      <BookOpen className="w-4 h-4 text-earth-clay" />
+                      <span>Inkijkexemplaar lezen</span>
+                    </Link>
+                  )}
                 </div>
               </div>
 

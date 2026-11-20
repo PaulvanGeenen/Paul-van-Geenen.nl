@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, BookOpen } from 'lucide-react';
 import { BOOKS } from '../data/books';
 import appConfig from '../data/appConfig.json';
 import { BookCard } from '../components/ui/BookCard';
@@ -113,12 +113,23 @@ export function Books() {
                       </p>
                     </div>
                   </div>
-                  <Link 
-                    to={`/boeken/${book.slug}`} 
-                    className="inline-flex items-center gap-2 text-earth-clay font-bold text-[10px] uppercase tracking-[0.2em] hover:text-earth-dark transition-colors mt-auto"
-                  >
-                    Lees meer <span className="text-lg leading-none">→</span>
-                  </Link>
+                  <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-2">
+                    <Link 
+                      to={`/boeken/${book.slug}`} 
+                      className="inline-flex items-center gap-2 text-earth-clay font-bold text-[10px] uppercase tracking-[0.2em] hover:text-earth-dark transition-colors"
+                    >
+                      Lees meer <span className="text-lg leading-none">→</span>
+                    </Link>
+                    {book.slug === 'de-geboorte-van-de-leeuw' && (
+                      <Link
+                        to="/inkijkexemplaar/de-geboorte-van-de-leeuw"
+                        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-earth-warm/80 hover:text-earth-clay transition-colors border-b border-earth-clay/25 hover:border-earth-clay pb-0.5"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-earth-clay/80" />
+                        <span>Inkijkexemplaar</span>
+                      </Link>
+                    )}
+                  </div>
                 </motion.div>
               );
             })}

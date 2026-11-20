@@ -44,6 +44,7 @@ const QRStudio = lazy(() => import('./pages/QRStudio').then(module => ({ default
 const Music = lazy(() => import('./pages/Music').then(module => ({ default: module.Music })));
 const QRRedirect = lazy(() => import('./pages/QRRedirect').then(module => ({ default: module.QRRedirect })));
 const Privacy = lazy(() => import('./pages/Privacy').then(module => ({ default: module.Privacy })));
+const BookSampleReader = lazy(() => import('./pages/BookSampleReader').then(module => ({ default: module.BookSampleReader })));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -145,6 +146,7 @@ function LayoutWrapper({ children }: LayoutWrapperProps) {
   // or is a dynamic second-slash identifier that is not an existing site page.
   const isRedirectPage = 
     pathname.toLowerCase().startsWith('/music') ||
+    pathname.toLowerCase().startsWith('/inkijkexemplaar') ||
     pathname.startsWith('/qr/') || 
     pathname.startsWith('/qrcode/') || 
     pathname.startsWith('/scan/') ||
@@ -186,6 +188,7 @@ export default function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/boeken" element={<Books />} />
                 <Route path="/boeken/:slug" element={<BookDetail />} />
+                <Route path="/inkijkexemplaar/:slug" element={<BookSampleReader />} />
                 <Route path="/de-echo" element={<Echo />} />
                 <Route path="/fragmenten" element={<Fragments />} />
                 <Route path="/over-mij" element={<About />} />
