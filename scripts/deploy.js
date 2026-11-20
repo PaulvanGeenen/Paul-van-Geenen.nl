@@ -155,6 +155,50 @@ async function deploy() {
       console.log(`✅ ${imageFiles.length} afbeeldingen gesynchroniseerd!`);
     }
 
+    // 3c. Upload inkijkexemplaren (dist/inkijk/**)
+    const localInkijkDir = path.join(DIST_DIR, 'inkijk');
+    const remoteInkijkDir = `${REMOTE_ROOT}/inkijk`;
+    if (fs.existsSync(localInkijkDir)) {
+      const inkijkFiles = [];
+      function walkInkijk(dir) {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walkInkijk(full);
+          else if (entry.isFile()) inkijkFiles.push(full);
+        }
+      }
+      walkInkijk(localInkijkDir);
+
+      let inkijkUploaded = 0;
+      for (const localPath of inkijkFiles) {
+        const relativePath = path.relative(localInkijkDir, localPath).replace(/\\/g, '/');
+        const remotePath = `${remoteInkijkDir}/${relativePath}`;
+        const remoteSubdir = remotePath.substring(0, remotePath.lastIndexOf('/'));
+        const localStat = fs.statSync(localPath);
+
+        let needUpload = true;
+        try {
+          const stat = await sftp.stat(remotePath);
+          const localMtimeSec = Math.floor(localStat.mtimeMs / 1000);
+          if (stat.size === localStat.size && localMtimeSec <= stat.modifyTime + 2) {
+            needUpload = false;
+          }
+        } catch (e) {
+          needUpload = true;
+        }
+
+        if (needUpload) {
+          try {
+            await sftp.mkdir(remoteSubdir, true);
+          } catch {}
+          await sftp.fastPut(localPath, remotePath);
+          inkijkUploaded++;
+        }
+      }
+      console.log(`✅ ${inkijkUploaded} van ${inkijkFiles.length} inkijkexemplaar-pagina's gesynchroniseerd!`);
+    }
+
     // 4. Upload .htaccess & manifest.json
     const localHtaccess = path.join(DIST_DIR, '.htaccess');
     if (fs.existsSync(localHtaccess)) {
