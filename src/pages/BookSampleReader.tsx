@@ -85,6 +85,7 @@ export function BookSampleReader() {
 
   // Reader GUI controls
   const [zoomPercent, setZoomPercent] = useState<number>(100);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [theme, setTheme] = useState<ReaderTheme>('day');
   const [showToc, setShowToc] = useState<boolean>(false);
   const [showTypography, setShowTypography] = useState<boolean>(false);
@@ -128,13 +129,28 @@ export function BookSampleReader() {
   const bookHostRef = useRef<HTMLDivElement | null>(null);
   const pageFlipRef = useRef<PageFlip | null>(null);
   const zoomPercentRef = useRef<number>(100);
+  const panRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const pinchStartRef = useRef<{ dist: number; zoom: number } | null>(null);
+  const panDragRef = useRef<{
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    isPanning: boolean;
+  } | null>(null);
 
   useEffect(() => {
     zoomPercentRef.current = zoomPercent;
+    if (zoomPercent <= 100) {
+      setPan({ x: 0, y: 0 });
+    }
   }, [zoomPercent]);
 
-  // Native 2-finger pinch-to-zoom on the reading stage (capture phase so StPageFlip doesn't flip while pinching)
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+
+  // Native 2-finger pinch-to-zoom & 1-finger pan/scroll when zoomed in (capture phase so StPageFlip doesn't flip)
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -146,9 +162,18 @@ export function BookSampleReader() {
       if (e.touches.length === 2) {
         e.preventDefault();
         e.stopPropagation();
+        panDragRef.current = null;
         pinchStartRef.current = {
           dist: Math.max(10, getTouchDist(e.touches)),
           zoom: zoomPercentRef.current,
+        };
+      } else if (e.touches.length === 1 && zoomPercentRef.current > 100) {
+        panDragRef.current = {
+          startX: e.touches[0].clientX,
+          startY: e.touches[0].clientY,
+          originX: panRef.current.x,
+          originY: panRef.current.y,
+          isPanning: false,
         };
       }
     };
@@ -163,12 +188,35 @@ export function BookSampleReader() {
           Math.max(85, Math.min(220, pinchStartRef.current.zoom * scaleRatio))
         );
         setZoomPercent(nextZoom);
+      } else if (e.touches.length === 1 && panDragRef.current && zoomPercentRef.current > 100) {
+        const dx = e.touches[0].clientX - panDragRef.current.startX;
+        const dy = e.touches[0].clientY - panDragRef.current.startY;
+        if (panDragRef.current.isPanning || Math.hypot(dx, dy) > 6) {
+          panDragRef.current.isPanning = true;
+          e.preventDefault();
+          e.stopPropagation();
+
+          const scale = zoomPercentRef.current / 100;
+          const rect = stage.getBoundingClientRect();
+          const maxPanX = Math.max(40, ((rect.width * (scale - 1)) / 2) + 40);
+          const maxPanY = Math.max(80, ((rect.height * (scale - 1)) / 2) + 120);
+
+          const nextX = Math.max(-maxPanX, Math.min(maxPanX, panDragRef.current.originX + dx));
+          const nextY = Math.max(-maxPanY, Math.min(maxPanY, panDragRef.current.originY + dy));
+          setPan({ x: nextX, y: nextY });
+        }
       }
     };
 
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) {
         pinchStartRef.current = null;
+      }
+      if (e.touches.length === 0) {
+        if (panDragRef.current?.isPanning) {
+          e.stopPropagation();
+        }
+        panDragRef.current = null;
       }
     };
 
@@ -299,6 +347,7 @@ export function BookSampleReader() {
     pageFlip.on('flip', (e) => {
       if (typeof e.data === 'number') {
         setCurrentPage(e.data + 1);
+        setPan({ x: 0, y: 0 });
       }
     });
 
@@ -815,7 +864,9 @@ export function BookSampleReader() {
           {/* Main Book Stage */}
           <div
             ref={stageRef}
-            className="relative flex-1 flex items-center justify-center overflow-auto p-2 sm:p-5 md:p-6"
+            className={`relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-5 md:p-6 ${
+              zoomPercent > 100 ? 'touch-none cursor-grab active:cursor-grabbing' : ''
+            }`}
           >
             {/* Left / Right page-curl buttons */}
             <button
@@ -838,12 +889,13 @@ export function BookSampleReader() {
               <ChevronRight className="w-5 h-5" />
             </button>
 
-            {/* Zoomable FlipBook Host */}
+            {/* Zoomable & Pannable FlipBook Host */}
             <div
-              className="inkijk-flipbook-stage transition-transform duration-200"
+              className="inkijk-flipbook-stage"
               style={{
-                transform: `scale(${zoomPercent / 100})`,
-                transformOrigin: zoomPercent > 100 ? 'top center' : 'center center',
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoomPercent / 100})`,
+                transformOrigin: 'center center',
+                willChange: 'transform',
               }}
             >
               <div
