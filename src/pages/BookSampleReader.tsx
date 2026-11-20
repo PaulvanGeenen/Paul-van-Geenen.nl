@@ -88,9 +88,9 @@ function paginateEpubSections(
 
   const padX = pageW < 360 ? 22 : 34;
   const padTop = pageW < 360 ? 26 : 36;
-  const padBottom = pageW < 360 ? 34 : 42; // leave room for subtle page number
+  const padBottom = pageW < 360 ? 36 : 44; // leave room for subtle page number
   const innerW = Math.max(120, pageW - padX * 2);
-  const maxContentH = Math.max(140, pageH - padTop - padBottom);
+  const maxContentH = Math.max(140, pageH - padTop - padBottom - 8);
 
   // Offscreen measuring box with identical typography — MUST have height: auto (not 100%)!
   const measure = document.createElement('div');
@@ -398,8 +398,56 @@ export function BookSampleReader() {
   const userExitedFullscreenRef = useRef<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const bookHostRef = useRef<HTMLDivElement | null>(null);
   const pageFlipRef = useRef<PageFlip | null>(null);
+
+  // Trigger a fresh measurement once <style> is mounted in DOM and once web fonts finish loading
+  const [measureTick, setMeasureTick] = useState<number>(0);
+  const [stageSize, setStageSize] = useState<{ w: number; h: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const raf = requestAnimationFrame(() => {
+      if (!cancelled) setMeasureTick((t) => t + 1);
+    });
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      document.fonts.ready.then(() => {
+        if (!cancelled) setMeasureTick((t) => t + 1);
+      });
+    }
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // Measure the actual rendered stage container (handles mobile browser bars accurately on first load!)
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let timer: number | null = null;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 100 && rect.height > 100) {
+        setStageSize((prev) =>
+          prev && Math.abs(prev.w - rect.width) < 3 && Math.abs(prev.h - rect.height) < 3
+            ? prev
+            : { w: Math.floor(rect.width), h: Math.floor(rect.height) }
+        );
+      }
+    };
+    update();
+    const ro = new ResizeObserver(() => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(update, 80);
+    });
+    ro.observe(el);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      ro.disconnect();
+    };
+  }, []);
 
   const shareSlug = book?.slug ?? 'de-geboorte-van-de-leeuw';
   const shareUrl = `https://paulvangeenen.nl/inkijkexemplaar/${shareSlug}`;
@@ -426,11 +474,15 @@ export function BookSampleReader() {
 
   const isPortraitViewport = viewport.h > viewport.w;
 
-  // Compute exact single-page dimensions that fit 100% cleanly on screen
+  // Compute exact single-page dimensions from the REAL measured stage box so portrait never overflows on first load
   const { pageW, pageH } = useMemo(() => {
     const isSmall = viewport.w < 640;
-    const availW = Math.max(260, viewport.w - (isSmall ? 20 : 120));
-    const availH = Math.max(360, viewport.h - (isSmall ? 128 : 180));
+    const availW = stageSize
+      ? Math.max(240, stageSize.w - (isSmall ? 12 : 84))
+      : Math.max(240, viewport.w - (isSmall ? 24 : 120));
+    const availH = stageSize
+      ? Math.max(320, stageSize.h - (isSmall ? 12 : 28))
+      : Math.max(320, viewport.h - (isSmall ? 150 : 185));
     const aspect = 0.68;
 
     if (isPortraitViewport) {
@@ -447,20 +499,22 @@ export function BookSampleReader() {
       const w = Math.floor(h * aspect);
       return { pageW: w, pageH: h };
     }
-  }, [viewport.w, viewport.h, isPortraitViewport]);
+  }, [viewport.w, viewport.h, isPortraitViewport, stageSize]);
 
-  // Reflow EPUB sections into exact pages whenever fontSize, fontFamily, or page dimensions change
-  const { pages, sectionStartPages } = useMemo(
-    () =>
-      paginateEpubSections(
-        sections,
-        pageW,
-        pageH,
-        fontSize,
-        FONT_FAMILIES[fontFamily].css
-      ),
-    [sections, pageW, pageH, fontSize, fontFamily]
-  );
+  // Reflow EPUB sections into exact pages whenever styles/fonts, fontSize, fontFamily, or page dimensions change
+  const { pages, sectionStartPages } = useMemo(() => {
+    // Wait until <style> is mounted (measureTick > 0) so paragraph margins & dropcaps are measured accurately
+    if (measureTick === 0) {
+      return { pages: [] as PaginatedPage[], sectionStartPages: {} as Record<number, number> };
+    }
+    return paginateEpubSections(
+      sections,
+      pageW,
+      pageH,
+      fontSize,
+      FONT_FAMILIES[fontFamily].css
+    );
+  }, [sections, pageW, pageH, fontSize, fontFamily, measureTick]);
 
   const totalPages = Math.max(1, pages.length);
 
@@ -537,7 +591,7 @@ export function BookSampleReader() {
 
     const padX = pageW < 360 ? 22 : 34;
     const padTop = pageW < 360 ? 26 : 36;
-    const padBottom = pageW < 360 ? 34 : 42;
+    const padBottom = pageW < 360 ? 36 : 44;
 
     const pageNodes: HTMLElement[] = [];
     for (const pg of pages) {
@@ -1365,7 +1419,10 @@ export function BookSampleReader() {
           )}
 
           {/* Main Book Stage */}
-          <div className="relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-5 md:p-6">
+          <div
+            ref={stageRef}
+            className="relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-5 md:p-6"
+          >
             {/* Left / Right page-curl arrows */}
             <button
               type="button"
