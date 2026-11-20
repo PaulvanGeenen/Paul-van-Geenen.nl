@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef, type TouchEvent } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { PageFlip } from 'page-flip';
 import {
   ChevronLeft,
   ChevronRight,
@@ -22,7 +23,6 @@ type ReaderTheme = 'day' | 'sepia' | 'night';
 
 interface ChapterEntry {
   title: string;
-  subtitle?: string;
   page: number;
 }
 
@@ -46,19 +46,13 @@ export function BookSampleReader() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
-  const book = BOOKS.find((b) => b.slug === slug) ?? BOOKS.find((b) => b.slug === 'de-geboorte-van-de-leeuw');
+  const book =
+    BOOKS.find((b) => b.slug === slug) ??
+    BOOKS.find((b) => b.slug === 'de-geboorte-van-de-leeuw');
 
-  // Spread / single-page state.
-  // In 2-page spread mode: page 1 is cover (shown alone on right/center),
-  // then spreads are [2,3], [4,5], ..., [36,37] so odd pages are always on the right!
-  const [isSpread, setIsSpread] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerWidth >= 900 : true
-  );
+  // 1-based current page number for UI display
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [flipDirection, setFlipDirection] = useState<'next' | 'prev' | null>(null);
-  const [isFlipping, setIsFlipping] = useState<boolean>(false);
-  const [flipActive, setFlipActive] = useState<boolean>(false);
-  const [flipSnapshot, setFlipSnapshot] = useState<{ front: number; back: number } | null>(null);
+  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
 
   // Reader GUI controls
   const [zoomPercent, setZoomPercent] = useState<number>(100);
@@ -68,25 +62,8 @@ export function BookSampleReader() {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
-  const flipTimerRef = useRef<number | null>(null);
-
-  // Update spread mode on resize
-  useEffect(() => {
-    const handleResize = () => {
-      setIsSpread(window.innerWidth >= 900);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Normalize currentPage when switching to spread mode so left page is even (or 1 for cover)
-  useEffect(() => {
-    if (isSpread && currentPage > 1 && currentPage % 2 === 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  }, [isSpread, currentPage]);
+  const bookHostRef = useRef<HTMLDivElement | null>(null);
+  const pageFlipRef = useRef<PageFlip | null>(null);
 
   // Block Ctrl+S / Ctrl+P / Cmd+S / Cmd+P to protect sample pages
   useEffect(() => {
@@ -99,123 +76,136 @@ export function BookSampleReader() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Preload adjacent pages for instant smooth page turns
+  // Initialize StPageFlip (authentic iPad curved page-curl & drag-to-flip engine)
   useEffect(() => {
-    const pagesToPreload = [
-      currentPage - 2,
-      currentPage - 1,
-      currentPage + 1,
-      currentPage + 2,
-      currentPage + 3,
-      currentPage + 4,
-    ].filter((p) => p >= 1 && p <= TOTAL_PAGES);
+    const host = bookHostRef.current;
+    if (!host) return;
 
-    pagesToPreload.forEach((p) => {
-      const img = new Image();
+    host.innerHTML = '';
+    const bookEl = document.createElement('div');
+    bookEl.className = 'inkijk-flipbook';
+
+    const pageNodes: HTMLElement[] = [];
+    for (let p = 1; p <= TOTAL_PAGES; p++) {
+      const pageDiv = document.createElement('div');
+      pageDiv.className = 'inkijk-page';
+      pageDiv.dataset.page = String(p);
+      pageDiv.dataset.illustration = ILLUSTRATION_PAGES.has(p) ? '1' : '0';
+      if (p === 1) {
+        pageDiv.dataset.density = 'hard';
+      }
+
+      const img = document.createElement('img');
       img.src = getPageSrc(p);
-    });
-  }, [currentPage]);
+      img.alt = `Pagina ${p}`;
+      img.draggable = false;
+      img.loading = p <= 6 ? 'eager' : 'lazy';
+      img.className = 'inkijk-page-img';
 
-  // Cleanup timer
-  useEffect(() => {
+      const shield = document.createElement('div');
+      shield.className = 'inkijk-page-shield';
+
+      pageDiv.appendChild(img);
+      pageDiv.appendChild(shield);
+      bookEl.appendChild(pageDiv);
+      pageNodes.push(pageDiv);
+    }
+
+    host.appendChild(bookEl);
+
+    const isMobile = window.innerWidth < 768;
+    const pageFlip = new PageFlip(bookEl, {
+      width: 440,
+      height: 656,
+      size: 'stretch',
+      minWidth: isMobile ? 260 : 300,
+      maxWidth: 520,
+      minHeight: isMobile ? 385 : 445,
+      maxHeight: 775,
+      drawShadow: true,
+      maxShadowOpacity: 0.48,
+      flippingTime: 780,
+      usePortrait: true,
+      showCover: true,
+      autoSize: true,
+      showPageCorners: true,
+      useMouseEvents: true,
+      mobileScrollSupport: false,
+      swipeDistance: 30,
+      startPage: 0,
+    });
+
+    pageFlip.loadFromHTML(pageNodes);
+
+    pageFlip.on('init', (e) => {
+      if (e.data?.mode) setOrientation(e.data.mode);
+      if (typeof e.data?.page === 'number') setCurrentPage(e.data.page + 1);
+    });
+
+    pageFlip.on('flip', (e) => {
+      if (typeof e.data === 'number') {
+        setCurrentPage(e.data + 1);
+      }
+    });
+
+    pageFlip.on('changeOrientation', (e) => {
+      if (e.data === 'landscape' || e.data === 'portrait') {
+        setOrientation(e.data);
+      }
+    });
+
+    pageFlipRef.current = pageFlip;
+
+    const handleResize = () => {
+      try {
+        pageFlip.update();
+      } catch {
+        // Ignore resize race during unmount
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
-      if (flipTimerRef.current) window.clearTimeout(flipTimerRef.current);
+      window.removeEventListener('resize', handleResize);
+      pageFlipRef.current = null;
+      try {
+        pageFlip.destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+      if (host) host.innerHTML = '';
     };
   }, []);
 
-  // Compute left & right pages in spread mode
-  const leftPage: number | null = isSpread
-    ? currentPage === 1
-      ? null
-      : currentPage % 2 === 0
-      ? currentPage
-      : currentPage - 1
-    : null;
-
-  const rightPage: number | null = isSpread
-    ? currentPage === 1
-      ? 1
-      : leftPage !== null && leftPage + 1 <= TOTAL_PAGES
-      ? leftPage + 1
-      : null
-    : currentPage;
-
   const canGoPrev = currentPage > 1;
-  const canGoNext = isSpread
-    ? currentPage === 1 || (leftPage !== null && leftPage + 2 <= TOTAL_PAGES)
-    : currentPage < TOTAL_PAGES;
-
-  const triggerFlip = useCallback(
-    (targetPage: number, direction: 'next' | 'prev') => {
-      if (isFlipping) return;
-      const clamped = Math.max(1, Math.min(TOTAL_PAGES, targetPage));
-      const normalized =
-        isSpread && clamped > 1 && clamped % 2 === 1 ? clamped - 1 : clamped;
-
-      if (normalized === currentPage) return;
-
-      if (isSpread) {
-        if (direction === 'next') {
-          const curRight = currentPage === 1 ? 1 : currentPage + 1;
-          const nextLeft = normalized;
-          setFlipSnapshot({ front: curRight, back: nextLeft });
-        } else {
-          const curLeft = currentPage;
-          const prevRight = normalized === 1 ? 1 : normalized + 1;
-          setFlipSnapshot({ front: prevRight, back: curLeft });
-        }
-      } else {
-        setFlipSnapshot({ front: currentPage, back: normalized });
-      }
-
-      setFlipDirection(direction);
-      setFlipActive(false);
-      setIsFlipping(true);
-
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setFlipActive(true);
-        });
-      });
-
-      if (flipTimerRef.current) window.clearTimeout(flipTimerRef.current);
-      flipTimerRef.current = window.setTimeout(() => {
-        setCurrentPage(normalized);
-        setIsFlipping(false);
-        setFlipActive(false);
-        setFlipDirection(null);
-        setFlipSnapshot(null);
-      }, 480);
-    },
-    [currentPage, isFlipping, isSpread]
-  );
+  const canGoNext =
+    orientation === 'landscape'
+      ? currentPage === 1 || currentPage + 1 < TOTAL_PAGES
+      : currentPage < TOTAL_PAGES;
 
   const goNext = useCallback(() => {
     if (!canGoNext) return;
-    if (isSpread) {
-      const next = currentPage === 1 ? 2 : currentPage + 2;
-      triggerFlip(next, 'next');
-    } else {
-      triggerFlip(currentPage + 1, 'next');
-    }
-  }, [canGoNext, currentPage, isSpread, triggerFlip]);
+    pageFlipRef.current?.flipNext('bottom');
+  }, [canGoNext]);
 
   const goPrev = useCallback(() => {
     if (!canGoPrev) return;
-    if (isSpread) {
-      const prev = currentPage <= 2 ? 1 : currentPage - 2;
-      triggerFlip(prev, 'prev');
-    } else {
-      triggerFlip(currentPage - 1, 'prev');
-    }
-  }, [canGoPrev, currentPage, isSpread, triggerFlip]);
+    pageFlipRef.current?.flipPrev('bottom');
+  }, [canGoPrev]);
 
-  const jumpToPage = (page: number) => {
+  const jumpToPage = useCallback((page: number) => {
     setShowToc(false);
-    const normalized = isSpread && page > 1 && page % 2 === 1 ? page - 1 : page;
-    if (normalized === currentPage) return;
-    triggerFlip(normalized, normalized > currentPage ? 'next' : 'prev');
-  };
+    const idx = Math.max(0, Math.min(TOTAL_PAGES - 1, page - 1));
+    const pf = pageFlipRef.current;
+    if (!pf) return;
+    const curIdx = pf.getCurrentPageIndex();
+    if (Math.abs(idx - curIdx) <= 2) {
+      pf.flip(idx, 'bottom');
+    } else {
+      pf.turnToPage(idx);
+      setCurrentPage(idx + 1);
+    }
+  }, []);
 
   // Keyboard navigation
   useEffect(() => {
@@ -239,6 +229,13 @@ export function BookSampleReader() {
   useEffect(() => {
     const onFsChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
+      setTimeout(() => {
+        try {
+          pageFlipRef.current?.update();
+        } catch {
+          // ignore
+        }
+      }, 120);
     };
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
@@ -256,33 +253,13 @@ export function BookSampleReader() {
     }
   };
 
-  // Touch swipe handlers (active when zoom === 100 so zoomed pan doesn't accidentally turn pages)
-  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
-    if (zoomPercent > 100) return;
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
-    if (zoomPercent > 100 || touchStartX.current === null || touchStartY.current === null) return;
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    const dy = e.changedTouches[0].clientY - touchStartY.current;
-    touchStartX.current = null;
-    touchStartY.current = null;
-
-    if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.4) {
-      if (dx < 0) goNext();
-      else goPrev();
-    }
-  };
-
-  // Theme styling for pages & iPad screen
+  // Theme classes
   const screenBgClass =
     theme === 'night'
-      ? 'bg-[#141416] text-stone-200'
+      ? 'bg-[#141416] text-stone-200 reader-theme-night'
       : theme === 'sepia'
-      ? 'bg-[#efe6d5] text-stone-900'
-      : 'bg-[#f4f1ea] text-stone-900';
+      ? 'bg-[#efe6d5] text-stone-900 reader-theme-sepia'
+      : 'bg-[#f4f1ea] text-stone-900 reader-theme-day';
 
   const toolbarClass =
     theme === 'night'
@@ -291,30 +268,22 @@ export function BookSampleReader() {
       ? 'bg-[#e7dcc7]/90 border-stone-400/25 text-stone-800'
       : 'bg-white/85 border-stone-300/60 text-stone-800';
 
-  const pageSurfaceClass = theme === 'night' ? 'bg-[#141416]' : 'bg-white';
-
-  const getPageFilterStyle = (page: number | null) => {
-    const isIllustration = page !== null && ILLUSTRATION_PAGES.has(page);
-    if (theme === 'night') {
-      return isIllustration
-        ? { filter: 'brightness(0.84) contrast(1.04)' }
-        : { filter: 'invert(0.92) hue-rotate(180deg) contrast(0.94) brightness(0.92)' };
-    }
-    if (theme === 'sepia') {
-      return isIllustration
-        ? { filter: 'sepia(0.08) brightness(0.96)' }
-        : { filter: 'sepia(0.28) brightness(0.97) contrast(0.98)' };
-    }
-    return undefined;
-  };
+  const isSpread = orientation === 'landscape';
+  const leftPage = isSpread && currentPage > 1 ? currentPage : null;
+  const rightPage =
+    isSpread && currentPage > 1
+      ? Math.min(TOTAL_PAGES, currentPage + 1)
+      : currentPage;
 
   const pageLabel = isSpread
-    ? leftPage && rightPage
+    ? currentPage === 1
+      ? `Omslag • Pagina 1 van ${TOTAL_PAGES}`
+      : leftPage !== null && rightPage !== leftPage
       ? `Pagina ${leftPage}–${rightPage} van ${TOTAL_PAGES}`
-      : `Omslag • Pagina ${rightPage ?? leftPage} van ${TOTAL_PAGES}`
+      : `Pagina ${currentPage} van ${TOTAL_PAGES}`
     : `Pagina ${currentPage} van ${TOTAL_PAGES}`;
 
-  const isAtSampleEnd = isSpread ? (rightPage ?? 0) >= TOTAL_PAGES : currentPage >= TOTAL_PAGES;
+  const isAtSampleEnd = isSpread ? rightPage >= TOTAL_PAGES : currentPage >= TOTAL_PAGES;
 
   return (
     <div
@@ -322,22 +291,89 @@ export function BookSampleReader() {
       onContextMenu={(e) => e.preventDefault()}
       className="min-h-screen w-full bg-gradient-to-br from-[#161311] via-[#1f1a17] to-[#0f0d0c] flex flex-col items-center justify-center p-0 sm:p-4 md:p-6 select-none overflow-hidden"
     >
-      {/* Hide content if user tries to print */}
+      {/* Anti-print + PageFlip styling + Theme filters */}
       <style>{`
         @media print { body { display: none !important; } }
-        .book-perspective { perspective: 2400px; }
-        .book-leaf {
-          transform-style: preserve-3d;
-          transition: transform 480ms cubic-bezier(0.45, 0.05, 0.25, 1);
+
+        .inkijk-flipbook-stage {
+          width: 100%;
+          max-width: 960px;
+          height: min(72vh, 690px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
-        .book-leaf-face {
-          backface-visibility: hidden;
-          -webkit-backface-visibility: hidden;
+
+        .inkijk-page {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          background: #ffffff;
+          overflow: hidden;
+          box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.04);
         }
-        .book-leaf-back {
-          backface-visibility: hidden;
-          -webkit-backface-visibility: hidden;
-          transform: rotateY(180deg);
+
+        .inkijk-page-img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          pointer-events: none;
+          user-select: none;
+          -webkit-user-drag: none;
+          display: block;
+        }
+
+        .inkijk-page-shield {
+          position: absolute;
+          inset: 0;
+          z-index: 5;
+        }
+
+        /* Subtle spine crease inside open pages */
+        .inkijk-page.--left::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          width: 28px;
+          background: linear-gradient(to left, rgba(0,0,0,0.16), rgba(0,0,0,0.04) 45%, transparent);
+          pointer-events: none;
+          z-index: 6;
+        }
+
+        .inkijk-page.--right::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          bottom: 0;
+          width: 28px;
+          background: linear-gradient(to right, rgba(0,0,0,0.14), rgba(0,0,0,0.04) 45%, transparent);
+          pointer-events: none;
+          z-index: 6;
+        }
+
+        /* Night mode: invert text pages cleanly, keep illustrations natural & dimmed */
+        .reader-theme-night .inkijk-page {
+          background: #141416;
+        }
+        .reader-theme-night .inkijk-page[data-illustration="0"] .inkijk-page-img {
+          filter: invert(0.92) hue-rotate(180deg) contrast(0.94) brightness(0.92);
+        }
+        .reader-theme-night .inkijk-page[data-illustration="1"] .inkijk-page-img {
+          filter: brightness(0.84) contrast(1.04);
+        }
+
+        /* Sepia mode: warm paper tint for text, gentle warmth for illustrations */
+        .reader-theme-sepia .inkijk-page {
+          background: #f5ecdc;
+        }
+        .reader-theme-sepia .inkijk-page[data-illustration="0"] .inkijk-page-img {
+          filter: sepia(0.28) brightness(0.97) contrast(0.98);
+        }
+        .reader-theme-sepia .inkijk-page[data-illustration="1"] .inkijk-page-img {
+          filter: sepia(0.08) brightness(0.96);
         }
       `}</style>
 
@@ -398,7 +434,6 @@ export function BookSampleReader() {
 
             {/* Right controls: AA (Font/Zoom + Theme) & Fullscreen */}
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {/* Quick A- / A+ inline buttons on desktop, plus AA popover */}
               <div className="hidden md:flex items-center gap-0.5 rounded-lg border border-current/15 px-1 py-0.5">
                 <button
                   type="button"
@@ -471,7 +506,6 @@ export function BookSampleReader() {
                 </button>
               </div>
 
-              {/* Font size / zoom */}
               <div className="mb-4">
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="opacity-75">Lettergrootte</span>
@@ -518,7 +552,6 @@ export function BookSampleReader() {
                 />
               </div>
 
-              {/* Paper theme */}
               <div>
                 <span className="block text-xs opacity-75 mb-2">Leesmodus</span>
                 <div className="grid grid-cols-3 gap-2">
@@ -602,22 +635,18 @@ export function BookSampleReader() {
                 })}
               </nav>
               <div className="p-4 border-t border-current/10 text-[11px] opacity-65 leading-relaxed">
-                Dit inkijkexemplaar bevat het voorwerk, de proloog en de eerste drie hoofdstukken (tot Warm Porselein).
+                Sleep met je vinger of muis aan een hoek van de pagina, of klik op de pijlen om de pagina echt om te slaan.
               </div>
             </div>
           )}
 
           {/* Main Book Stage */}
-          <div
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-            className="relative flex-1 flex items-center justify-center overflow-auto p-3 sm:p-6 md:p-8"
-          >
-            {/* Left / Right tap-or-click page-turn arrows */}
+          <div className="relative flex-1 flex items-center justify-center overflow-auto p-2 sm:p-5 md:p-6">
+            {/* Left / Right page-curl buttons */}
             <button
               type="button"
               onClick={goPrev}
-              disabled={!canGoPrev || isFlipping}
+              disabled={!canGoPrev}
               aria-label="Vorige pagina"
               className="hidden sm:flex absolute left-3 md:left-5 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full items-center justify-center bg-black/10 hover:bg-black/20 backdrop-blur-sm transition-all disabled:opacity-0 disabled:pointer-events-none"
             >
@@ -627,194 +656,25 @@ export function BookSampleReader() {
             <button
               type="button"
               onClick={goNext}
-              disabled={!canGoNext || isFlipping}
+              disabled={!canGoNext}
               aria-label="Volgende pagina"
               className="hidden sm:flex absolute right-3 md:right-5 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full items-center justify-center bg-black/10 hover:bg-black/20 backdrop-blur-sm transition-all disabled:opacity-0 disabled:pointer-events-none"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
 
-            {/* Zoomable Book Wrapper */}
+            {/* Zoomable FlipBook Host */}
             <div
-              className="book-perspective relative flex items-center justify-center transition-transform duration-200 origin-center"
+              className="inkijk-flipbook-stage transition-transform duration-200"
               style={{
                 transform: `scale(${zoomPercent / 100})`,
                 transformOrigin: zoomPercent > 100 ? 'top center' : 'center center',
               }}
             >
-              {isSpread ? (
-                /* TWO-PAGE OPEN BOOK SPREAD */
-                <div
-                  className={`relative flex items-stretch shadow-[0_24px_60px_rgba(0,0,0,0.35)] rounded-sm overflow-hidden ${
-                    leftPage === null ? 'w-[340px] md:w-[410px] lg:w-[450px]' : 'w-[680px] md:w-[820px] lg:w-[900px]'
-                  } max-w-[92vw]`}
-                  style={{
-                    height: 'min(70vh, 660px)',
-                    width:
-                      leftPage === null
-                        ? 'calc(min(70vh, 660px) * 0.67)'
-                        : 'calc(min(70vh, 660px) * 1.34)',
-                  }}
-                >
-                  {/* Left Page (when past cover) */}
-                  {leftPage !== null && (
-                    <div
-                      onClick={zoomPercent === 100 ? goPrev : undefined}
-                      className={`relative w-1/2 h-full ${pageSurfaceClass} overflow-hidden cursor-pointer group`}
-                      title={canGoPrev ? 'Klik voor vorige pagina' : undefined}
-                    >
-                      <img
-                        src={getPageSrc(leftPage)}
-                        alt={`Pagina ${leftPage}`}
-                        draggable={false}
-                        style={getPageFilterStyle(leftPage)}
-                        className="w-full h-full object-contain pointer-events-none select-none"
-                      />
-                      {/* Realistic inner spine shadow */}
-                      <div className="absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-black/18 via-black/5 to-transparent pointer-events-none" />
-                      {/* Protective transparent shield against save/drag */}
-                      <div className="absolute inset-0 z-10" />
-                    </div>
-                  )}
-
-                  {/* Center Spine Crease */}
-                  {leftPage !== null && rightPage !== null && (
-                    <div className="w-[1px] bg-black/25 z-20 shrink-0" />
-                  )}
-
-                  {/* Right Page */}
-                  {rightPage !== null && (
-                    <div
-                      onClick={zoomPercent === 100 ? goNext : undefined}
-                      className={`relative ${
-                        leftPage === null ? 'w-full' : 'w-1/2'
-                      } h-full ${pageSurfaceClass} overflow-hidden cursor-pointer`}
-                      title={canGoNext ? 'Klik voor volgende pagina' : undefined}
-                    >
-                      <img
-                        src={getPageSrc(rightPage)}
-                        alt={`Pagina ${rightPage}`}
-                        draggable={false}
-                        style={getPageFilterStyle(rightPage)}
-                        className="w-full h-full object-contain pointer-events-none select-none"
-                      />
-                      {leftPage !== null && (
-                        <div className="absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-black/15 via-black/5 to-transparent pointer-events-none" />
-                      )}
-                      <div className="absolute inset-0 z-10" />
-                    </div>
-                  )}
-
-                  {/* 3D Animated Turning Leaf Overlay */}
-                  {isFlipping && flipSnapshot && leftPage !== null && (
-                    <div
-                      className="book-leaf absolute top-0 right-0 w-1/2 h-full z-30 pointer-events-none"
-                      style={{
-                        transformOrigin: 'left center',
-                        transform:
-                          flipDirection === 'next'
-                            ? flipActive
-                              ? 'rotateY(-180deg)'
-                              : 'rotateY(0deg)'
-                            : flipActive
-                            ? 'rotateY(0deg)'
-                            : 'rotateY(-180deg)',
-                      }}
-                    >
-                      {/* Front of turning leaf */}
-                      <div className={`book-leaf-face absolute inset-0 ${pageSurfaceClass} overflow-hidden shadow-xl`}>
-                        <img
-                          src={getPageSrc(flipSnapshot.front)}
-                          alt=""
-                          draggable={false}
-                          style={getPageFilterStyle(flipSnapshot.front)}
-                          className="w-full h-full object-contain"
-                        />
-                        <div className="absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-black/20 to-transparent" />
-                      </div>
-                      {/* Back of turning leaf */}
-                      <div className={`book-leaf-back absolute inset-0 ${pageSurfaceClass} overflow-hidden shadow-xl`}>
-                        <img
-                          src={getPageSrc(flipSnapshot.back)}
-                          alt=""
-                          draggable={false}
-                          style={getPageFilterStyle(flipSnapshot.back)}
-                          className="w-full h-full object-contain"
-                        />
-                        <div className="absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-black/20 to-transparent" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Cover flip animation (from centered cover to first spread) */}
-                  {isFlipping && flipSnapshot && leftPage === null && (
-                    <div
-                      className="book-leaf absolute inset-0 z-30 pointer-events-none"
-                      style={{
-                        transformOrigin: 'left center',
-                        transform:
-                          flipDirection === 'next' && flipActive ? 'rotateY(-110deg)' : 'rotateY(0deg)',
-                        opacity: flipDirection === 'next' && flipActive ? 0.25 : 1,
-                      }}
-                    >
-                      <div className={`book-leaf-face absolute inset-0 ${pageSurfaceClass} overflow-hidden shadow-2xl`}>
-                        <img
-                          src={getPageSrc(flipSnapshot.front)}
-                          alt=""
-                          draggable={false}
-                          style={getPageFilterStyle(flipSnapshot.front)}
-                          className="w-full h-full object-contain"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* SINGLE-PAGE MOBILE / PORTRAIT VIEW */
-                <div
-                  className={`relative ${pageSurfaceClass} shadow-[0_20px_50px_rgba(0,0,0,0.35)] rounded-sm overflow-hidden`}
-                  style={{
-                    height: 'min(72vh, 640px)',
-                    width: 'calc(min(72vh, 640px) * 0.67)',
-                    maxWidth: '92vw',
-                  }}
-                >
-                  <div
-                    className={`w-full h-full transition-all duration-300 ${
-                      isFlipping
-                        ? flipDirection === 'next'
-                          ? '-translate-x-4 opacity-40 scale-[0.98]'
-                          : 'translate-x-4 opacity-40 scale-[0.98]'
-                        : 'translate-x-0 opacity-100 scale-100'
-                    }`}
-                  >
-                    <img
-                      src={getPageSrc(currentPage)}
-                      alt={`Pagina ${currentPage}`}
-                      draggable={false}
-                      style={getPageFilterStyle(currentPage)}
-                      className="w-full h-full object-contain pointer-events-none select-none"
-                    />
-                  </div>
-                  {/* Tap left / right zones on mobile */}
-                  {zoomPercent === 100 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={goPrev}
-                        aria-label="Vorige pagina"
-                        className="absolute inset-y-0 left-0 w-1/3 z-10 cursor-pointer"
-                      />
-                      <button
-                        type="button"
-                        onClick={goNext}
-                        aria-label="Volgende pagina"
-                        className="absolute inset-y-0 right-0 w-1/3 z-10 cursor-pointer"
-                      />
-                    </>
-                  )}
-                </div>
-              )}
+              <div
+                ref={bookHostRef}
+                className="w-full h-full flex items-center justify-center drop-shadow-[0_24px_50px_rgba(0,0,0,0.32)]"
+              />
             </div>
           </div>
 
@@ -840,7 +700,7 @@ export function BookSampleReader() {
             <button
               type="button"
               onClick={goPrev}
-              disabled={!canGoPrev || isFlipping}
+              disabled={!canGoPrev}
               className="sm:hidden p-1.5 rounded-lg disabled:opacity-30"
               aria-label="Vorige pagina"
             >
@@ -868,7 +728,7 @@ export function BookSampleReader() {
             <button
               type="button"
               onClick={goNext}
-              disabled={!canGoNext || isFlipping}
+              disabled={!canGoNext}
               className="sm:hidden p-1.5 rounded-lg disabled:opacity-30"
               aria-label="Volgende pagina"
             >
