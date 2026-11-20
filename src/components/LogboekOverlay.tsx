@@ -299,6 +299,20 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
           animation: pageFlipPrev 0.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) forwards;
           backface-visibility: hidden;
         }
+        .logboek-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .logboek-scrollbar::-webkit-scrollbar-track {
+          background: rgba(124, 34, 24, 0.06);
+          border-radius: 9999px;
+        }
+        .logboek-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(124, 34, 24, 0.35);
+          border-radius: 9999px;
+        }
+        .logboek-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(124, 34, 24, 0.55);
+        }
       `}</style>
 
       {/* Het open rode leren logboek */}
@@ -324,7 +338,7 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
 
           {/* Boekblok */}
           <div className="logboek-perspective relative rounded-lg overflow-hidden shadow-[inset_0_0_25px_rgba(60,35,15,0.22)]">
-            <div className="logboek-paper relative min-h-[460px] sm:min-h-[540px] max-h-[78vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2">
+            <div className="logboek-paper relative min-h-[460px] sm:min-h-[540px] md:h-[540px] max-h-[78vh] overflow-y-auto md:overflow-hidden grid grid-cols-1 md:grid-cols-2">
               {/* Middenrug schaduw (desktop) */}
               <div className="hidden md:block pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-10 bg-gradient-to-r from-black/15 via-black/25 to-transparent z-10" />
 
@@ -370,7 +384,7 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
               ) : (
                 <>
                   {/* LINKERPAGINA: Polaroid met slordig plakbandje */}
-                  <div className="relative p-6 sm:p-9 md:p-10 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-amber-950/15">
+                  <div className="relative p-6 sm:p-9 md:p-10 md:h-full flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-amber-950/15">
                     {/* Paginanummer linksboven */}
                     <span
                       style={{ fontFamily: "'Patrick Hand', cursive" }}
@@ -482,9 +496,9 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
                   </div>
 
                   {/* RECHTERPAGINA: Speelse datum + zwarte pen notitie */}
-                  <div className="relative p-6 sm:p-9 md:p-10 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-baseline justify-between gap-3 mb-5">
+                  <div className="relative p-6 sm:p-9 md:p-10 md:h-full md:overflow-hidden flex flex-col justify-between">
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      <div className="flex items-baseline justify-between gap-3 mb-5 shrink-0">
                         <time
                           dateTime={entry.datum}
                           style={{ fontFamily: "'Patrick Hand', cursive" }}
@@ -534,9 +548,10 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
                       </div>
 
                       <div
+                        key={`tekst-${entry.id}`}
                         style={{ fontFamily: "'Caveat', cursive" }}
                         className={cn(
-                          'text-[22px] sm:text-[26px] leading-[1.45] text-[#171412] whitespace-pre-wrap break-words',
+                          'flex-1 min-h-0 md:overflow-y-auto md:pr-2 logboek-scrollbar text-[22px] sm:text-[26px] leading-[1.45] text-[#171412] whitespace-pre-wrap break-words',
                           tiltClasses[vIdx]
                         )}
                       >
@@ -545,7 +560,7 @@ export function LogboekOverlay({ isOpen, initialIndex = 0, initialEntryId = null
                     </div>
 
                     {/* Navigatie onderaan rechterpagina */}
-                    <div className="pt-8 mt-6 border-t border-amber-950/10 flex items-center justify-between gap-3">
+                    <div className="pt-5 mt-4 shrink-0 border-t border-amber-950/10 flex items-center justify-between gap-3">
                       <button
                         type="button"
                         disabled={!hasPrev || isFlipping}
