@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { PageFlip } from 'page-flip';
 import {
@@ -12,48 +12,296 @@ import {
   Sun,
   Coffee,
   Moon,
-  ZoomIn,
-  ZoomOut,
   RotateCcw,
   BookOpen,
   Share2,
   Copy,
   Check,
   MessageCircle,
+  Type,
 } from 'lucide-react';
 import { BOOKS } from '../data/books';
+import inkijkEpubData from '../data/inkijk-de-geboorte-van-de-leeuw.json';
 import { isOwnAnalyticsIgnored, getUserGeoLocation } from '../lib/analytics';
 import { transipPost } from '../lib/transip';
 
 type ReaderTheme = 'day' | 'sepia' | 'night';
+type ReaderFont = 'serif' | 'garamond' | 'sans';
 
-interface ChapterEntry {
+interface EpubSection {
+  id: string;
+  index: number;
   title: string;
+  tocLabel: string | null;
+  type: string;
+  html: string;
+}
+
+interface PaginatedPage {
+  pageNumber: number;
+  sectionIndex: number;
+  sectionTitle: string;
+  kind: 'cover' | 'fpi' | 'centered' | 'text';
+  html: string;
+}
+
+interface TocEntry {
+  title: string;
+  sectionIndex: number;
   page: number;
 }
 
-// Skip blank page 2 (empty verso after cover) so it is never shown forward or backward
-const SAMPLE_PAGES: number[] = [1, ...Array.from({ length: 35 }, (_, i) => i + 3)];
-const TOTAL_PAGES = SAMPLE_PAGES.length;
-const ILLUSTRATION_PDF_PAGES = new Set([1, 10, 22, 27, 32, 37]);
-
-const pdfPageToReaderPage = (pdfPage: number): number => {
-  const idx = SAMPLE_PAGES.indexOf(pdfPage);
-  return idx >= 0 ? idx + 1 : 1;
+const FONT_FAMILIES: Record<ReaderFont, { label: string; css: string }> = {
+  serif: {
+    label: 'Boek Serif',
+    css: "Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
+  },
+  garamond: {
+    label: 'Klassiek',
+    css: "'Cormorant Garamond', 'Garamond', 'Times New Roman', serif",
+  },
+  sans: {
+    label: 'Helder Sans',
+    css: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  },
 };
 
-const SAMPLE_CHAPTERS: ChapterEntry[] = [
-  { title: 'Omslag', page: pdfPageToReaderPage(1) },
-  { title: 'Inhoudsopgave', page: pdfPageToReaderPage(5) },
-  { title: 'Noot van de auteur', page: pdfPageToReaderPage(7) },
-  { title: 'Proloog', page: pdfPageToReaderPage(11) },
-  { title: '1. Koude vingers', page: pdfPageToReaderPage(13) },
-  { title: '2. As en As', page: pdfPageToReaderPage(23) },
-  { title: '3. Veilige Toetsen', page: pdfPageToReaderPage(28) },
-];
+const COVER_IMAGE_URL = '/inkijk/de-geboorte-van-de-leeuw/page-01.jpg';
 
-const getPageSrc = (pdfPage: number): string =>
-  `/inkijk/de-geboorte-van-de-leeuw/page-${String(pdfPage).padStart(2, '0')}.jpg`;
+/**
+ * Splits EPUB HTML sections into exact, reflowable book pages matching (pageW x pageH)
+ * at the currently chosen fontSize and fontFamily.
+ */
+function paginateEpubSections(
+  sections: EpubSection[],
+  pageW: number,
+  pageH: number,
+  fontSize: number,
+  fontFamilyCss: string
+): { pages: PaginatedPage[]; sectionStartPages: Record<number, number> } {
+  const pages: PaginatedPage[] = [];
+  const sectionStartPages: Record<number, number> = {};
+
+  if (typeof document === 'undefined' || pageW < 120 || pageH < 180) {
+    return { pages, sectionStartPages };
+  }
+
+  const padX = pageW < 360 ? 22 : 34;
+  const padTop = pageW < 360 ? 26 : 36;
+  const padBottom = pageW < 360 ? 34 : 42; // leave room for subtle page number
+  const innerW = Math.max(120, pageW - padX * 2);
+  const maxContentH = Math.max(140, pageH - padTop - padBottom);
+
+  // Offscreen measuring box with identical typography
+  const measure = document.createElement('div');
+  measure.className = 'epub-page-content epub-measure-box';
+  measure.style.position = 'fixed';
+  measure.style.left = '-99999px';
+  measure.style.top = '0';
+  measure.style.visibility = 'hidden';
+  measure.style.pointerEvents = 'none';
+  measure.style.width = `${innerW}px`;
+  measure.style.fontSize = `${fontSize}px`;
+  measure.style.fontFamily = fontFamilyCss;
+  measure.style.lineHeight = '1.62';
+  measure.style.boxSizing = 'border-box';
+  document.body.appendChild(measure);
+
+  const pushPage = (
+    sec: EpubSection,
+    kind: PaginatedPage['kind'],
+    htmlContent: string
+  ) => {
+    const pageNumber = pages.length + 1;
+    if (sectionStartPages[sec.index] === undefined) {
+      sectionStartPages[sec.index] = pageNumber;
+    }
+    pages.push({
+      pageNumber,
+      sectionIndex: sec.index,
+      sectionTitle: sec.tocLabel || sec.title,
+      kind,
+      html: htmlContent,
+    });
+  };
+
+  // Extract flat flow of semantic blocks from Atticus HTML
+  const extractBlocks = (htmlStr: string): HTMLElement[] => {
+    const temp = document.createElement('div');
+    temp.innerHTML = htmlStr;
+    const blocks: HTMLElement[] = [];
+
+    const walk = (el: HTMLElement) => {
+      const cls = el.className || '';
+      const tag = el.tagName.toLowerCase();
+
+      if (
+        cls.includes('chapter-title-card') ||
+        cls.includes('image') ||
+        tag === 'p' ||
+        tag === 'h1' ||
+        tag === 'h2' ||
+        tag === 'h3' ||
+        tag === 'blockquote' ||
+        tag === 'li'
+      ) {
+        // Skip completely empty paragraphs
+        if (tag === 'p' && !el.textContent?.trim() && !el.querySelector('img')) {
+          return;
+        }
+        blocks.push(el.cloneNode(true) as HTMLElement);
+        return;
+      }
+
+      if (el.children.length > 0) {
+        Array.from(el.children).forEach((child) => walk(child as HTMLElement));
+      } else if (el.textContent?.trim()) {
+        const p = document.createElement('p');
+        p.innerHTML = el.innerHTML;
+        blocks.push(p);
+      }
+    };
+
+    Array.from(temp.children).forEach((child) => walk(child as HTMLElement));
+    return blocks;
+  };
+
+  // Split an oversized plain/inline-formatted paragraph across pages cleanly on word boundaries
+  const splitOversizedParagraph = (
+    pEl: HTMLElement,
+    sec: EpubSection,
+    currentHtmlParts: string[]
+  ): string[] => {
+    const text = pEl.textContent || '';
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length <= 8) {
+      // Too short to split meaningfully; put on its own page
+      if (currentHtmlParts.length > 0) {
+        pushPage(sec, 'text', currentHtmlParts.join(''));
+        measure.innerHTML = '';
+      }
+      pushPage(sec, 'text', pEl.outerHTML);
+      return [];
+    }
+
+    let remainingWords = words;
+    let parts = [...currentHtmlParts];
+
+    while (remainingWords.length > 0) {
+      // Binary search how many words fit in the remaining space of measure
+      let low = 1;
+      let high = remainingWords.length;
+      let best = 0;
+
+      const baseHtml = parts.join('');
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const candidate = `<p>${remainingWords.slice(0, mid).join(' ')}</p>`;
+        measure.innerHTML = baseHtml + candidate;
+        if (measure.scrollHeight <= maxContentH) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+
+      if (best === 0) {
+        if (parts.length > 0) {
+          pushPage(sec, 'text', parts.join(''));
+          parts = [];
+          measure.innerHTML = '';
+          continue;
+        } else {
+          // Even 1 word overflows (extreme edge case) — force at least 1 word
+          best = 1;
+        }
+      }
+
+      const chunkHtml = `<p>${remainingWords.slice(0, best).join(' ')}</p>`;
+      parts.push(chunkHtml);
+      remainingWords = remainingWords.slice(best);
+
+      if (remainingWords.length > 0) {
+        pushPage(sec, 'text', parts.join(''));
+        parts = [];
+        measure.innerHTML = '';
+      } else {
+        measure.innerHTML = parts.join('');
+      }
+    }
+
+    return parts;
+  };
+
+  try {
+    for (const sec of sections) {
+      if (sec.type === 'cover') {
+        pushPage(sec, 'cover', sec.html);
+        continue;
+      }
+      if (sec.type === 'fpi') {
+        pushPage(sec, 'fpi', sec.html);
+        continue;
+      }
+      if (sec.index === 1 || sec.index === 5) {
+        // Title Page & Ginger's proloog QR page look best cleanly centered on 1 page
+        pushPage(sec, 'centered', sec.html);
+        continue;
+      }
+
+      const blocks = extractBlocks(sec.html);
+      measure.innerHTML = '';
+      let currentParts: string[] = [];
+
+      for (const block of blocks) {
+        // Normalize QR image sizing inside measuring box so it never miscalculates height
+        const imgs = block.querySelectorAll('img');
+        imgs.forEach((im) => {
+          im.style.maxHeight = `${Math.min(180, Math.floor(maxContentH * 0.35))}px`;
+          im.style.width = 'auto';
+          im.style.height = 'auto';
+        });
+
+        const blockHtml = block.outerHTML;
+        measure.innerHTML = currentParts.join('') + blockHtml;
+
+        if (measure.scrollHeight <= maxContentH) {
+          currentParts.push(blockHtml);
+        } else if (currentParts.length === 0) {
+          // Single block is taller than a full page
+          if (block.tagName.toLowerCase() === 'p') {
+            currentParts = splitOversizedParagraph(block, sec, []);
+          } else {
+            pushPage(sec, 'text', blockHtml);
+            measure.innerHTML = '';
+          }
+        } else {
+          // Flush current page and start next page with this block
+          pushPage(sec, 'text', currentParts.join(''));
+          currentParts = [];
+          measure.innerHTML = blockHtml;
+          if (measure.scrollHeight <= maxContentH) {
+            currentParts.push(blockHtml);
+          } else if (block.tagName.toLowerCase() === 'p') {
+            currentParts = splitOversizedParagraph(block, sec, []);
+          } else {
+            pushPage(sec, 'text', blockHtml);
+            measure.innerHTML = '';
+          }
+        }
+      }
+
+      if (currentParts.length > 0) {
+        pushPage(sec, 'text', currentParts.join(''));
+      }
+    }
+  } finally {
+    document.body.removeChild(measure);
+  }
+
+  return { pages, sectionStartPages };
+}
 
 export function BookSampleReader() {
   const { slug } = useParams<{ slug: string }>();
@@ -63,184 +311,111 @@ export function BookSampleReader() {
     BOOKS.find((b) => b.slug === slug) ??
     BOOKS.find((b) => b.slug === 'de-geboorte-van-de-leeuw');
 
-  // 1-based current page number for UI display
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const currentPageRef = useRef<number>(1);
-  const [isPortraitViewport, setIsPortraitViewport] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : false
+  const sections = inkijkEpubData.sections as EpubSection[];
+
+  // Viewport size & orientation (portrait = 1 page, landscape = 2 pages)
+  const [viewport, setViewport] = useState<{ w: number; h: number }>(() =>
+    typeof window !== 'undefined'
+      ? { w: window.innerWidth, h: window.innerHeight }
+      : { w: 1200, h: 800 }
   );
-  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>(() =>
-    typeof window !== 'undefined' && window.innerHeight > window.innerWidth ? 'portrait' : 'landscape'
+
+  // Typography & Reader controls
+  const [fontSize, setFontSize] = useState<number>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 15 : 16
   );
-
-  // Keep ref in sync so orientation switch preserves reading position
-  useEffect(() => {
-    currentPageRef.current = currentPage;
-  }, [currentPage]);
-
-  // Listen for viewport orientation changes (portrait = 1 page, landscape = 2 pages)
-  useEffect(() => {
-    const updateViewportOrientation = () => {
-      const portrait = window.innerHeight > window.innerWidth;
-      setIsPortraitViewport(portrait);
-    };
-    window.addEventListener('resize', updateViewportOrientation);
-    window.addEventListener('orientationchange', updateViewportOrientation);
-    return () => {
-      window.removeEventListener('resize', updateViewportOrientation);
-      window.removeEventListener('orientationchange', updateViewportOrientation);
-    };
-  }, []);
-
-  // Reader GUI controls
-  const [zoomPercent, setZoomPercent] = useState<number>(100);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [fontFamily, setFontFamily] = useState<ReaderFont>('serif');
   const [theme, setTheme] = useState<ReaderTheme>('day');
+
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const progressRef = useRef<{ sectionIndex: number; offsetRatio: number }>({
+    sectionIndex: 0,
+    offsetRatio: 0,
+  });
+
   const [showToc, setShowToc] = useState<boolean>(false);
   const [showTypography, setShowTypography] = useState<boolean>(false);
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
   const [copiedShareUrl, setCopiedShareUrl] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const bookHostRef = useRef<HTMLDivElement | null>(null);
+  const pageFlipRef = useRef<PageFlip | null>(null);
+
   const shareSlug = book?.slug ?? 'de-geboorte-van-de-leeuw';
   const shareUrl = `https://paulvangeenen.nl/inkijkexemplaar/${shareSlug}`;
   const shareTitle = `Inkijkexemplaar — ${book?.title ?? 'De Geboorte van de Leeuw'}`;
   const shareText = `Lees het inkijkexemplaar van "${book?.title ?? 'De Geboorte van de Leeuw'}" van Paul van Geenen:`;
 
-  const handleCopyShareLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopiedShareUrl(true);
-      window.setTimeout(() => setCopiedShareUrl(false), 2200);
-    } catch {
-      // Fallback
-    }
-  };
-
-  const handleNativeShare = async () => {
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      try {
-        await navigator.share({
-          title: shareTitle,
-          text: shareText,
-          url: shareUrl,
-        });
-        return;
-      } catch {
-        // User cancelled or share failed
-      }
-    }
-    handleCopyShareLink();
-  };
-
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const bookHostRef = useRef<HTMLDivElement | null>(null);
-  const pageFlipRef = useRef<PageFlip | null>(null);
-  const zoomPercentRef = useRef<number>(100);
-  const panRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const pinchStartRef = useRef<{ dist: number; zoom: number } | null>(null);
-  const panDragRef = useRef<{
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-    isPanning: boolean;
-  } | null>(null);
-
+  // Update viewport dimensions on resize / orientationchange (debounced gently)
   useEffect(() => {
-    zoomPercentRef.current = zoomPercent;
-    if (zoomPercent <= 100) {
-      setPan({ x: 0, y: 0 });
-    }
-  }, [zoomPercent]);
-
-  useEffect(() => {
-    panRef.current = pan;
-  }, [pan]);
-
-  // Native 2-finger pinch-to-zoom & 1-finger pan/scroll when zoomed in (capture phase so StPageFlip doesn't flip)
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-
-    const getTouchDist = (t: TouchList) =>
-      Math.hypot(t[1].clientX - t[0].clientX, t[1].clientY - t[0].clientY);
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        e.stopPropagation();
-        panDragRef.current = null;
-        pinchStartRef.current = {
-          dist: Math.max(10, getTouchDist(e.touches)),
-          zoom: zoomPercentRef.current,
-        };
-      } else if (e.touches.length === 1 && zoomPercentRef.current > 100) {
-        panDragRef.current = {
-          startX: e.touches[0].clientX,
-          startY: e.touches[0].clientY,
-          originX: panRef.current.x,
-          originY: panRef.current.y,
-          isPanning: false,
-        };
-      }
+    let timer: number | null = null;
+    const onResize = () => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        setViewport({ w: window.innerWidth, h: window.innerHeight });
+      }, 120);
     };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && pinchStartRef.current) {
-        e.preventDefault();
-        e.stopPropagation();
-        const dist = getTouchDist(e.touches);
-        const scaleRatio = dist / pinchStartRef.current.dist;
-        const nextZoom = Math.round(
-          Math.max(85, Math.min(220, pinchStartRef.current.zoom * scaleRatio))
-        );
-        setZoomPercent(nextZoom);
-      } else if (e.touches.length === 1 && panDragRef.current && zoomPercentRef.current > 100) {
-        const dx = e.touches[0].clientX - panDragRef.current.startX;
-        const dy = e.touches[0].clientY - panDragRef.current.startY;
-        if (panDragRef.current.isPanning || Math.hypot(dx, dy) > 6) {
-          panDragRef.current.isPanning = true;
-          e.preventDefault();
-          e.stopPropagation();
-
-          const scale = zoomPercentRef.current / 100;
-          const rect = stage.getBoundingClientRect();
-          const maxPanX = Math.max(40, ((rect.width * (scale - 1)) / 2) + 40);
-          const maxPanY = Math.max(80, ((rect.height * (scale - 1)) / 2) + 120);
-
-          const nextX = Math.max(-maxPanX, Math.min(maxPanX, panDragRef.current.originX + dx));
-          const nextY = Math.max(-maxPanY, Math.min(maxPanY, panDragRef.current.originY + dy));
-          setPan({ x: nextX, y: nextY });
-        }
-      }
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) {
-        pinchStartRef.current = null;
-      }
-      if (e.touches.length === 0) {
-        if (panDragRef.current?.isPanning) {
-          e.stopPropagation();
-        }
-        panDragRef.current = null;
-      }
-    };
-
-    stage.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
-    stage.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
-    stage.addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
-    stage.addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true });
-
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
     return () => {
-      stage.removeEventListener('touchstart', onTouchStart, { capture: true });
-      stage.removeEventListener('touchmove', onTouchMove, { capture: true });
-      stage.removeEventListener('touchend', onTouchEnd, { capture: true });
-      stage.removeEventListener('touchcancel', onTouchEnd, { capture: true });
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
     };
   }, []);
+
+  const isPortraitViewport = viewport.h > viewport.w;
+
+  // Compute exact single-page dimensions that fit 100% cleanly on screen
+  const { pageW, pageH } = useMemo(() => {
+    const isSmall = viewport.w < 640;
+    const availW = Math.max(260, viewport.w - (isSmall ? 20 : 120));
+    const availH = Math.max(360, viewport.h - (isSmall ? 128 : 180));
+    const aspect = 0.68;
+
+    if (isPortraitViewport) {
+      const w = Math.floor(Math.min(availW, availH * aspect, 560));
+      const h = Math.floor(Math.min(availH, w / aspect));
+      return { pageW: w, pageH: h };
+    } else {
+      const maxHalfW = Math.floor(Math.min(availW / 2, 480));
+      const hFromW = Math.floor(maxHalfW / aspect);
+      if (hFromW <= availH) {
+        return { pageW: maxHalfW, pageH: hFromW };
+      }
+      const h = Math.floor(Math.min(availH, 720));
+      const w = Math.floor(h * aspect);
+      return { pageW: w, pageH: h };
+    }
+  }, [viewport.w, viewport.h, isPortraitViewport]);
+
+  // Reflow EPUB sections into exact pages whenever fontSize, fontFamily, or page dimensions change
+  const { pages, sectionStartPages } = useMemo(
+    () =>
+      paginateEpubSections(
+        sections,
+        pageW,
+        pageH,
+        fontSize,
+        FONT_FAMILIES[fontFamily].css
+      ),
+    [sections, pageW, pageH, fontSize, fontFamily]
+  );
+
+  const totalPages = Math.max(1, pages.length);
+
+  // Build dynamic TOC with exact live page numbers
+  const tocEntries: TocEntry[] = useMemo(() => {
+    return sections
+      .filter((s) => Boolean(s.tocLabel))
+      .map((s) => ({
+        title: s.tocLabel as string,
+        sectionIndex: s.index,
+        page: sectionStartPages[s.index] ?? 1,
+      }));
+  }, [sections, sectionStartPages]);
 
   // Track Inkijkexemplaar view (location, date & time) — automatically skips admin devices & admin IPs
   const loggedViewRef = useRef<boolean>(false);
@@ -275,12 +450,12 @@ export function BookSampleReader() {
           deviceType: detectDevice(navigator.userAgent),
         });
       } catch {
-        // Silent fail: never interrupt reading experience
+        // Silent fail
       }
     })();
   }, [book?.slug, book?.title]);
 
-  // Block Ctrl+S / Ctrl+P / Cmd+S / Cmd+P to protect sample pages
+  // Block Ctrl+S / Ctrl+P / Cmd+S / Cmd+P to protect sample content
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u'].includes(e.key.toLowerCase())) {
@@ -291,134 +466,134 @@ export function BookSampleReader() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Initialize StPageFlip (authentic iPad curved page-curl & drag-to-flip engine)
+  // Initialize StPageFlip whenever paginated pages or dimensions change, preserving reading spot!
   useEffect(() => {
     const host = bookHostRef.current;
-    if (!host) return;
+    if (!host || pages.length === 0) return;
 
     host.innerHTML = '';
     const bookEl = document.createElement('div');
     bookEl.className = 'inkijk-flipbook';
+    bookEl.style.width = isPortraitViewport ? `${pageW}px` : `${pageW * 2}px`;
+    bookEl.style.height = `${pageH}px`;
+
+    const padX = pageW < 360 ? 22 : 34;
+    const padTop = pageW < 360 ? 26 : 36;
+    const padBottom = pageW < 360 ? 34 : 42;
 
     const pageNodes: HTMLElement[] = [];
-    for (let i = 0; i < SAMPLE_PAGES.length; i++) {
-      const pdfPage = SAMPLE_PAGES[i];
-      const readerPage = i + 1;
+    for (const pg of pages) {
       const pageDiv = document.createElement('div');
-      pageDiv.className = 'inkijk-page';
-      pageDiv.dataset.page = String(readerPage);
-      pageDiv.dataset.illustration = ILLUSTRATION_PDF_PAGES.has(pdfPage) ? '1' : '0';
-      if (readerPage === 1) {
+      pageDiv.className = `inkijk-page inkijk-page--${pg.kind}`;
+      pageDiv.dataset.page = String(pg.pageNumber);
+      if (pg.pageNumber === 1) {
         pageDiv.dataset.density = 'hard';
       }
 
-      const img = document.createElement('img');
-      img.src = getPageSrc(pdfPage);
-      img.alt = `Pagina ${readerPage}`;
-      img.draggable = false;
-      img.loading = 'eager';
-      img.decoding = 'async';
-      img.className = 'inkijk-page-img';
+      if (pg.kind === 'cover' || pg.kind === 'fpi') {
+        const inner = document.createElement('div');
+        inner.className = 'epub-fullbleed';
+        inner.innerHTML = pg.html;
+        inner.querySelectorAll('img').forEach((im) => {
+          im.draggable = false;
+        });
+        pageDiv.appendChild(inner);
+      } else {
+        const inner = document.createElement('div');
+        inner.className =
+          pg.kind === 'centered'
+            ? 'epub-page-content epub-page-centered'
+            : 'epub-page-content';
+        inner.style.padding = `${padTop}px ${padX}px ${padBottom}px ${padX}px`;
+        inner.style.fontSize = `${fontSize}px`;
+        inner.style.fontFamily = FONT_FAMILIES[fontFamily].css;
+        inner.style.lineHeight = '1.62';
+        inner.innerHTML = pg.html;
 
-      const shield = document.createElement('div');
-      shield.className = 'inkijk-page-shield';
+        // Prevent image dragging & keep QR links clickable without triggering page flip
+        inner.querySelectorAll('img').forEach((im) => {
+          im.draggable = false;
+        });
+        inner.querySelectorAll('a.epub-qr-link').forEach((linkEl) => {
+          linkEl.addEventListener('mousedown', (ev) => ev.stopPropagation());
+          linkEl.addEventListener('touchstart', (ev) => ev.stopPropagation(), { passive: true });
+          linkEl.addEventListener('click', (ev) => ev.stopPropagation());
+        });
 
-      pageDiv.appendChild(img);
-      pageDiv.appendChild(shield);
+        pageDiv.appendChild(inner);
+
+        // Subtle running page number at bottom
+        if (pg.pageNumber > 1) {
+          const footer = document.createElement('div');
+          footer.className = 'epub-page-footer';
+          footer.textContent = String(pg.pageNumber);
+          pageDiv.appendChild(footer);
+        }
+      }
+
       bookEl.appendChild(pageDiv);
       pageNodes.push(pageDiv);
     }
 
     host.appendChild(bookEl);
 
-    const aspect = 440 / 656;
-    const isSmallScreen = window.innerWidth < 640;
-    const availW = Math.max(240, window.innerWidth - (isSmallScreen ? 20 : 96));
-    const availH = Math.max(340, window.innerHeight - (isSmallScreen ? 135 : 185));
-    const portraitPageW = Math.floor(Math.min(availW, availH * aspect));
-    const portraitPageH = Math.floor(portraitPageW / aspect);
-
-    if (isPortraitViewport) {
-      bookEl.style.width = `${portraitPageW}px`;
-      bookEl.style.height = `${portraitPageH}px`;
-    }
-
-    const pageFlip = new PageFlip(bookEl, isPortraitViewport
-      ? {
-          width: portraitPageW,
-          height: portraitPageH,
-          size: 'fixed',
-          minWidth: portraitPageW,
-          maxWidth: portraitPageW,
-          minHeight: portraitPageH,
-          maxHeight: portraitPageH,
-          drawShadow: true,
-          maxShadowOpacity: 0.45,
-          flippingTime: 700,
-          usePortrait: true,
-          showCover: true,
-          autoSize: false,
-          showPageCorners: true,
-          useMouseEvents: true,
-          mobileScrollSupport: false,
-          swipeDistance: 30,
-          startPage: Math.max(0, currentPageRef.current - 1),
-        }
-      : {
-          width: 440,
-          height: 656,
-          size: 'stretch',
-          minWidth: 220,
-          maxWidth: 520,
-          minHeight: 320,
-          maxHeight: 775,
-          drawShadow: true,
-          maxShadowOpacity: 0.48,
-          flippingTime: 780,
-          usePortrait: false,
-          showCover: true,
-          autoSize: true,
-          showPageCorners: true,
-          useMouseEvents: true,
-          mobileScrollSupport: false,
-          swipeDistance: 30,
-          startPage: Math.max(0, currentPageRef.current - 1),
-        }
+    // Restore reading position to the same section & relative offset
+    const targetSectionStart = sectionStartPages[progressRef.current.sectionIndex] ?? 1;
+    const sameSectionPages = pages.filter(
+      (p) => p.sectionIndex === progressRef.current.sectionIndex
+    );
+    const offsetIndex = Math.round(
+      progressRef.current.offsetRatio * Math.max(0, sameSectionPages.length - 1)
+    );
+    const restoredPage = Math.max(
+      1,
+      Math.min(pages.length, targetSectionStart + offsetIndex)
     );
 
-    pageFlip.loadFromHTML(pageNodes);
-
-    pageFlip.on('init', (e) => {
-      if (e.data?.mode) setOrientation(e.data.mode);
-      if (typeof e.data?.page === 'number') setCurrentPage(e.data.page + 1);
+    const pageFlip = new PageFlip(bookEl, {
+      width: pageW,
+      height: pageH,
+      size: 'fixed',
+      minWidth: pageW,
+      maxWidth: pageW,
+      minHeight: pageH,
+      maxHeight: pageH,
+      drawShadow: true,
+      maxShadowOpacity: 0.45,
+      flippingTime: 720,
+      usePortrait: isPortraitViewport,
+      showCover: true,
+      autoSize: false,
+      showPageCorners: true,
+      useMouseEvents: true,
+      mobileScrollSupport: false,
+      swipeDistance: 30,
+      startPage: restoredPage - 1,
     });
+
+    pageFlip.loadFromHTML(pageNodes);
+    setCurrentPage(restoredPage);
 
     pageFlip.on('flip', (e) => {
       if (typeof e.data === 'number') {
-        setCurrentPage(e.data + 1);
-        setPan({ x: 0, y: 0 });
-      }
-    });
-
-    pageFlip.on('changeOrientation', (e) => {
-      if (e.data === 'landscape' || e.data === 'portrait') {
-        setOrientation(e.data);
+        const nextPageNum = e.data + 1;
+        setCurrentPage(nextPageNum);
+        const pg = pages[e.data];
+        if (pg) {
+          const secPages = pages.filter((p) => p.sectionIndex === pg.sectionIndex);
+          const idxInSec = secPages.findIndex((p) => p.pageNumber === pg.pageNumber);
+          progressRef.current = {
+            sectionIndex: pg.sectionIndex,
+            offsetRatio:
+              secPages.length > 1 ? Math.max(0, idxInSec) / (secPages.length - 1) : 0,
+          };
+        }
       }
     });
 
     pageFlipRef.current = pageFlip;
 
-    const handleResize = () => {
-      try {
-        pageFlip.update();
-      } catch {
-        // Ignore resize race during unmount
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
     return () => {
-      window.removeEventListener('resize', handleResize);
       pageFlipRef.current = null;
       try {
         pageFlip.destroy();
@@ -427,13 +602,13 @@ export function BookSampleReader() {
       }
       if (host) host.innerHTML = '';
     };
-  }, [isPortraitViewport]);
+  }, [pages, pageW, pageH, isPortraitViewport, fontSize, fontFamily, sectionStartPages]);
 
+  const isSpread = !isPortraitViewport;
   const canGoPrev = currentPage > 1;
-  const canGoNext =
-    orientation === 'landscape'
-      ? currentPage === 1 || currentPage + 1 < TOTAL_PAGES
-      : currentPage < TOTAL_PAGES;
+  const canGoNext = isSpread
+    ? currentPage === 1 || currentPage + 1 < totalPages
+    : currentPage < totalPages;
 
   const goNext = useCallback(() => {
     if (!canGoNext) return;
@@ -445,19 +620,27 @@ export function BookSampleReader() {
     pageFlipRef.current?.flipPrev('bottom');
   }, [canGoPrev]);
 
-  const jumpToPage = useCallback((page: number) => {
-    setShowToc(false);
-    const idx = Math.max(0, Math.min(TOTAL_PAGES - 1, page - 1));
-    const pf = pageFlipRef.current;
-    if (!pf) return;
-    const curIdx = pf.getCurrentPageIndex();
-    if (Math.abs(idx - curIdx) <= 2) {
-      pf.flip(idx, 'bottom');
-    } else {
-      pf.turnToPage(idx);
-      setCurrentPage(idx + 1);
-    }
-  }, []);
+  const jumpToPage = useCallback(
+    (page: number) => {
+      setShowToc(false);
+      const clamped = Math.max(1, Math.min(totalPages, page));
+      const idx = clamped - 1;
+      const pf = pageFlipRef.current;
+      if (!pf) return;
+      const curIdx = pf.getCurrentPageIndex();
+      if (Math.abs(idx - curIdx) <= 2) {
+        pf.flip(idx, 'bottom');
+      } else {
+        pf.turnToPage(idx);
+        setCurrentPage(clamped);
+        const pg = pages[idx];
+        if (pg) {
+          progressRef.current = { sectionIndex: pg.sectionIndex, offsetRatio: 0 };
+        }
+      }
+    },
+    [totalPages, pages]
+  );
 
   // Keyboard navigation
   useEffect(() => {
@@ -483,11 +666,7 @@ export function BookSampleReader() {
     const onFsChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
       setTimeout(() => {
-        try {
-          pageFlipRef.current?.update();
-        } catch {
-          // ignore
-        }
+        setViewport({ w: window.innerWidth, h: window.innerHeight });
       }, 120);
     };
     document.addEventListener('fullscreenchange', onFsChange);
@@ -502,41 +681,66 @@ export function BookSampleReader() {
         await document.exitFullscreen();
       }
     } catch {
-      // Fullscreen may be blocked by browser policy
+      // Blocked by browser policy
     }
+  };
+
+  const handleCopyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedShareUrl(true);
+      window.setTimeout(() => setCopiedShareUrl(false), 2200);
+    } catch {
+      // Fallback
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch {
+        // Cancelled
+      }
+    }
+    handleCopyShareLink();
   };
 
   // Theme classes
   const screenBgClass =
     theme === 'night'
-      ? 'bg-[#141416] text-stone-200 reader-theme-night'
+      ? 'bg-[#111113] text-stone-200 reader-theme-night'
       : theme === 'sepia'
-      ? 'bg-[#efe6d5] text-stone-900 reader-theme-sepia'
-      : 'bg-[#f4f1ea] text-stone-900 reader-theme-day';
+      ? 'bg-[#ebe0cb] text-stone-900 reader-theme-sepia'
+      : 'bg-[#f1ede4] text-stone-900 reader-theme-day';
 
   const toolbarClass =
     theme === 'night'
       ? 'bg-[#1c1c1f]/90 border-white/10 text-stone-200'
       : theme === 'sepia'
-      ? 'bg-[#e7dcc7]/90 border-stone-400/25 text-stone-800'
+      ? 'bg-[#e3d6bc]/90 border-stone-400/25 text-stone-800'
       : 'bg-white/85 border-stone-300/60 text-stone-800';
 
-  const isSpread = orientation === 'landscape';
   const leftPage = isSpread && currentPage > 1 ? currentPage : null;
   const rightPage =
     isSpread && currentPage > 1
-      ? Math.min(TOTAL_PAGES, currentPage + 1)
+      ? Math.min(totalPages, currentPage + 1)
       : currentPage;
 
   const pageLabel = isSpread
     ? currentPage === 1
-      ? `Omslag • Pagina 1 van ${TOTAL_PAGES}`
+      ? `Omslag • Pagina 1 van ${totalPages}`
       : leftPage !== null && rightPage !== leftPage
-      ? `Pagina ${leftPage}–${rightPage} van ${TOTAL_PAGES}`
-      : `Pagina ${currentPage} van ${TOTAL_PAGES}`
-    : `Pagina ${currentPage} van ${TOTAL_PAGES}`;
+      ? `Pagina ${leftPage}–${rightPage} van ${totalPages}`
+      : `Pagina ${currentPage} van ${totalPages}`
+    : `Pagina ${currentPage} van ${totalPages}`;
 
-  const isAtSampleEnd = isSpread ? rightPage >= TOTAL_PAGES : currentPage >= TOTAL_PAGES;
+  const isAtSampleEnd = isSpread ? rightPage >= totalPages : currentPage >= totalPages;
 
   return (
     <div
@@ -544,44 +748,191 @@ export function BookSampleReader() {
       onContextMenu={(e) => e.preventDefault()}
       className="min-h-screen w-full bg-gradient-to-br from-[#161311] via-[#1f1a17] to-[#0f0d0c] flex flex-col items-center justify-center p-0 sm:p-4 md:p-6 select-none overflow-hidden"
     >
-      {/* Anti-print + PageFlip styling + Theme filters */}
+      {/* EPUB Typography, Themes, Dropcap & StPageFlip styling */}
       <style>{`
         @media print { body { display: none !important; } }
 
-        .inkijk-flipbook-stage {
-          width: 100%;
-          max-width: 960px;
-          height: min(76vh, 880px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        @media (orientation: landscape) {
-          .inkijk-flipbook-stage {
-            height: min(72vh, 690px);
-          }
-        }
-
         .inkijk-page {
-          background: #ffffff;
+          background: #fffdf9;
+          color: #1c1917;
           overflow: hidden;
           box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.04);
         }
 
-        .inkijk-page-img {
+        .reader-theme-sepia .inkijk-page {
+          background: #f6eedc;
+          color: #3a2e21;
+        }
+
+        .reader-theme-night .inkijk-page {
+          background: #1a1a1d;
+          color: #e4e0d8;
+        }
+
+        .epub-fullbleed {
           width: 100%;
           height: 100%;
-          object-fit: contain;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #111;
+        }
+        .epub-fullbleed img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
           pointer-events: none;
           user-select: none;
           -webkit-user-drag: none;
+        }
+
+        .epub-page-content {
+          width: 100%;
+          height: 100%;
+          box-sizing: border-box;
+          text-align: justify;
+          hyphens: auto;
+          -webkit-hyphens: auto;
+          overflow: hidden;
+        }
+
+        .epub-page-centered {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+        }
+
+        .epub-page-content h1 {
+          font-size: 1.55em;
+          font-weight: 700;
+          line-height: 1.25;
+          margin: 0 0 0.5em 0;
+          text-align: center;
+        }
+
+        .epub-page-content h2 {
+          font-size: 1.38em;
+          font-weight: 600;
+          font-style: italic;
+          line-height: 1.3;
+          margin: 0.2em 0 0.9em 0;
+          text-align: center;
+        }
+
+        .epub-page-content h3 {
+          font-size: 1.05em;
+          font-weight: 500;
+          font-style: italic;
+          opacity: 0.8;
+          margin: 0 0 1em 0;
+          text-align: center;
+        }
+
+        .epub-page-content .chapter-title-card {
+          margin-bottom: 1.1em;
+          padding-bottom: 0.45em;
+          border-bottom: 1px solid currentColor;
+          border-color: rgba(154, 107, 76, 0.28);
+        }
+
+        .epub-page-content p {
+          margin: 0 0 0.72em 0;
+        }
+
+        .epub-page-content em {
+          font-style: italic;
+        }
+
+        .epub-page-content .dropcap {
+          float: left;
+          font-size: 2.95em;
+          line-height: 0.82;
+          padding-top: 0.08em;
+          padding-right: 0.12em;
+          font-weight: 600;
+          color: #9A6B4C;
+        }
+
+        .reader-theme-night .epub-page-content .dropcap {
+          color: #e0bd82;
+        }
+
+        .epub-page-content .title-card {
+          margin-bottom: 2em;
+        }
+
+        .epub-page-content .publisher-details {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.45em;
+          font-size: 0.85em;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          opacity: 0.78;
+        }
+
+        .epub-page-content .publisher-logo img {
+          max-height: 76px;
+          width: auto;
+          border-radius: 8px;
+        }
+
+        .epub-page-content .image {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          margin: 1em auto;
+        }
+
+        .epub-page-content .image img {
+          max-width: 170px;
+          max-height: 170px;
+          width: auto !important;
+          height: auto;
+          border-radius: 10px;
           display: block;
         }
 
-        .inkijk-page-shield {
+        /* Keep QR codes crisp and scannable even in Night mode */
+        .reader-theme-night .epub-page-content .image img {
+          background: #ffffff;
+          padding: 8px;
+          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+        }
+
+        .epub-page-content a.epub-qr-link {
+          display: inline-block;
+          position: relative;
+          z-index: 20;
+          pointer-events: auto;
+          cursor: pointer;
+          transition: transform 160ms ease;
+        }
+        .epub-page-content a.epub-qr-link:hover {
+          transform: scale(1.04);
+        }
+
+        .epub-page-content li {
+          list-style: none;
+          margin: 0 0 0.35em 0;
+          font-size: 0.92em;
+          text-align: left;
+        }
+
+        .epub-page-footer {
           position: absolute;
-          inset: 0;
-          z-index: 5;
+          bottom: 11px;
+          left: 0;
+          right: 0;
+          text-align: center;
+          font-size: 11px;
+          opacity: 0.45;
+          font-family: Georgia, serif;
+          pointer-events: none;
         }
 
         /* Subtle spine crease inside open pages */
@@ -591,7 +942,7 @@ export function BookSampleReader() {
           top: 0;
           right: 0;
           bottom: 0;
-          width: 28px;
+          width: 26px;
           background: linear-gradient(to left, rgba(0,0,0,0.16), rgba(0,0,0,0.04) 45%, transparent);
           pointer-events: none;
           z-index: 6;
@@ -603,32 +954,10 @@ export function BookSampleReader() {
           top: 0;
           left: 0;
           bottom: 0;
-          width: 28px;
+          width: 26px;
           background: linear-gradient(to right, rgba(0,0,0,0.14), rgba(0,0,0,0.04) 45%, transparent);
           pointer-events: none;
           z-index: 6;
-        }
-
-        /* Night mode: invert text pages cleanly, keep illustrations natural & dimmed */
-        .reader-theme-night .inkijk-page {
-          background: #141416;
-        }
-        .reader-theme-night .inkijk-page[data-illustration="0"] .inkijk-page-img {
-          filter: invert(0.92) hue-rotate(180deg) contrast(0.94) brightness(0.92);
-        }
-        .reader-theme-night .inkijk-page[data-illustration="1"] .inkijk-page-img {
-          filter: brightness(0.84) contrast(1.04);
-        }
-
-        /* Sepia mode: warm paper tint for text, gentle warmth for illustrations */
-        .reader-theme-sepia .inkijk-page {
-          background: #f5ecdc;
-        }
-        .reader-theme-sepia .inkijk-page[data-illustration="0"] .inkijk-page-img {
-          filter: sepia(0.28) brightness(0.97) contrast(0.98);
-        }
-        .reader-theme-sepia .inkijk-page[data-illustration="1"] .inkijk-page-img {
-          filter: sepia(0.08) brightness(0.96);
         }
       `}</style>
 
@@ -666,6 +995,7 @@ export function BookSampleReader() {
                 onClick={() => {
                   setShowToc((v) => !v);
                   setShowTypography(false);
+                  setShowShareModal(false);
                 }}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   showToc ? 'bg-earth-clay/20 text-earth-clay' : 'hover:bg-black/5'
@@ -679,7 +1009,7 @@ export function BookSampleReader() {
 
             {/* Center title */}
             <div className="flex flex-col items-center text-center min-w-0 px-2">
-              <span className="text-xs sm:text-sm font-serif font-semibold truncate max-w-[180px] sm:max-w-[340px]">
+              <span className="text-xs sm:text-sm font-serif font-semibold truncate max-w-[165px] sm:max-w-[340px]">
                 {book?.title ?? 'De Geboorte van de Leeuw'}
               </span>
               <span className="text-[10px] tracking-wide opacity-65">
@@ -687,25 +1017,25 @@ export function BookSampleReader() {
               </span>
             </div>
 
-            {/* Right controls: AA (Font/Zoom + Theme) & Fullscreen */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Right controls: A- / A+, AA (Font & Theme), Deel, Fullscreen */}
+            <div className="flex items-center gap-1 sm:gap-2">
               <div className="hidden md:flex items-center gap-0.5 rounded-lg border border-current/15 px-1 py-0.5">
                 <button
                   type="button"
-                  onClick={() => setZoomPercent((z) => Math.max(85, z - 15))}
-                  disabled={zoomPercent <= 85}
+                  onClick={() => setFontSize((s) => Math.max(13, s - 1))}
+                  disabled={fontSize <= 13}
                   className="px-2 py-1 rounded text-xs font-serif font-semibold disabled:opacity-35 hover:bg-black/5 transition-colors"
                   title="Kleiner lettertype"
                 >
                   A<span className="text-[10px]">-</span>
                 </button>
-                <span className="text-[11px] font-medium px-1.5 min-w-[42px] text-center opacity-75">
-                  {zoomPercent}%
+                <span className="text-[11px] font-medium px-1.5 min-w-[36px] text-center opacity-75">
+                  {fontSize}px
                 </span>
                 <button
                   type="button"
-                  onClick={() => setZoomPercent((z) => Math.min(190, z + 15))}
-                  disabled={zoomPercent >= 190}
+                  onClick={() => setFontSize((s) => Math.min(24, s + 1))}
+                  disabled={fontSize >= 24}
                   className="px-2 py-1 rounded text-sm font-serif font-semibold disabled:opacity-35 hover:bg-black/5 transition-colors"
                   title="Groter lettertype"
                 >
@@ -723,7 +1053,7 @@ export function BookSampleReader() {
                 className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-serif font-bold tracking-tight transition-colors ${
                   showTypography ? 'bg-earth-clay/20 text-earth-clay' : 'hover:bg-black/5'
                 }`}
-                title="Lettergrootte en leesmodus"
+                title="Lettertype, grootte en leesmodus"
               >
                 <span className="text-xs">A</span>
                 <span className="text-sm">A</span>
@@ -754,10 +1084,10 @@ export function BookSampleReader() {
             </div>
           </header>
 
-          {/* Typography / Font-Size & Reading Theme Popover */}
+          {/* Typography: Font Size, Font Family & Reading Theme Popover */}
           {showTypography && (
             <div
-              className={`absolute top-14 right-3 sm:right-5 z-40 w-72 rounded-2xl shadow-2xl border p-4 backdrop-blur-xl ${
+              className={`absolute top-14 right-3 sm:right-5 z-40 w-76 rounded-2xl shadow-2xl border p-4 backdrop-blur-xl ${
                 theme === 'night'
                   ? 'bg-[#232326]/95 border-white/15 text-stone-100'
                   : 'bg-white/95 border-stone-200 text-stone-800'
@@ -765,7 +1095,7 @@ export function BookSampleReader() {
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold uppercase tracking-wider opacity-70">
-                  Weergave & Lettergrootte
+                  Weergave &amp; Tekstopmaak
                 </span>
                 <button
                   type="button"
@@ -776,15 +1106,16 @@ export function BookSampleReader() {
                 </button>
               </div>
 
+              {/* Font size */}
               <div className="mb-4">
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="opacity-75">Lettergrootte</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold">{zoomPercent}%</span>
-                    {zoomPercent !== 100 && (
+                    <span className="font-semibold">{fontSize}px</span>
+                    {fontSize !== 16 && (
                       <button
                         type="button"
-                        onClick={() => setZoomPercent(100)}
+                        onClick={() => setFontSize(16)}
                         className="inline-flex items-center gap-1 text-[11px] text-earth-clay hover:underline"
                       >
                         <RotateCcw className="w-3 h-3" /> Reset
@@ -795,33 +1126,58 @@ export function BookSampleReader() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setZoomPercent((z) => Math.max(85, z - 15))}
-                    disabled={zoomPercent <= 85}
+                    onClick={() => setFontSize((s) => Math.max(13, s - 1))}
+                    disabled={fontSize <= 13}
                     className="flex-1 py-2 rounded-xl border border-current/15 flex items-center justify-center gap-1.5 text-sm font-serif disabled:opacity-35 hover:bg-black/5"
                   >
-                    <ZoomOut className="w-3.5 h-3.5" /> A-
+                    A-
                   </button>
                   <button
                     type="button"
-                    onClick={() => setZoomPercent((z) => Math.min(190, z + 15))}
-                    disabled={zoomPercent >= 190}
+                    onClick={() => setFontSize((s) => Math.min(24, s + 1))}
+                    disabled={fontSize >= 24}
                     className="flex-1 py-2 rounded-xl border border-current/15 flex items-center justify-center gap-1.5 text-base font-serif font-semibold disabled:opacity-35 hover:bg-black/5"
                   >
-                    <ZoomIn className="w-3.5 h-3.5" /> A+
+                    A+
                   </button>
                 </div>
                 <input
                   type="range"
-                  min={85}
-                  max={190}
-                  step={5}
-                  value={zoomPercent}
-                  onChange={(e) => setZoomPercent(Number(e.target.value))}
+                  min={13}
+                  max={24}
+                  step={1}
+                  value={fontSize}
+                  onChange={(e) => setFontSize(Number(e.target.value))}
                   className="w-full mt-2.5 accent-[#9A6B4C]"
                   aria-label="Lettergrootte schuifregelaar"
                 />
               </div>
 
+              {/* Font family */}
+              <div className="mb-4">
+                <span className="flex items-center gap-1.5 text-xs opacity-75 mb-2">
+                  <Type className="w-3.5 h-3.5" /> Lettertype
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(Object.keys(FONT_FAMILIES) as ReaderFont[]).map((fk) => (
+                    <button
+                      key={fk}
+                      type="button"
+                      onClick={() => setFontFamily(fk)}
+                      style={{ fontFamily: FONT_FAMILIES[fk].css }}
+                      className={`py-2 px-2 rounded-xl border text-xs font-medium transition-all ${
+                        fontFamily === fk
+                          ? 'border-[#9A6B4C] ring-2 ring-[#9A6B4C]/30 bg-[#9A6B4C]/10'
+                          : 'border-current/15 opacity-75 hover:opacity-100'
+                      }`}
+                    >
+                      {FONT_FAMILIES[fk].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Paper theme */}
               <div>
                 <span className="block text-xs opacity-75 mb-2">Leesmodus</span>
                 <div className="grid grid-cols-3 gap-2">
@@ -883,13 +1239,13 @@ export function BookSampleReader() {
                 </button>
               </div>
               <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-                {SAMPLE_CHAPTERS.map((ch) => {
+                {tocEntries.map((ch) => {
                   const isActive =
                     currentPage === ch.page ||
                     (isSpread && (leftPage === ch.page || rightPage === ch.page));
                   return (
                     <button
-                      key={ch.page}
+                      key={ch.sectionIndex}
                       type="button"
                       onClick={() => jumpToPage(ch.page)}
                       className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm flex items-center justify-between transition-colors ${
@@ -905,19 +1261,14 @@ export function BookSampleReader() {
                 })}
               </nav>
               <div className="p-4 border-t border-current/10 text-[11px] opacity-65 leading-relaxed">
-                Sleep met je vinger of muis aan een hoek van de pagina, of klik op de pijlen om de pagina echt om te slaan.
+                Pas lettergrootte en lettertype aan via <strong>AA</strong> — de tekst vloeit automatisch mee over de pagina&apos;s. Tik of scan een QR-code om de soundtrack te horen.
               </div>
             </div>
           )}
 
           {/* Main Book Stage */}
-          <div
-            ref={stageRef}
-            className={`relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-5 md:p-6 ${
-              zoomPercent > 100 ? 'touch-none cursor-grab active:cursor-grabbing' : ''
-            }`}
-          >
-            {/* Left / Right page-curl buttons */}
+          <div className="relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-5 md:p-6">
+            {/* Left / Right page-curl arrows */}
             <button
               type="button"
               onClick={goPrev}
@@ -938,20 +1289,11 @@ export function BookSampleReader() {
               <ChevronRight className="w-5 h-5" />
             </button>
 
-            {/* Zoomable & Pannable FlipBook Host */}
+            {/* StPageFlip Host */}
             <div
-              className="inkijk-flipbook-stage"
-              style={{
-                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoomPercent / 100})`,
-                transformOrigin: 'center center',
-                willChange: 'transform',
-              }}
-            >
-              <div
-                ref={bookHostRef}
-                className="w-full h-full flex items-center justify-center drop-shadow-[0_24px_50px_rgba(0,0,0,0.32)]"
-              />
-            </div>
+              ref={bookHostRef}
+              className="flex items-center justify-center drop-shadow-[0_24px_50px_rgba(0,0,0,0.32)]"
+            />
           </div>
 
           {/* End-of-sample subtle footer banner */}
@@ -1006,13 +1348,13 @@ export function BookSampleReader() {
                 {/* Book preview card */}
                 <div className="mt-4 p-3 rounded-xl bg-white/[0.04] border border-white/10 flex items-center gap-3.5">
                   <img
-                    src={getPageSrc(1)}
+                    src={COVER_IMAGE_URL}
                     alt={book?.title ?? 'De Geboorte van de Leeuw'}
                     className="w-12 h-16 rounded-md object-cover shadow-md border border-white/15 shrink-0"
                   />
                   <div className="min-w-0">
                     <span className="block text-[10px] font-semibold uppercase tracking-widest text-[#e0bd82]">
-                      Inkijkexemplaar • {TOTAL_PAGES} pagina&apos;s
+                      Inkijkexemplaar • Proloog + H1 t/m H3
                     </span>
                     <span className="block font-serif font-semibold text-sm text-white truncate mt-0.5">
                       {book?.title ?? 'De Geboorte van de Leeuw'}
@@ -1097,7 +1439,7 @@ export function BookSampleReader() {
             <input
               type="range"
               min={1}
-              max={TOTAL_PAGES}
+              max={totalPages}
               value={currentPage}
               onChange={(e) => jumpToPage(Number(e.target.value))}
               className="flex-1 h-1.5 accent-[#9A6B4C] cursor-pointer"
@@ -1105,7 +1447,7 @@ export function BookSampleReader() {
             />
 
             <span className="text-[11px] font-medium opacity-65 shrink-0">
-              {currentPage} / {TOTAL_PAGES}
+              {currentPage} / {totalPages}
             </span>
 
             <button
