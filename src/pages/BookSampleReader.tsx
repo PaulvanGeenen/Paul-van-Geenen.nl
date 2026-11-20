@@ -392,7 +392,10 @@ export function BookSampleReader() {
   const [showTypography, setShowTypography] = useState<boolean>(false);
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
   const [copiedShareUrl, setCopiedShareUrl] = useState<boolean>(false);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() =>
+    typeof document !== 'undefined' ? Boolean(document.fullscreenElement) : false
+  );
+  const userExitedFullscreenRef = useRef<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const bookHostRef = useRef<HTMLDivElement | null>(null);
@@ -716,10 +719,44 @@ export function BookSampleReader() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [goNext, goPrev]);
 
+  // Auto-enter fullscreen on open (immediate attempt + first-interaction fallback for direct links) and exit on unmount
+  useEffect(() => {
+    const enterFs = () => {
+      if (userExitedFullscreenRef.current || document.fullscreenElement) return;
+      const target = document.documentElement;
+      if (target?.requestFullscreen) {
+        target.requestFullscreen().catch(() => {});
+      }
+    };
+
+    enterFs();
+
+    const onFirstGesture = () => {
+      enterFs();
+      window.removeEventListener('pointerdown', onFirstGesture, true);
+      window.removeEventListener('keydown', onFirstGesture, true);
+    };
+
+    window.addEventListener('pointerdown', onFirstGesture, true);
+    window.addEventListener('keydown', onFirstGesture, true);
+
+    return () => {
+      window.removeEventListener('pointerdown', onFirstGesture, true);
+      window.removeEventListener('keydown', onFirstGesture, true);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, []);
+
   // Fullscreen sync
   useEffect(() => {
     const onFsChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      const nowFs = Boolean(document.fullscreenElement);
+      setIsFullscreen(nowFs);
+      if (!nowFs) {
+        userExitedFullscreenRef.current = true;
+      }
       setTimeout(() => {
         setViewport({ w: window.innerWidth, h: window.innerHeight });
       }, 120);
@@ -730,9 +767,11 @@ export function BookSampleReader() {
 
   const toggleFullscreen = async () => {
     try {
-      if (!document.fullscreenElement && containerRef.current) {
-        await containerRef.current.requestFullscreen();
-      } else if (document.fullscreenElement) {
+      if (!document.fullscreenElement) {
+        userExitedFullscreenRef.current = false;
+        await document.documentElement.requestFullscreen();
+      } else {
+        userExitedFullscreenRef.current = true;
         await document.exitFullscreen();
       }
     } catch {

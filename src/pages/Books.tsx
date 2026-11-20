@@ -123,6 +123,9 @@ export function Books() {
                     {book.slug === 'de-geboorte-van-de-leeuw' && (
                       <Link
                         to="/inkijkexemplaar/de-geboorte-van-de-leeuw"
+                        onClick={() => {
+                          document.documentElement.requestFullscreen?.().catch(() => {});
+                        }}
                         className="inline-flex items-center gap-1.5 text-[11px] font-medium text-earth-warm/80 hover:text-earth-clay transition-colors border-b border-earth-clay/25 hover:border-earth-clay pb-0.5"
                       >
                         <BookOpen className="w-3.5 h-3.5 text-earth-clay/80" />
