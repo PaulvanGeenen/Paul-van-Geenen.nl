@@ -30,21 +30,28 @@ interface ChapterEntry {
   page: number;
 }
 
-const TOTAL_PAGES = 37;
-const ILLUSTRATION_PAGES = new Set([1, 10, 22, 27, 32, 37]);
+// Skip blank page 2 (empty verso after cover) so it is never shown forward or backward
+const SAMPLE_PAGES: number[] = [1, ...Array.from({ length: 35 }, (_, i) => i + 3)];
+const TOTAL_PAGES = SAMPLE_PAGES.length;
+const ILLUSTRATION_PDF_PAGES = new Set([1, 10, 22, 27, 32, 37]);
+
+const pdfPageToReaderPage = (pdfPage: number): number => {
+  const idx = SAMPLE_PAGES.indexOf(pdfPage);
+  return idx >= 0 ? idx + 1 : 1;
+};
 
 const SAMPLE_CHAPTERS: ChapterEntry[] = [
-  { title: 'Omslag', page: 1 },
-  { title: 'Inhoudsopgave', page: 5 },
-  { title: 'Noot van de auteur', page: 7 },
-  { title: 'Proloog', page: 11 },
-  { title: '1. Koude vingers', page: 13 },
-  { title: '2. As en As', page: 23 },
-  { title: '3. Veilige Toetsen', page: 28 },
+  { title: 'Omslag', page: pdfPageToReaderPage(1) },
+  { title: 'Inhoudsopgave', page: pdfPageToReaderPage(5) },
+  { title: 'Noot van de auteur', page: pdfPageToReaderPage(7) },
+  { title: 'Proloog', page: pdfPageToReaderPage(11) },
+  { title: '1. Koude vingers', page: pdfPageToReaderPage(13) },
+  { title: '2. As en As', page: pdfPageToReaderPage(23) },
+  { title: '3. Veilige Toetsen', page: pdfPageToReaderPage(28) },
 ];
 
-const getPageSrc = (page: number): string =>
-  `/inkijk/de-geboorte-van-de-leeuw/page-${String(page).padStart(2, '0')}.jpg`;
+const getPageSrc = (pdfPage: number): string =>
+  `/inkijk/de-geboorte-van-de-leeuw/page-${String(pdfPage).padStart(2, '0')}.jpg`;
 
 export function BookSampleReader() {
   const { slug } = useParams<{ slug: string }>();
@@ -254,18 +261,20 @@ export function BookSampleReader() {
     bookEl.className = 'inkijk-flipbook';
 
     const pageNodes: HTMLElement[] = [];
-    for (let p = 1; p <= TOTAL_PAGES; p++) {
+    for (let i = 0; i < SAMPLE_PAGES.length; i++) {
+      const pdfPage = SAMPLE_PAGES[i];
+      const readerPage = i + 1;
       const pageDiv = document.createElement('div');
       pageDiv.className = 'inkijk-page';
-      pageDiv.dataset.page = String(p);
-      pageDiv.dataset.illustration = ILLUSTRATION_PAGES.has(p) ? '1' : '0';
-      if (p === 1) {
+      pageDiv.dataset.page = String(readerPage);
+      pageDiv.dataset.illustration = ILLUSTRATION_PDF_PAGES.has(pdfPage) ? '1' : '0';
+      if (readerPage === 1) {
         pageDiv.dataset.density = 'hard';
       }
 
       const img = document.createElement('img');
-      img.src = getPageSrc(p);
-      img.alt = `Pagina ${p}`;
+      img.src = getPageSrc(pdfPage);
+      img.alt = `Pagina ${readerPage}`;
       img.draggable = false;
       img.loading = 'eager';
       img.decoding = 'async';
@@ -963,7 +972,7 @@ export function BookSampleReader() {
                   />
                   <div className="min-w-0">
                     <span className="block text-[10px] font-semibold uppercase tracking-widest text-[#e0bd82]">
-                      Inkijkexemplaar • 37 pagina&apos;s
+                      Inkijkexemplaar • {TOTAL_PAGES} pagina&apos;s
                     </span>
                     <span className="block font-serif font-semibold text-sm text-white truncate mt-0.5">
                       {book?.title ?? 'De Geboorte van de Leeuw'}
