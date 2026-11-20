@@ -52,7 +52,32 @@ export function BookSampleReader() {
 
   // 1-based current page number for UI display
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
+  const currentPageRef = useRef<number>(1);
+  const [isPortraitViewport, setIsPortraitViewport] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : false
+  );
+  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>(() =>
+    typeof window !== 'undefined' && window.innerHeight > window.innerWidth ? 'portrait' : 'landscape'
+  );
+
+  // Keep ref in sync so orientation switch preserves reading position
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  // Listen for viewport orientation changes (portrait = 1 page, landscape = 2 pages)
+  useEffect(() => {
+    const updateViewportOrientation = () => {
+      const portrait = window.innerHeight > window.innerWidth;
+      setIsPortraitViewport(portrait);
+    };
+    window.addEventListener('resize', updateViewportOrientation);
+    window.addEventListener('orientationchange', updateViewportOrientation);
+    return () => {
+      window.removeEventListener('resize', updateViewportOrientation);
+      window.removeEventListener('orientationchange', updateViewportOrientation);
+    };
+  }, []);
 
   // Reader GUI controls
   const [zoomPercent, setZoomPercent] = useState<number>(100);
@@ -114,26 +139,25 @@ export function BookSampleReader() {
 
     host.appendChild(bookEl);
 
-    const isMobile = window.innerWidth < 768;
     const pageFlip = new PageFlip(bookEl, {
       width: 440,
       height: 656,
       size: 'stretch',
-      minWidth: isMobile ? 260 : 300,
-      maxWidth: 520,
-      minHeight: isMobile ? 385 : 445,
-      maxHeight: 775,
+      minWidth: isPortraitViewport ? 1200 : 220,
+      maxWidth: isPortraitViewport ? 1400 : 520,
+      minHeight: 320,
+      maxHeight: isPortraitViewport ? 1400 : 775,
       drawShadow: true,
       maxShadowOpacity: 0.48,
       flippingTime: 780,
-      usePortrait: true,
+      usePortrait: isPortraitViewport,
       showCover: true,
       autoSize: true,
       showPageCorners: true,
       useMouseEvents: true,
       mobileScrollSupport: false,
       swipeDistance: 30,
-      startPage: 0,
+      startPage: Math.max(0, currentPageRef.current - 1),
     });
 
     pageFlip.loadFromHTML(pageNodes);
@@ -176,7 +200,7 @@ export function BookSampleReader() {
       }
       if (host) host.innerHTML = '';
     };
-  }, []);
+  }, [isPortraitViewport]);
 
   const canGoPrev = currentPage > 1;
   const canGoNext =
@@ -299,10 +323,15 @@ export function BookSampleReader() {
         .inkijk-flipbook-stage {
           width: 100%;
           max-width: 960px;
-          height: min(72vh, 690px);
+          height: min(76vh, 880px);
           display: flex;
           align-items: center;
           justify-content: center;
+        }
+        @media (orientation: landscape) {
+          .inkijk-flipbook-stage {
+            height: min(72vh, 690px);
+          }
         }
 
         .inkijk-page {
