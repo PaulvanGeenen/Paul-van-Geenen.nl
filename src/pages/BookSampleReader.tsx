@@ -16,6 +16,10 @@ import {
   ZoomOut,
   RotateCcw,
   BookOpen,
+  Share2,
+  Copy,
+  Check,
+  MessageCircle,
 } from 'lucide-react';
 import { BOOKS } from '../data/books';
 
@@ -84,7 +88,40 @@ export function BookSampleReader() {
   const [theme, setTheme] = useState<ReaderTheme>('day');
   const [showToc, setShowToc] = useState<boolean>(false);
   const [showTypography, setShowTypography] = useState<boolean>(false);
+  const [showShareModal, setShowShareModal] = useState<boolean>(false);
+  const [copiedShareUrl, setCopiedShareUrl] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  const shareSlug = book?.slug ?? 'de-geboorte-van-de-leeuw';
+  const shareUrl = `https://paulvangeenen.nl/inkijkexemplaar/${shareSlug}`;
+  const shareTitle = `Inkijkexemplaar — ${book?.title ?? 'De Geboorte van de Leeuw'}`;
+  const shareText = `Lees het inkijkexemplaar van "${book?.title ?? 'De Geboorte van de Leeuw'}" van Paul van Geenen:`;
+
+  const handleCopyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedShareUrl(true);
+      window.setTimeout(() => setCopiedShareUrl(false), 2200);
+    } catch {
+      // Fallback
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch {
+        // User cancelled or share failed
+      }
+    }
+    handleCopyShareLink();
+  };
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const bookHostRef = useRef<HTMLDivElement | null>(null);
@@ -244,6 +281,7 @@ export function BookSampleReader() {
       } else if (e.key === 'Escape') {
         setShowToc(false);
         setShowTypography(false);
+        setShowShareModal(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -490,6 +528,7 @@ export function BookSampleReader() {
                 onClick={() => {
                   setShowTypography((v) => !v);
                   setShowToc(false);
+                  setShowShareModal(false);
                 }}
                 className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-serif font-bold tracking-tight transition-colors ${
                   showTypography ? 'bg-earth-clay/20 text-earth-clay' : 'hover:bg-black/5'
@@ -498,6 +537,20 @@ export function BookSampleReader() {
               >
                 <span className="text-xs">A</span>
                 <span className="text-sm">A</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowShareModal(true);
+                  setShowToc(false);
+                  setShowTypography(false);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-black/5 transition-colors"
+                title="Deel inkijkexemplaar op socials"
+              >
+                <Share2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Deel</span>
               </button>
 
               <button
@@ -717,6 +770,113 @@ export function BookSampleReader() {
               >
                 Terug naar boekinformatie →
               </Link>
+            </div>
+          )}
+
+          {/* Share Modal */}
+          {showShareModal && (
+            <div
+              onClick={() => setShowShareModal(false)}
+              className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4"
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-md rounded-2xl bg-[#1c1917] text-stone-100 border border-[#c6a26c]/25 shadow-2xl p-6"
+              >
+                <div className="flex items-start justify-between gap-3 pb-4 border-b border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#c6a26c]/15 border border-[#c6a26c]/30 flex items-center justify-center text-[#e0bd82]">
+                      <Share2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-serif text-lg font-semibold leading-tight">
+                        Deel inkijkexemplaar
+                      </h3>
+                      <p className="text-xs text-stone-400">
+                        Directe link met mooie social-preview
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowShareModal(false)}
+                    className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-colors"
+                    aria-label="Sluiten"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Book preview card */}
+                <div className="mt-4 p-3 rounded-xl bg-white/[0.04] border border-white/10 flex items-center gap-3.5">
+                  <img
+                    src={getPageSrc(1)}
+                    alt={book?.title ?? 'De Geboorte van de Leeuw'}
+                    className="w-12 h-16 rounded-md object-cover shadow-md border border-white/15 shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-semibold uppercase tracking-widest text-[#e0bd82]">
+                      Inkijkexemplaar • 37 pagina&apos;s
+                    </span>
+                    <span className="block font-serif font-semibold text-sm text-white truncate mt-0.5">
+                      {book?.title ?? 'De Geboorte van de Leeuw'}
+                    </span>
+                    <span className="block text-xs text-stone-400">
+                      Paul van Geenen • Lion Books Publishing
+                    </span>
+                  </div>
+                </div>
+
+                {/* URL box */}
+                <div className="mt-4">
+                  <span className="block text-[10px] font-semibold uppercase tracking-widest text-stone-400 mb-1.5">
+                    Link naar inkijkexemplaar:
+                  </span>
+                  <div className="px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs font-mono text-[#e0bd82] truncate select-all">
+                    {shareUrl}
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="mt-4 space-y-2.5">
+                  <button
+                    type="button"
+                    onClick={handleCopyShareLink}
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#e0bd82] hover:bg-[#ebd09f] text-stone-950 font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
+                  >
+                    {copiedShareUrl ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Link gekopieerd!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        <span>Kopieer link naar klembord</span>
+                      </>
+                    )}
+                  </button>
+
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#1a472a] hover:bg-[#215935] border border-[#2d7a49]/50 text-[#6ee79b] font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Deel direct via WhatsApp</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={handleNativeShare}
+                    className="w-full py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.11] border border-white/10 text-stone-100 font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Share2 className="w-4 h-4 text-[#e0bd82]" />
+                    <span>Deel via app...</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

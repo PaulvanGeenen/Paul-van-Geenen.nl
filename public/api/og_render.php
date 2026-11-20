@@ -306,4 +306,12 @@ elseif ($pdo && (str_starts_with($path, '/music') || str_starts_with($path, '/@m
     }
 }
 
+// 3. INKIJKEXEMPLAAR (/inkijkexemplaar/<slug>)
+elseif (str_starts_with($path, '/inkijkexemplaar')) {
+    $ogTitle = 'Inkijkexemplaar — De Geboorte van de Leeuw | Paul van Geenen';
+    $ogDesc = 'Lees het inkijkexemplaar van "De Geboorte van de Leeuw" — inclusief proloog en de eerste drie hoofdstukken.';
+    $ogImage = $origin . '/inkijk/de-geboorte-van-de-leeuw/page-01.jpg';
+    $html = applyOgMeta($html, $ogTitle, $ogDesc, $ogImage, $pageUrl);
+}
+
 echo $html;
