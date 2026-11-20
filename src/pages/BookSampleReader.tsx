@@ -176,26 +176,60 @@ export function BookSampleReader() {
 
     host.appendChild(bookEl);
 
-    const pageFlip = new PageFlip(bookEl, {
-      width: 440,
-      height: 656,
-      size: 'stretch',
-      minWidth: isPortraitViewport ? 1200 : 220,
-      maxWidth: isPortraitViewport ? 1400 : 520,
-      minHeight: 320,
-      maxHeight: isPortraitViewport ? 1400 : 775,
-      drawShadow: true,
-      maxShadowOpacity: 0.48,
-      flippingTime: 780,
-      usePortrait: isPortraitViewport,
-      showCover: true,
-      autoSize: true,
-      showPageCorners: true,
-      useMouseEvents: true,
-      mobileScrollSupport: false,
-      swipeDistance: 30,
-      startPage: Math.max(0, currentPageRef.current - 1),
-    });
+    const aspect = 440 / 656;
+    const isSmallScreen = window.innerWidth < 640;
+    const availW = Math.max(240, window.innerWidth - (isSmallScreen ? 20 : 96));
+    const availH = Math.max(340, window.innerHeight - (isSmallScreen ? 135 : 185));
+    const portraitPageW = Math.floor(Math.min(availW, availH * aspect));
+    const portraitPageH = Math.floor(portraitPageW / aspect);
+
+    if (isPortraitViewport) {
+      bookEl.style.width = `${portraitPageW}px`;
+      bookEl.style.height = `${portraitPageH}px`;
+    }
+
+    const pageFlip = new PageFlip(bookEl, isPortraitViewport
+      ? {
+          width: portraitPageW,
+          height: portraitPageH,
+          size: 'fixed',
+          minWidth: portraitPageW,
+          maxWidth: portraitPageW,
+          minHeight: portraitPageH,
+          maxHeight: portraitPageH,
+          drawShadow: true,
+          maxShadowOpacity: 0.45,
+          flippingTime: 700,
+          usePortrait: true,
+          showCover: true,
+          autoSize: false,
+          showPageCorners: true,
+          useMouseEvents: true,
+          mobileScrollSupport: false,
+          swipeDistance: 30,
+          startPage: Math.max(0, currentPageRef.current - 1),
+        }
+      : {
+          width: 440,
+          height: 656,
+          size: 'stretch',
+          minWidth: 220,
+          maxWidth: 520,
+          minHeight: 320,
+          maxHeight: 775,
+          drawShadow: true,
+          maxShadowOpacity: 0.48,
+          flippingTime: 780,
+          usePortrait: false,
+          showCover: true,
+          autoSize: true,
+          showPageCorners: true,
+          useMouseEvents: true,
+          mobileScrollSupport: false,
+          swipeDistance: 30,
+          startPage: Math.max(0, currentPageRef.current - 1),
+        }
+    );
 
     pageFlip.loadFromHTML(pageNodes);
 
