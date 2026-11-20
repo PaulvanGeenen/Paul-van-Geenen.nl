@@ -293,7 +293,7 @@ elseif ($pdo && (str_starts_with($path, '/music') || str_starts_with($path, '/@m
                 $trackTitle = trim((string)$trk['title']);
                 $albumTitle = trim((string)($trk['album_title'] ?? 'SoundTrack'));
                 $ogTitle = "{$trackTitle} — {$albumTitle} | Paul van Geenen";
-                $ogDesc = "Luister naar \"{$trackTitle}\" uit {$albumTitle} van Paul van Geenen.";
+                $ogDesc = "Luister naar \"{$trackTitle}\" uit {$albumTitle}";
                 $ogImage = findTrackCoverUrl(
                     (string)$trk['foldername'],
                     $trackTitle,
