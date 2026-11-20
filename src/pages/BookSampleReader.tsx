@@ -124,8 +124,66 @@ export function BookSampleReader() {
   };
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const bookHostRef = useRef<HTMLDivElement | null>(null);
   const pageFlipRef = useRef<PageFlip | null>(null);
+  const zoomPercentRef = useRef<number>(100);
+  const pinchStartRef = useRef<{ dist: number; zoom: number } | null>(null);
+
+  useEffect(() => {
+    zoomPercentRef.current = zoomPercent;
+  }, [zoomPercent]);
+
+  // Native 2-finger pinch-to-zoom on the reading stage (capture phase so StPageFlip doesn't flip while pinching)
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const getTouchDist = (t: TouchList) =>
+      Math.hypot(t[1].clientX - t[0].clientX, t[1].clientY - t[0].clientY);
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        pinchStartRef.current = {
+          dist: Math.max(10, getTouchDist(e.touches)),
+          zoom: zoomPercentRef.current,
+        };
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchStartRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        const dist = getTouchDist(e.touches);
+        const scaleRatio = dist / pinchStartRef.current.dist;
+        const nextZoom = Math.round(
+          Math.max(85, Math.min(220, pinchStartRef.current.zoom * scaleRatio))
+        );
+        setZoomPercent(nextZoom);
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        pinchStartRef.current = null;
+      }
+    };
+
+    stage.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+    stage.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
+    stage.addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
+    stage.addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true });
+
+    return () => {
+      stage.removeEventListener('touchstart', onTouchStart, { capture: true });
+      stage.removeEventListener('touchmove', onTouchMove, { capture: true });
+      stage.removeEventListener('touchend', onTouchEnd, { capture: true });
+      stage.removeEventListener('touchcancel', onTouchEnd, { capture: true });
+    };
+  }, []);
 
   // Block Ctrl+S / Ctrl+P / Cmd+S / Cmd+P to protect sample pages
   useEffect(() => {
@@ -755,7 +813,10 @@ export function BookSampleReader() {
           )}
 
           {/* Main Book Stage */}
-          <div className="relative flex-1 flex items-center justify-center overflow-auto p-2 sm:p-5 md:p-6">
+          <div
+            ref={stageRef}
+            className="relative flex-1 flex items-center justify-center overflow-auto p-2 sm:p-5 md:p-6"
+          >
             {/* Left / Right page-curl buttons */}
             <button
               type="button"
