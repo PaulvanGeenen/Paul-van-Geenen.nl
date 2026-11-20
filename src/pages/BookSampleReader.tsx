@@ -27,6 +27,7 @@ interface ChapterEntry {
 }
 
 const TOTAL_PAGES = 37;
+const ILLUSTRATION_PAGES = new Set([1, 9, 10, 22, 27, 32, 37]);
 
 const SAMPLE_CHAPTERS: ChapterEntry[] = [
   { title: 'Omslag', page: 1 },
@@ -290,12 +291,22 @@ export function BookSampleReader() {
       ? 'bg-[#e7dcc7]/90 border-stone-400/25 text-stone-800'
       : 'bg-white/85 border-stone-300/60 text-stone-800';
 
-  const pageFilterStyle =
-    theme === 'night'
-      ? { filter: 'invert(0.92) hue-rotate(180deg) contrast(0.94) brightness(0.92)' }
-      : theme === 'sepia'
-      ? { filter: 'sepia(0.28) brightness(0.97) contrast(0.98)' }
-      : undefined;
+  const pageSurfaceClass = theme === 'night' ? 'bg-[#141416]' : 'bg-white';
+
+  const getPageFilterStyle = (page: number | null) => {
+    const isIllustration = page !== null && ILLUSTRATION_PAGES.has(page);
+    if (theme === 'night') {
+      return isIllustration
+        ? { filter: 'brightness(0.84) contrast(1.04)' }
+        : { filter: 'invert(0.92) hue-rotate(180deg) contrast(0.94) brightness(0.92)' };
+    }
+    if (theme === 'sepia') {
+      return isIllustration
+        ? { filter: 'sepia(0.08) brightness(0.96)' }
+        : { filter: 'sepia(0.28) brightness(0.97) contrast(0.98)' };
+    }
+    return undefined;
+  };
 
   const pageLabel = isSpread
     ? leftPage && rightPage
@@ -649,14 +660,14 @@ export function BookSampleReader() {
                   {leftPage !== null && (
                     <div
                       onClick={zoomPercent === 100 ? goPrev : undefined}
-                      className="relative w-1/2 h-full bg-white overflow-hidden cursor-pointer group"
+                      className={`relative w-1/2 h-full ${pageSurfaceClass} overflow-hidden cursor-pointer group`}
                       title={canGoPrev ? 'Klik voor vorige pagina' : undefined}
                     >
                       <img
                         src={getPageSrc(leftPage)}
                         alt={`Pagina ${leftPage}`}
                         draggable={false}
-                        style={pageFilterStyle}
+                        style={getPageFilterStyle(leftPage)}
                         className="w-full h-full object-contain pointer-events-none select-none"
                       />
                       {/* Realistic inner spine shadow */}
@@ -677,14 +688,14 @@ export function BookSampleReader() {
                       onClick={zoomPercent === 100 ? goNext : undefined}
                       className={`relative ${
                         leftPage === null ? 'w-full' : 'w-1/2'
-                      } h-full bg-white overflow-hidden cursor-pointer`}
+                      } h-full ${pageSurfaceClass} overflow-hidden cursor-pointer`}
                       title={canGoNext ? 'Klik voor volgende pagina' : undefined}
                     >
                       <img
                         src={getPageSrc(rightPage)}
                         alt={`Pagina ${rightPage}`}
                         draggable={false}
-                        style={pageFilterStyle}
+                        style={getPageFilterStyle(rightPage)}
                         className="w-full h-full object-contain pointer-events-none select-none"
                       />
                       {leftPage !== null && (
@@ -711,23 +722,23 @@ export function BookSampleReader() {
                       }}
                     >
                       {/* Front of turning leaf */}
-                      <div className="book-leaf-face absolute inset-0 bg-white overflow-hidden shadow-xl">
+                      <div className={`book-leaf-face absolute inset-0 ${pageSurfaceClass} overflow-hidden shadow-xl`}>
                         <img
                           src={getPageSrc(flipSnapshot.front)}
                           alt=""
                           draggable={false}
-                          style={pageFilterStyle}
+                          style={getPageFilterStyle(flipSnapshot.front)}
                           className="w-full h-full object-contain"
                         />
                         <div className="absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-black/20 to-transparent" />
                       </div>
                       {/* Back of turning leaf */}
-                      <div className="book-leaf-back absolute inset-0 bg-white overflow-hidden shadow-xl">
+                      <div className={`book-leaf-back absolute inset-0 ${pageSurfaceClass} overflow-hidden shadow-xl`}>
                         <img
                           src={getPageSrc(flipSnapshot.back)}
                           alt=""
                           draggable={false}
-                          style={pageFilterStyle}
+                          style={getPageFilterStyle(flipSnapshot.back)}
                           className="w-full h-full object-contain"
                         />
                         <div className="absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-black/20 to-transparent" />
@@ -746,12 +757,12 @@ export function BookSampleReader() {
                         opacity: flipDirection === 'next' && flipActive ? 0.25 : 1,
                       }}
                     >
-                      <div className="book-leaf-face absolute inset-0 bg-white overflow-hidden shadow-2xl">
+                      <div className={`book-leaf-face absolute inset-0 ${pageSurfaceClass} overflow-hidden shadow-2xl`}>
                         <img
                           src={getPageSrc(flipSnapshot.front)}
                           alt=""
                           draggable={false}
-                          style={pageFilterStyle}
+                          style={getPageFilterStyle(flipSnapshot.front)}
                           className="w-full h-full object-contain"
                         />
                       </div>
@@ -761,7 +772,7 @@ export function BookSampleReader() {
               ) : (
                 /* SINGLE-PAGE MOBILE / PORTRAIT VIEW */
                 <div
-                  className="relative bg-white shadow-[0_20px_50px_rgba(0,0,0,0.35)] rounded-sm overflow-hidden"
+                  className={`relative ${pageSurfaceClass} shadow-[0_20px_50px_rgba(0,0,0,0.35)] rounded-sm overflow-hidden`}
                   style={{
                     height: 'min(72vh, 640px)',
                     width: 'calc(min(72vh, 640px) * 0.67)',
@@ -781,7 +792,7 @@ export function BookSampleReader() {
                       src={getPageSrc(currentPage)}
                       alt={`Pagina ${currentPage}`}
                       draggable={false}
-                      style={pageFilterStyle}
+                      style={getPageFilterStyle(currentPage)}
                       className="w-full h-full object-contain pointer-events-none select-none"
                     />
                   </div>
