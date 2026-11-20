@@ -92,7 +92,7 @@ function paginateEpubSections(
   const innerW = Math.max(120, pageW - padX * 2);
   const maxContentH = Math.max(140, pageH - padTop - padBottom);
 
-  // Offscreen measuring box with identical typography
+  // Offscreen measuring box with identical typography — MUST have height: auto (not 100%)!
   const measure = document.createElement('div');
   measure.className = 'epub-page-content epub-measure-box';
   measure.style.position = 'fixed';
@@ -101,6 +101,10 @@ function paginateEpubSections(
   measure.style.visibility = 'hidden';
   measure.style.pointerEvents = 'none';
   measure.style.width = `${innerW}px`;
+  measure.style.height = 'auto';
+  measure.style.minHeight = '0';
+  measure.style.maxHeight = 'none';
+  measure.style.overflow = 'visible';
   measure.style.fontSize = `${fontSize}px`;
   measure.style.fontFamily = fontFamilyCss;
   measure.style.lineHeight = '1.62';
