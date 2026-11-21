@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText, ClipboardPaste, HardDrive, Share2 } from 'lucide-react';
+import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, ChevronUp, ChevronDown, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText, ClipboardPaste, HardDrive, Share2 } from 'lucide-react';
 import { convertImageFileToNotebookLmPdf } from '../utils/notebookLmPdf';
 import {
   BOOK_DEFAULT_QR_STYLE,
@@ -1297,15 +1297,42 @@ export function Admin() {
     }
   };
 
-  const handleDeleteHoofdstuk = async (id: string, name: string) => {
-    if (!window.confirm(`Weet je zeker dat je hoofdstuk "${name}" wilt verwijderen?`)) return;
+  // Verwijderen van hoofdstukken is bewust uitgeschakeld om weeskinderen (gekoppelde QR-codes) te voorkomen.
+  // In plaats daarvan kunnen hoofdstukken worden toegevoegd, hernoemd en verplaatst (volgnummer wisselen).
+  const handleMoveHoofdstuk = async (
+    chapter: ChapterAdminData,
+    direction: 'up' | 'down',
+    sortedBookChapters: ChapterAdminData[]
+  ) => {
+    const idx = sortedBookChapters.findIndex((c) => c.id === chapter.id);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= sortedBookChapters.length) return;
+
+    const neighbor = sortedBookChapters[swapIdx];
+    const currentOrder = chapter.volgnummer || idx + 1;
+    const neighborOrder =
+      neighbor.volgnummer && neighbor.volgnummer !== currentOrder
+        ? neighbor.volgnummer
+        : direction === 'up'
+        ? Math.max(1, currentOrder - 1)
+        : currentOrder + 1;
+
     setLoading(true);
     try {
-      await deleteDocOrFirestore(`/api/hoofdstukken/${encodeURIComponent(id)}`, 'hoofdstukken', id);
-      fetchAllData();
+      await saveDocOrFirestore('/api/hoofdstukken', 'hoofdstukken', chapter.id, {
+        boekId: chapter.boekId,
+        volgnummer: neighborOrder,
+        omschrijving: chapter.omschrijving,
+      });
+      await saveDocOrFirestore('/api/hoofdstukken', 'hoofdstukken', neighbor.id, {
+        boekId: neighbor.boekId,
+        volgnummer: currentOrder,
+        omschrijving: neighbor.omschrijving,
+      });
+      await fetchAllData();
     } catch (err) {
       console.error(err);
-      setError('Fout bij verwijderen hoofdstuk.');
+      setError('Fout bij verplaatsen van hoofdstuk.');
     } finally {
       setLoading(false);
     }
@@ -2068,22 +2095,42 @@ export function Admin() {
             .filter((h) => !selectedBookChapterFilter || h.boekId === selectedBookChapterFilter)
             .sort((a, b) => (a.volgnummer || 0) - (b.volgnummer || 0));
 
+          const openAddChapterForSelection = () => {
+            const targetBookId = selectedBookChapterFilter || boeken[0]?.id || '';
+            const chaptersForBook = hoofdstukken.filter((c) => c.boekId === targetBookId);
+            const nextOrder =
+              chaptersForBook.reduce((max, c) => Math.max(max, Number(c.volgnummer) || 0), 0) + 1;
+            setEditingHoofdstuk(null);
+            setNewHoofdstuk({
+              boekId: targetBookId,
+              volgnummer: nextOrder,
+              omschrijving: '',
+            });
+            setIsAddingHoofdstuk(true);
+          };
+
           return (
             <div className="space-y-6">
-              {/* Filter section styled beautifully */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-earth-clay/5 border border-white/10 p-6 rounded-2xl shadow-lg">
-                <div className="flex items-center gap-3">
-                  <BookOpen className="text-earth-gold w-6 h-6 animate-pulse" />
+              {/* Filter & Chapter Maintenance Header */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-earth-clay/5 border border-white/10 p-6 rounded-2xl shadow-lg">
+                <div className="flex items-start gap-3">
+                  <BookOpen className="text-earth-gold w-6 h-6 mt-0.5 shrink-0" />
                   <div>
-                    <h3 className="text-lg font-serif text-white font-medium">Kies een boek om te filteren</h3>
-                    <p className="text-earth-light/40 text-xs font-mono">Toont alleen de hoofdstukken van het geselecteerde boek.</p>
+                    <h3 className="text-lg font-serif text-white font-medium">Hoofdstukken onderhouden per boek</h3>
+                    <p className="text-earth-light/50 text-xs mt-0.5">
+                      Selecteer een boek om hoofdstukken toe te voegen, te bewerken of de volgorde aan te passen.
+                    </p>
+                    <p className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/90">
+                      <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span>Verwijderen is geblokkeerd om weeskinderen bij gekoppelde QR-codes te voorkomen.</span>
+                    </p>
                   </div>
                 </div>
-                <div className="w-full md:w-96">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
                   <select
                     value={selectedBookChapterFilter}
                     onChange={(e) => setSelectedBookChapterFilter(e.target.value)}
-                    className="w-full bg-[#141414] border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-earth-gold cursor-pointer font-serif text-base"
+                    className="w-full sm:w-72 bg-[#141414] border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-earth-gold cursor-pointer font-serif text-base"
                   >
                     <option value="" className="bg-[#141414]">-- Toon alle boeken --</option>
                     {boeken.map((b) => (
@@ -2092,6 +2139,15 @@ export function Admin() {
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={openAddChapterForSelection}
+                    disabled={boeken.length === 0}
+                    className="inline-flex items-center justify-center gap-2 bg-earth-gold hover:bg-earth-gold/90 text-black font-bold text-xs uppercase tracking-wider px-4 py-3 rounded-lg transition-colors whitespace-nowrap disabled:opacity-40"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Nieuw hoofdstuk</span>
+                  </button>
                 </div>
               </div>
 
@@ -2103,19 +2159,22 @@ export function Admin() {
                         <th className="px-6 py-4">Boek</th>
                         <th className="px-6 py-4 w-28">Volgnummer</th>
                         <th className="px-6 py-4">Hoofdstuk Omschrijving</th>
-                        <th className="px-6 py-4 text-right">Acties</th>
+                        <th className="px-6 py-4 w-36">QR-codes</th>
+                        <th className="px-6 py-4 text-right">Onderhoud</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {sortedAndFilteredChapters.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="px-6 py-12 text-center text-earth-light/30">
+                          <td colSpan={5} className="px-6 py-12 text-center text-earth-light/30">
                             Geen hoofdstukken gevonden voor dit filter.
                           </td>
                         </tr>
                       ) : (
-                        sortedAndFilteredChapters.map((h) => {
+                        sortedAndFilteredChapters.map((h, idx) => {
                           const associatedBook = boeken.find(b => b.id === h.boekId);
+                          const linkedQrCount = qrcodes.filter(r => r.hoofdstukId === h.id).length;
+                          const canReorder = Boolean(selectedBookChapterFilter);
                           return (
                             <tr key={h.id} className="hover:bg-white/[0.02] transition-colors">
                               <td className="px-6 py-4 text-earth-light/60 font-medium">
@@ -2127,24 +2186,54 @@ export function Admin() {
                               <td className="px-6 py-4 text-white font-medium">
                                 {h.omschrijving}
                               </td>
-                              <td className="px-6 py-4 text-right space-x-2">
-                                <button
-                                  onClick={() => {
-                                    setEditingHoofdstuk(h);
-                                    setNewHoofdstuk({ boekId: h.boekId, volgnummer: h.volgnummer, omschrijving: h.omschrijving });
-                                    setIsAddingHoofdstuk(true);
-                                  }}
-                                  className="bg-white/5 border border-white/10 hover:border-earth-gold hover:bg-earth-gold hover:text-black hover:scale-105 transition-all text-white text-xs px-3 py-1.5 rounded-full font-bold"
+                              <td className="px-6 py-4">
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono",
+                                    linkedQrCount > 0
+                                      ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-300"
+                                      : "bg-white/5 border border-white/10 text-earth-light/40"
+                                  )}
                                 >
-                                  Bewerken
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteHoofdstuk(h.id, h.omschrijving)}
-                                  className="p-2 text-earth-light/20 hover:text-red-400 transition-colors"
-                                  title="Verwijderen"
-                                >
-                                  <Trash2 className="w-5 h-5 inline" />
-                                </button>
+                                  {linkedQrCount} {linkedQrCount === 1 ? 'QR-code' : 'QR-codes'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                <div className="inline-flex items-center gap-2">
+                                  {canReorder && (
+                                    <div className="inline-flex items-center rounded-lg border border-white/10 bg-black/30 overflow-hidden">
+                                      <button
+                                        type="button"
+                                        disabled={idx === 0}
+                                        onClick={() => handleMoveHoofdstuk(h, 'up', sortedAndFilteredChapters)}
+                                        className="p-1.5 text-earth-light/60 hover:text-earth-gold hover:bg-white/5 disabled:opacity-25 disabled:pointer-events-none transition-colors"
+                                        title="Verplaats omhoog"
+                                      >
+                                        <ChevronUp className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={idx === sortedAndFilteredChapters.length - 1}
+                                        onClick={() => handleMoveHoofdstuk(h, 'down', sortedAndFilteredChapters)}
+                                        className="p-1.5 text-earth-light/60 hover:text-earth-gold hover:bg-white/5 disabled:opacity-25 disabled:pointer-events-none transition-colors border-l border-white/10"
+                                        title="Verplaats omlaag"
+                                      >
+                                        <ChevronDown className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingHoofdstuk(h);
+                                      setNewHoofdstuk({ boekId: h.boekId, volgnummer: h.volgnummer, omschrijving: h.omschrijving });
+                                      setIsAddingHoofdstuk(true);
+                                    }}
+                                    className="bg-white/5 border border-white/10 hover:border-earth-gold hover:bg-earth-gold hover:text-black hover:scale-105 transition-all text-white text-xs px-3.5 py-1.5 rounded-full font-bold"
+                                  >
+                                    Bewerken
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
