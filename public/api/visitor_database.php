@@ -1663,6 +1663,12 @@ if ($action === 'inkijk_view') {
         exit;
     }
 
+    $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    if (preg_match('/bot|crawler|spider|facebookexternalhit|facebot|meta-external|headlesschrome|phantomjs|puppeteer|playwright|lighthouse|whatsapp|linkedinbot|twitterbot|slackbot|discordbot|telegrambot|curl|wget|python-requests/i', $userAgent)) {
+        echo json_encode(["success" => true, "skipped_bot" => true]);
+        exit;
+    }
+
     try {
         ensure_inkijk_table($pdo);
 

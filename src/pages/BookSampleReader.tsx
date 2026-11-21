@@ -529,25 +529,36 @@ export function BookSampleReader() {
       }));
   }, [sections, sectionStartPages]);
 
-  // Track Inkijkexemplaar view (location, date & time) — automatically skips admin devices & admin IPs
+  // Track Inkijkexemplaar view (location, date & time) — skips admin devices, admin IPs, and automated social/crawler bots
   const loggedViewRef = useRef<boolean>(false);
   useEffect(() => {
     if (loggedViewRef.current) return;
-    loggedViewRef.current = true;
-
     if (isOwnAnalyticsIgnored()) return;
 
-    const detectDevice = (ua: string): string => {
-      if (/iphone/i.test(ua)) return 'iPhone';
-      if (/ipad/i.test(ua)) return 'iPad';
-      if (/android/i.test(ua)) return /mobile/i.test(ua) ? 'Android Telefoon' : 'Android Tablet';
-      if (/windows/i.test(ua)) return 'Windows PC';
-      if (/macintosh/i.test(ua)) return 'Mac';
-      if (/linux/i.test(ua)) return 'Linux';
+    const ua = navigator.userAgent || '';
+    const isBot =
+      Boolean((navigator as unknown as { webdriver?: boolean }).webdriver) ||
+      /bot|crawler|spider|facebookexternalhit|facebot|meta-external|headlesschrome|phantomjs|puppeteer|playwright|lighthouse|whatsapp|linkedinbot|twitterbot|slackbot|discordbot|telegrambot|applebot|bingpreview|bytespider|ahrefs|semrush/i.test(
+        ua
+      );
+    if (isBot) return;
+
+    const detectDevice = (agent: string): string => {
+      if (/iphone/i.test(agent)) return 'iPhone';
+      if (/ipad/i.test(agent)) return 'iPad';
+      if (/android/i.test(agent)) return /mobile/i.test(agent) ? 'Android Telefoon' : 'Android Tablet';
+      if (/windows/i.test(agent)) return 'Windows PC';
+      if (/macintosh/i.test(agent)) return 'Mac';
+      if (/linux/i.test(agent)) return 'Linux';
       return 'Computer';
     };
 
-    (async () => {
+    // Wait 3 seconds of actual visible viewing so automated preview/security scanners are ignored
+    const timer = window.setTimeout(async () => {
+      if (loggedViewRef.current) return;
+      if (document.visibilityState === 'hidden') return;
+      loggedViewRef.current = true;
+
       try {
         const geo = await getUserGeoLocation();
         const sessionId = sessionStorage.getItem('boeken_analytics_session_id') || '';
@@ -559,12 +570,16 @@ export function BookSampleReader() {
           country: geo.country || 'Nederland',
           lat: geo.lat ?? null,
           lng: geo.lng ?? null,
-          deviceType: detectDevice(navigator.userAgent),
+          deviceType: detectDevice(ua),
         });
       } catch {
         // Silent fail
       }
-    })();
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [book?.slug, book?.title]);
 
   // Block Ctrl+S / Ctrl+P / Cmd+S / Cmd+P to protect sample content
