@@ -1632,7 +1632,6 @@ if ($action === 'delete_qrcode') {
     exit;
 }
 
-http_response_code(400);
 // =========================================================================
 // 11. INKIJKEXEMPLAAR WEERGAVEN (LOCATIE, DATUM & TIJD — ZONDER BEHEERDER)
 // =========================================================================
@@ -1754,4 +1753,5 @@ if ($action === 'delete_inkijk_view') {
     exit;
 }
 
+http_response_code(400);
 echo json_encode(["success" => false, "error" => "Onbekende actie: {$action}"]);
