@@ -126,9 +126,12 @@ export function Books() {
                         onClick={() => {
                           document.documentElement.requestFullscreen?.().catch(() => {});
                         }}
-                        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-earth-warm/80 hover:text-earth-clay transition-colors border-b border-earth-clay/25 hover:border-earth-clay pb-0.5"
+                        className="group/sample relative inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500/12 via-yellow-400/15 to-amber-500/12 border border-amber-600/35 hover:border-amber-500/70 text-[11px] font-semibold text-earth-dark hover:text-amber-900 shadow-[0_0_12px_rgba(234,179,8,0.22)] hover:shadow-[0_0_20px_rgba(234,179,8,0.45)] transition-all duration-300"
                       >
-                        <BookOpen className="w-3.5 h-3.5 text-earth-clay/80" />
+                        <span className="relative flex items-center justify-center">
+                          <span className="absolute -inset-1.5 rounded-full bg-amber-400/55 blur-[5px] animate-pulse pointer-events-none" />
+                          <BookOpen className="relative w-3.5 h-3.5 text-amber-700 drop-shadow-[0_0_6px_rgba(245,158,11,0.75)]" />
+                        </span>
                         <span>Inkijkexemplaar</span>
                       </Link>
                     )}
