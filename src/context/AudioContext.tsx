@@ -18,8 +18,50 @@ interface AudioContextType {
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
 
+const AMBIENT_MUTED_KEY = 'pv_ambient_muted';
+
+function readStoredAmbientMuted(): boolean {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const val = localStorage.getItem(AMBIENT_MUTED_KEY);
+      if (val === 'true') return true;
+      if (val === 'false') return false;
+    }
+    if (typeof document !== 'undefined') {
+      const m = document.cookie.match(new RegExp(`(^| )${AMBIENT_MUTED_KEY}=([^;]+)`));
+      if (m) return decodeURIComponent(m[2]) === 'true';
+    }
+  } catch {
+    // Ignore storage access errors
+  }
+  return false;
+}
+
+function writeStoredAmbientMuted(muted: boolean): void {
+  const val = muted ? 'true' : 'false';
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(AMBIENT_MUTED_KEY, val);
+    }
+  } catch {
+    // Ignore storage access errors
+  }
+  try {
+    if (typeof document !== 'undefined') {
+      const maxAge = 365 * 24 * 60 * 60; // 1 jaar
+      document.cookie = `${AMBIENT_MUTED_KEY}=${val}; path=/; max-age=${maxAge}; SameSite=Lax`;
+    }
+  } catch {
+    // Ignore cookie errors
+  }
+}
+
 export function AudioProvider({ children }: { children: React.ReactNode }) {
-  const [ambientMuted, setAmbientMuted] = useState(false);
+  const [ambientMuted, setAmbientMutedState] = useState<boolean>(() => readStoredAmbientMuted());
+  const setAmbientMuted = React.useCallback((muted: boolean) => {
+    setAmbientMutedState(muted);
+    writeStoredAmbientMuted(muted);
+  }, []);
   const [videoMuted, setVideoMuted] = useState(true);
   const [isAmbientPlaying, setIsAmbientPlaying] = useState(true);
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
@@ -111,7 +153,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }, interval);
   };
 
-  const toggleAmbientMute = React.useCallback(() => setAmbientMuted(prev => !prev), []);
+  const toggleAmbientMute = React.useCallback(() => {
+    setAmbientMutedState(prev => {
+      const next = !prev;
+      writeStoredAmbientMuted(next);
+      return next;
+    });
+  }, []);
   const toggleVideoMute = React.useCallback(() => setVideoMuted(prev => !prev), []);
 
   const reportVideoAudioStatus = React.useCallback((isPlaying: boolean) => {
