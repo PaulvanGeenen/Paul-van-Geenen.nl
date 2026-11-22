@@ -53,6 +53,8 @@ interface QRCodeData {
   song: string;
   artist: string;
   spotifyLink: string;
+  nextUrl?: string;
+  nextButtonLabel?: string;
   qrImage?: string;
   album?: string;
 }
@@ -429,6 +431,8 @@ export function Admin() {
     song: '',
     artist: '',
     spotifyLink: '',
+    nextUrl: '',
+    nextButtonLabel: '',
     qrImage: ''
   });
 
@@ -4282,15 +4286,49 @@ export function Admin() {
                     )}
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-earth-light/40 text-xs font-bold uppercase tracking-wider mb-2">Spotify Link</label>
+                    <label className="block text-earth-light/40 text-xs font-bold uppercase tracking-wider mb-2">Spotify / Media Link</label>
                     <input 
-                      type="url"
+                      type="text"
                       required
                       value={newItem.spotifyLink}
                       onChange={(e) => setNewItem({ ...newItem, spotifyLink: e.target.value.trim() })}
                       className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-earth-gold font-mono text-sm"
-                      placeholder="https://open.spotify.com/track/..."
+                      placeholder="https://paulvangeenen.nl/music?track=... of https://open.spotify.com/track/..."
                     />
+                  </div>
+                </div>
+
+                {/* ROW 4B: VERVOLG-ACTIE NA AFLOOP (bijv. Inkijkexemplaar na Achterflap MP4) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-earth-gold/[0.04] border border-earth-gold/20 rounded-xl p-4">
+                  <div>
+                    <label className="block text-earth-gold/90 text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Vervolg-URL na afloop (optioneel)
+                    </label>
+                    <input
+                      type="text"
+                      value={newItem.nextUrl || ''}
+                      onChange={(e) => setNewItem({ ...newItem, nextUrl: e.target.value.trim() })}
+                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3.5 py-2.5 text-white focus:outline-none focus:border-earth-gold font-mono text-xs"
+                      placeholder="/inkijkexemplaar/de-geboorte-van-de-leeuw"
+                    />
+                    <p className="text-[10px] text-earth-light/45 mt-1">
+                      Na de fade-out aan het einde van het nummer/filmpje verschijnt onderaan de knop naar deze link.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-earth-gold/90 text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Tekst op vervolgknop (optioneel)
+                    </label>
+                    <input
+                      type="text"
+                      value={newItem.nextButtonLabel || ''}
+                      onChange={(e) => setNewItem({ ...newItem, nextButtonLabel: e.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3.5 py-2.5 text-white focus:outline-none focus:border-earth-gold text-xs"
+                      placeholder="Klik hier voor het inkijkexemplaar"
+                    />
+                    <p className="text-[10px] text-earth-light/45 mt-1">
+                      Laat leeg voor automatische tekst (&ldquo;Klik hier voor het inkijkexemplaar&rdquo; / &ldquo;Ga verder&rdquo;).
+                    </p>
                   </div>
                 </div>
 

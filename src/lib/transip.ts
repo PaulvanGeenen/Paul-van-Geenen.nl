@@ -67,15 +67,23 @@ export async function transipQuerySql<T = any>(sql: string): Promise<T[] | null>
 
 export async function getQrCodeByCode(code: string): Promise<any | null> {
   const clean = code.trim().toUpperCase().replace(/'/g, "''");
-  const sql = `SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage FROM qrcodes WHERE UPPER(id) = '${clean}' LIMIT 1;`;
+  const res = await transipGet<{ success: boolean; qrcode?: any }>(`get_qrcode&code=${encodeURIComponent(clean)}`);
+  if (res?.success && res.qrcode) return res.qrcode;
+  const sql = `SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, next_url AS nextUrl, next_button_label AS nextButtonLabel, qr_image AS qrImage FROM qrcodes WHERE UPPER(id) = '${clean}' LIMIT 1;`;
   const rows = await transipQuerySql(sql);
-  return rows && rows.length > 0 ? rows[0] : null;
+  if (rows && rows.length > 0) return rows[0];
+  const fallback = await transipQuerySql(`SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage FROM qrcodes WHERE UPPER(id) = '${clean}' LIMIT 1;`);
+  return fallback && fallback.length > 0 ? fallback[0] : null;
 }
 
 export async function getTransipQrCodes(): Promise<any[]> {
-  const sql = `SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage FROM qrcodes ORDER BY id ASC;`;
+  const res = await transipGet<{ success: boolean; qrcodes?: any[] }>('get_qrcodes');
+  if (res?.success && Array.isArray(res.qrcodes)) return res.qrcodes;
+  const sql = `SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, next_url AS nextUrl, next_button_label AS nextButtonLabel, qr_image AS qrImage FROM qrcodes ORDER BY id ASC;`;
   const rows = await transipQuerySql(sql);
-  return rows || [];
+  if (rows !== null) return rows;
+  const fallback = await transipQuerySql(`SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage FROM qrcodes ORDER BY id ASC;`);
+  return fallback || [];
 }
 
 export async function getTransipBoeken(): Promise<any[]> {
@@ -129,6 +137,9 @@ export async function deleteTransipHoofdstuk(id: string): Promise<boolean> {
 }
 
 export async function saveTransipQrCode(item: any): Promise<boolean> {
+  const apiRes = await transipPost<{ success: boolean }>('save_qrcode', item);
+  if (apiRes?.success) return true;
+
   const cleanId = (item.id || '').toUpperCase().trim().replace(/'/g, "''");
   const cleanBoekId = (item.boekId || '').replace(/'/g, "''");
   const cleanBoekTitel = (item.boekTitel || '').replace(/'/g, "''");
@@ -137,10 +148,12 @@ export async function saveTransipQrCode(item: any): Promise<boolean> {
   const cleanSong = (item.song || '').replace(/'/g, "''");
   const cleanArtist = (item.artist || '').replace(/'/g, "''");
   const cleanSpotifyLink = (item.spotifyLink || '').replace(/'/g, "''");
+  const cleanNextUrl = (item.nextUrl || '').trim().replace(/'/g, "''");
+  const cleanNextLabel = (item.nextButtonLabel || '').trim().replace(/'/g, "''");
   const cleanQrImage = (item.qrImage || '').replace(/'/g, "''");
 
-  const sql = `INSERT INTO qrcodes (id, boek_id, boek_titel, hoofdstuk_id, hoofdstuk, song, artist, spotify_link, qr_image)
-    VALUES ('${cleanId}', '${cleanBoekId}', '${cleanBoekTitel}', '${cleanHoofdstukId}', '${cleanHoofdstuk}', '${cleanSong}', '${cleanArtist}', '${cleanSpotifyLink}', '${cleanQrImage}')
+  const sql = `INSERT INTO qrcodes (id, boek_id, boek_titel, hoofdstuk_id, hoofdstuk, song, artist, spotify_link, next_url, next_button_label, qr_image)
+    VALUES ('${cleanId}', '${cleanBoekId}', '${cleanBoekTitel}', '${cleanHoofdstukId}', '${cleanHoofdstuk}', '${cleanSong}', '${cleanArtist}', '${cleanSpotifyLink}', ${cleanNextUrl ? `'${cleanNextUrl}'` : 'NULL'}, ${cleanNextLabel ? `'${cleanNextLabel}'` : 'NULL'}, '${cleanQrImage}')
     ON DUPLICATE KEY UPDATE 
       boek_id = VALUES(boek_id),
       boek_titel = VALUES(boek_titel),
@@ -149,6 +162,8 @@ export async function saveTransipQrCode(item: any): Promise<boolean> {
       song = VALUES(song),
       artist = VALUES(artist),
       spotify_link = VALUES(spotify_link),
+      next_url = VALUES(next_url),
+      next_button_label = VALUES(next_button_label),
       qr_image = VALUES(qr_image);`;
   const res = await transipQuerySql(sql);
   return res !== null;

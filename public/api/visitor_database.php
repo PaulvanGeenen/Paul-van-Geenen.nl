@@ -1520,10 +1520,26 @@ if ($action === 'delete_hoofdstuk') {
 // ==========================================
 // 11. ACTIES: QR CODES BEHEER
 // ==========================================
+function ensure_qrcode_next_columns($pdo) {
+    try {
+        $col1 = $pdo->query("SHOW COLUMNS FROM `qrcodes` LIKE 'next_url'")->fetchAll();
+        if (empty($col1)) {
+            $pdo->exec("ALTER TABLE `qrcodes` ADD COLUMN `next_url` VARCHAR(500) NULL AFTER `spotify_link`");
+        }
+        $col2 = $pdo->query("SHOW COLUMNS FROM `qrcodes` LIKE 'next_button_label'")->fetchAll();
+        if (empty($col2)) {
+            $pdo->exec("ALTER TABLE `qrcodes` ADD COLUMN `next_button_label` VARCHAR(120) NULL AFTER `next_url`");
+        }
+    } catch (Throwable $e) {
+        // Ignore if table doesn't exist yet or already migrated
+    }
+}
+
 if ($action === 'get_qrcodes') {
     try {
+        ensure_qrcode_next_columns($pdo);
         $stmt = $pdo->query("
-            SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage 
+            SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, next_url AS nextUrl, next_button_label AS nextButtonLabel, qr_image AS qrImage 
             FROM qrcodes 
             ORDER BY id ASC
         ");
@@ -1544,8 +1560,9 @@ if ($action === 'get_qrcode') {
         exit;
     }
     try {
+        ensure_qrcode_next_columns($pdo);
         $stmt = $pdo->prepare("
-            SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, qr_image AS qrImage 
+            SELECT id, boek_id AS boekId, boek_titel AS boekTitel, hoofdstuk_id AS hoofdstukId, hoofdstuk, song, artist, spotify_link AS spotifyLink, next_url AS nextUrl, next_button_label AS nextButtonLabel, qr_image AS qrImage 
             FROM qrcodes 
             WHERE UPPER(id) = ? 
             LIMIT 1
@@ -1574,6 +1591,8 @@ if ($action === 'save_qrcode') {
     $song = trim($input['song'] ?? ($_POST['song'] ?? ''));
     $artist = trim($input['artist'] ?? ($_POST['artist'] ?? ''));
     $spotifyLink = trim($input['spotifyLink'] ?? ($input['spotify_link'] ?? ($_POST['spotifyLink'] ?? '')));
+    $nextUrl = trim((string)($input['nextUrl'] ?? ($input['next_url'] ?? ($_POST['nextUrl'] ?? ''))));
+    $nextButtonLabel = trim((string)($input['nextButtonLabel'] ?? ($input['next_button_label'] ?? ($_POST['nextButtonLabel'] ?? ''))));
     $qrImage = $input['qrImage'] ?? ($input['qr_image'] ?? ($_POST['qrImage'] ?? ''));
 
     if (empty($id) || empty($hoofdstuk) || empty($song) || empty($artist) || empty($spotifyLink)) {
@@ -1583,9 +1602,10 @@ if ($action === 'save_qrcode') {
     }
 
     try {
+        ensure_qrcode_next_columns($pdo);
         $stmt = $pdo->prepare("
-            INSERT INTO qrcodes (id, boek_id, boek_titel, hoofdstuk_id, hoofdstuk, song, artist, spotify_link, qr_image)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO qrcodes (id, boek_id, boek_titel, hoofdstuk_id, hoofdstuk, song, artist, spotify_link, next_url, next_button_label, qr_image)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE 
                 boek_id = VALUES(boek_id),
                 boek_titel = VALUES(boek_titel),
@@ -1594,9 +1614,23 @@ if ($action === 'save_qrcode') {
                 song = VALUES(song),
                 artist = VALUES(artist),
                 spotify_link = VALUES(spotify_link),
+                next_url = VALUES(next_url),
+                next_button_label = VALUES(next_button_label),
                 qr_image = VALUES(qr_image)
         ");
-        $stmt->execute([$id, $boekId, $boekTitel, $hoofdstukId, $hoofdstuk, $song, $artist, $spotifyLink, $qrImage]);
+        $stmt->execute([
+            $id,
+            $boekId,
+            $boekTitel,
+            $hoofdstukId,
+            $hoofdstuk,
+            $song,
+            $artist,
+            $spotifyLink,
+            $nextUrl !== '' ? $nextUrl : null,
+            $nextButtonLabel !== '' ? $nextButtonLabel : null,
+            $qrImage
+        ]);
         echo json_encode(["success" => true, "id" => $id]);
     } catch (PDOException $e) {
         http_response_code(500);

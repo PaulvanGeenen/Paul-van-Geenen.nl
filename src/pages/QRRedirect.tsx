@@ -81,8 +81,27 @@ async function recordScan(redirectCode: string, data: any, book: BookType | null
  * Resolve the target URL on our own music player with single=1 & ceremony=done
  * so the player opens the track in single mode (plays 1x and stops) right after our 5s cover reveal!
  */
-function resolvePlayerTargetUrl(rawLink: string, songTitle: string, matchedTrackId?: string): string {
-  const cleanLink = (rawLink || '').trim();
+function resolvePlayerTargetUrl(
+  rawLink: string,
+  songTitle: string,
+  matchedTrackId?: string,
+  nextUrl?: string,
+  nextButtonLabel?: string
+): string {
+  // Support both dedicated nextUrl field AND optional pipe syntax "primaryUrl | nextUrl"
+  const pipeParts = (rawLink || '').split('|').map((s) => s.trim()).filter(Boolean);
+  const cleanLink = pipeParts[0] || '';
+  const effectiveNextUrl = (nextUrl || '').trim() || pipeParts[1] || '';
+  const effectiveNextLabel = (nextButtonLabel || '').trim();
+
+  const appendNextParams = (urlObj: URL) => {
+    if (effectiveNextUrl) {
+      urlObj.searchParams.set('nextUrl', effectiveNextUrl);
+      if (effectiveNextLabel) {
+        urlObj.searchParams.set('nextLabel', effectiveNextLabel);
+      }
+    }
+  };
 
   try {
     if (cleanLink) {
@@ -100,6 +119,7 @@ function resolvePlayerTargetUrl(rawLink: string, songTitle: string, matchedTrack
         if (songTitle && songTitle !== 'Onbekend nummer') {
           urlObj.searchParams.set('songTitle', songTitle.trim());
         }
+        appendNextParams(urlObj);
         return `${urlObj.pathname}${urlObj.search}`;
       }
     }
@@ -107,11 +127,16 @@ function resolvePlayerTargetUrl(rawLink: string, songTitle: string, matchedTrack
 
   const targetIdentifier = matchedTrackId || (songTitle && songTitle !== 'Onbekend nummer' ? songTitle.trim() : '');
   if (targetIdentifier) {
-    const titleQuery =
-      songTitle && songTitle !== 'Onbekend nummer'
-        ? `&songTitle=${encodeURIComponent(songTitle.trim())}`
-        : '';
-    return `/music?track=${encodeURIComponent(targetIdentifier)}&single=1&ceremony=done&qr=1${titleQuery}`;
+    const urlObj = new URL('/music', window.location.origin);
+    urlObj.searchParams.set('track', targetIdentifier);
+    urlObj.searchParams.set('single', '1');
+    urlObj.searchParams.set('ceremony', 'done');
+    urlObj.searchParams.set('qr', '1');
+    if (songTitle && songTitle !== 'Onbekend nummer') {
+      urlObj.searchParams.set('songTitle', songTitle.trim());
+    }
+    appendNextParams(urlObj);
+    return `${urlObj.pathname}${urlObj.search}`;
   }
 
   if (cleanLink) {
@@ -351,7 +376,9 @@ export function QRRedirect() {
           const targetUrl = resolvePlayerTargetUrl(
             data.spotifyLink || '',
             songTitle,
-            matchedTrack?.id || matchedTrack?.folderName || songTitle
+            matchedTrack?.id || matchedTrack?.folderName || songTitle,
+            data.nextUrl || '',
+            data.nextButtonLabel || ''
           );
 
           if (active) {

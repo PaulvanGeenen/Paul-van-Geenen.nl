@@ -5335,6 +5335,52 @@ export function Music() {
               )}
             </AnimatePresence>
 
+            {/* Follow-up Action Button after fade-out (e.g. "Klik hier voor het inkijkexemplaar" configured on QR code) */}
+            <AnimatePresence>
+              {showEndedSoundtrackCover && (() => {
+                const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+                const nextUrl = (urlParams.get('nextUrl') || '').trim();
+                if (!nextUrl) return null;
+                const customLabel = (urlParams.get('nextLabel') || '').trim();
+                const buttonLabel =
+                  customLabel ||
+                  (nextUrl.toLowerCase().includes('inkijk')
+                    ? 'Klik hier voor het inkijkexemplaar'
+                    : 'Ga verder →');
+
+                const handleOpenNextUrl = (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  if (nextUrl.toLowerCase().includes('/inkijkexemplaar')) {
+                    document.documentElement.requestFullscreen?.().catch(() => {});
+                  }
+                  if (nextUrl.startsWith('/')) {
+                    navigate(nextUrl);
+                  } else {
+                    window.location.href = nextUrl;
+                  }
+                };
+
+                return (
+                  <motion.div
+                    initial={{ opacity: 0, y: 24, scale: 0.94 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 20, scale: 0.94 }}
+                    transition={{ duration: 0.45 }}
+                    className="fixed bottom-10 left-0 right-0 z-50 flex flex-col items-center gap-3 px-4"
+                  >
+                    <button
+                      type="button"
+                      onClick={handleOpenNextUrl}
+                      className="flex items-center gap-2.5 px-6 py-3.5 rounded-full bg-earth-gold hover:bg-amber-400 text-black text-sm sm:text-base font-bold border border-white/30 shadow-[0_10px_40px_rgba(212,175,55,0.65)] cursor-pointer transition-all hover:scale-105 active:scale-95 animate-bounce"
+                    >
+                      <BookOpen className="w-4 h-4 text-black shrink-0" />
+                      <span>{buttonLabel}</span>
+                    </button>
+                  </motion.div>
+                );
+              })()}
+            </AnimatePresence>
+
             {/* Subtitle Settings Popover Modal (Centered overlay, responsive and perfectly sized across mobile, desktop, iPad, landscape) */}
             <AnimatePresence>
               {showSubtitleMenu && (
