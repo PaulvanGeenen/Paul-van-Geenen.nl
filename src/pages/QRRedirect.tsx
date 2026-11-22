@@ -105,6 +105,14 @@ function resolvePlayerTargetUrl(
 
   try {
     if (cleanLink) {
+      // Direct MP4 / WebM video URL -> open in dedicated fullscreen QrVideoPlayer with fade-out + follow-up button
+      if (/\.(mp4|webm|mov)(\?|$)/i.test(cleanLink)) {
+        const videoPlayerUrl = new URL('/video-play', window.location.origin);
+        videoPlayerUrl.searchParams.set('src', cleanLink);
+        appendNextParams(videoPlayerUrl);
+        return `${videoPlayerUrl.pathname}${videoPlayerUrl.search}`;
+      }
+
       const isInternalMusic =
         cleanLink.startsWith('/music') ||
         cleanLink.startsWith('/@music') ||

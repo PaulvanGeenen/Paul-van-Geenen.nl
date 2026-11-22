@@ -67,7 +67,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     const p = window.location.pathname.toLowerCase();
-    return p.startsWith('/beheer') || p.startsWith('/inkijkexemplaar');
+    return p.startsWith('/beheer') || p.startsWith('/inkijkexemplaar') || p.startsWith('/video-play');
   });
   const [masterVolume, setMasterVolume] = useState(0.4);
   const [currentAmbientVolume, setCurrentAmbientVolume] = useState(0.4);

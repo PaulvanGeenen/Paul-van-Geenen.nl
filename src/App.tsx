@@ -45,6 +45,7 @@ const Music = lazy(() => import('./pages/Music').then(module => ({ default: modu
 const QRRedirect = lazy(() => import('./pages/QRRedirect').then(module => ({ default: module.QRRedirect })));
 const Privacy = lazy(() => import('./pages/Privacy').then(module => ({ default: module.Privacy })));
 const BookSampleReader = lazy(() => import('./pages/BookSampleReader').then(module => ({ default: module.BookSampleReader })));
+const QrVideoPlayer = lazy(() => import('./pages/QrVideoPlayer').then(module => ({ default: module.QrVideoPlayer })));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -122,7 +123,7 @@ function AdminAmbientSuppressor() {
   const { setIsAdminRoute } = useAudio();
   useEffect(() => {
     const p = pathname.toLowerCase();
-    setIsAdminRoute(p.startsWith('/beheer') || p.startsWith('/inkijkexemplaar'));
+    setIsAdminRoute(p.startsWith('/beheer') || p.startsWith('/inkijkexemplaar') || p.startsWith('/video-play'));
   }, [pathname, setIsAdminRoute]);
   return null;
 }
@@ -148,6 +149,7 @@ function LayoutWrapper({ children }: LayoutWrapperProps) {
   const isRedirectPage = 
     pathname.toLowerCase().startsWith('/music') ||
     pathname.toLowerCase().startsWith('/inkijkexemplaar') ||
+    pathname.toLowerCase().startsWith('/video-play') ||
     pathname.startsWith('/qr/') || 
     pathname.startsWith('/qrcode/') || 
     pathname.startsWith('/scan/') ||
@@ -190,6 +192,7 @@ export default function App() {
                 <Route path="/boeken" element={<Books />} />
                 <Route path="/boeken/:slug" element={<BookDetail />} />
                 <Route path="/inkijkexemplaar/:slug" element={<BookSampleReader />} />
+                <Route path="/video-play" element={<QrVideoPlayer />} />
                 <Route path="/de-echo" element={<Echo />} />
                 <Route path="/fragmenten" element={<Fragments />} />
                 <Route path="/over-mij" element={<About />} />
