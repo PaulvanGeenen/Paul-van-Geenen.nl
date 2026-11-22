@@ -486,6 +486,18 @@ export function QRRedirect() {
     setVisualStage('book-in');
     requestTabletFullscreenSilently();
 
+    // Direct MP4 video QR codes (e.g. ACHTERFLAP): show the book cover cleanly, then go STRAIGHT to the video player (skip lock & soundtrack cover)
+    if (songInfo.targetUrl.startsWith('/video-play')) {
+      const tGoVideo = setTimeout(() => {
+        triggerPlayerRedirect(songInfo.targetUrl);
+      }, 2600);
+      sequenceTimersRef.current = [tGoVideo];
+      return () => {
+        sequenceTimersRef.current.forEach(t => clearTimeout(t));
+        sequenceTimersRef.current = [];
+      };
+    }
+
     if (!wasAlreadyUnlocked) {
       const tLockIn = setTimeout(() => {
         setVisualStage('lock-locked');

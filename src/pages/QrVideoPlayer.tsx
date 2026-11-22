@@ -17,25 +17,27 @@ export function QrVideoPlayer() {
       : 'Ga verder →');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [needsTapToStart, setNeedsTapToStart] = useState<boolean>(false);
+  // Start with button visible until <video> actually fires 'playing' so mobile browsers never get stuck on a black screen
+  const [needsTapToStart, setNeedsTapToStart] = useState<boolean>(true);
   const [phase, setPhase] = useState<'playing' | 'fadingOut' | 'ended'>('playing');
+
+  // Append #t=0.001 so iOS Safari / Android Chrome decode and display the first video frame (Ginger) immediately instead of black
+  const videoSrcWithFirstFrame = src
+    ? src.includes('#')
+      ? src
+      : `${src}#t=0.001`
+    : '';
 
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid || !src) return;
 
-    vid.currentTime = 0;
     vid.muted = false;
     const playPromise = vid.play();
     if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          setNeedsTapToStart(false);
-        })
-        .catch(() => {
-          // Mobile browser blocked autoplay with sound — show familiar bottom tap button
-          setNeedsTapToStart(true);
-        });
+      playPromise.catch(() => {
+        setNeedsTapToStart(true);
+      });
     }
   }, [src]);
 
@@ -43,10 +45,20 @@ export function QrVideoPlayer() {
     const vid = videoRef.current;
     if (!vid) return;
     vid.muted = false;
-    vid.play().then(() => {
-      setNeedsTapToStart(false);
-      setPhase('playing');
-    }).catch(() => {});
+    if (vid.currentTime < 0.05) {
+      try {
+        vid.currentTime = 0;
+      } catch {}
+    }
+    vid
+      .play()
+      .then(() => {
+        setNeedsTapToStart(false);
+        setPhase('playing');
+      })
+      .catch(() => {
+        setNeedsTapToStart(true);
+      });
   };
 
   const handleVideoEnded = () => {
@@ -105,9 +117,13 @@ export function QrVideoPlayer() {
       {/* Fullscreen Video with smooth fade-out at the end */}
       <video
         ref={videoRef}
-        src={src}
+        src={videoSrcWithFirstFrame}
         playsInline
         preload="auto"
+        onPlaying={() => {
+          setNeedsTapToStart(false);
+          setPhase('playing');
+        }}
         onEnded={handleVideoEnded}
         onClick={needsTapToStart ? handleTapToStart : undefined}
         className={`max-h-screen max-w-full w-auto h-auto object-contain transition-opacity duration-1000 ease-in-out ${
