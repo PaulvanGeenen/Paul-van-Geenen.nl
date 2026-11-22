@@ -73,6 +73,38 @@ function parseSrtContent(raw: string): SubtitleCue[] {
   return cues.sort((a, b) => a.start - b.start);
 }
 
+function buildAutoCuesFromPlainText(raw: string, durationSec: number): SubtitleCue[] {
+  const cleaned = raw.trim();
+  if (!cleaned) return [];
+  const duration = durationSec > 2 ? durationSec : 60;
+  const chunks = cleaned
+    .replace(/\r\n/g, '\n')
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (chunks.length === 0) return [];
+
+  const totalWeight = chunks.reduce((acc, c) => acc + Math.max(8, c.length), 0);
+  let cursor = 0.3;
+  const usableDuration = Math.max(2, duration - 0.6);
+
+  return chunks.map((chunk) => {
+    const share = (Math.max(8, chunk.length) / totalWeight) * usableDuration;
+    const start = cursor;
+    const end = Math.min(duration, start + Math.max(1.2, share - 0.08));
+    cursor = start + share;
+    return { start, end, text: chunk };
+  });
+}
+
+function resolveSubtitleCues(raw: string, durationSec: number): SubtitleCue[] {
+  if (!raw.trim()) return [];
+  if (raw.includes('-->')) {
+    return parseSrtContent(raw);
+  }
+  return buildAutoCuesFromPlainText(raw, durationSec);
+}
+
 function wrapCanvasLines(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -177,6 +209,11 @@ export function AudioVideoStudio() {
   const [subtitleSize, setSubtitleSize] = useState<SubtitleSizePreset>('md');
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
 
+  // Automatically recompute timed cues whenever text OR audioDuration changes (works for both SRT and plain pasted text!)
+  useEffect(() => {
+    setSubtitleCues(resolveSubtitleCues(subtitleText, audioDuration));
+  }, [subtitleText, audioDuration]);
+
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
   const [isRendering, setIsRendering] = useState<boolean>(false);
   const [renderProgress, setRenderProgress] = useState<number>(0);
@@ -244,7 +281,6 @@ export function AudioVideoStudio() {
     try {
       const content = await file.text();
       setSubtitleText(content);
-      setSubtitleCues(parseSrtContent(content));
     } catch {
       setStatusError('Kon het ondertitelbestand (.srt) niet lezen.');
     }
@@ -252,42 +288,18 @@ export function AudioVideoStudio() {
 
   const handleSubtitleTextChange = (value: string) => {
     setSubtitleText(value);
-    setSubtitleCues(parseSrtContent(value));
   };
 
-  // Auto-generate timed SRT cues from plain spoken text distributed across audioDuration
+  // Convert plain text into explicit editable SRT timestamps in the textarea
   const handleAutoTimePlainText = () => {
     const raw = subtitleText.trim();
-    if (!raw) return;
-    if (raw.includes('-->')) {
-      setSubtitleCues(parseSrtContent(raw));
-      return;
-    }
-    const duration = audioDuration > 2 ? audioDuration : 60;
-    // Split into natural sentence/line chunks
-    const chunks = raw
-      .replace(/\r\n/g, '\n')
-      .split(/\n+|(?<=[.!?])\s+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (chunks.length === 0) return;
-
-    const totalWeight = chunks.reduce((acc, c) => acc + Math.max(8, c.length), 0);
-    let cursor = 0.4;
-    const usableDuration = Math.max(2, duration - 0.8);
-    const srtBlocks: string[] = [];
-
-    chunks.forEach((chunk, i) => {
-      const share = (Math.max(8, chunk.length) / totalWeight) * usableDuration;
-      const start = cursor;
-      const end = Math.min(duration, start + Math.max(1.2, share - 0.12));
-      cursor = start + share;
-      srtBlocks.push(`${i + 1}\n${formatSrtTime(start)} --> ${formatSrtTime(end)}\n${chunk}`);
-    });
-
-    const generated = srtBlocks.join('\n\n');
+    if (!raw || raw.includes('-->')) return;
+    const cues = buildAutoCuesFromPlainText(raw, audioDuration);
+    if (cues.length === 0) return;
+    const generated = cues
+      .map((c, i) => `${i + 1}\n${formatSrtTime(c.start)} --> ${formatSrtTime(c.end)}\n${c.text}`)
+      .join('\n\n');
     setSubtitleText(generated);
-    setSubtitleCues(parseSrtContent(generated));
   };
 
   // Draw one frame (image cover-fit + optional vignette + live/idle symmetrical audio waveform + synchronized subtitles)
