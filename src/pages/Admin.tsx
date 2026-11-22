@@ -4262,26 +4262,20 @@ export function Admin() {
                     <input 
                       type="text"
                       required
-                      readOnly={!!newItem.qrImage && (qrImageOrigin === 'manual' || qrImageOrigin === 'existing')}
                       value={newItem.id}
                       onChange={(e) => setNewItem({ ...newItem, id: e.target.value.toUpperCase().trim() })}
-                      className={cn(
-                        "w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-earth-gold font-mono text-base uppercase transition-all",
-                        (newItem.qrImage && (qrImageOrigin === 'manual' || qrImageOrigin === 'existing'))
-                          ? "opacity-55 select-none cursor-not-allowed bg-black/20 border-white/5 focus:border-white/5"
-                          : ""
-                      )}
+                      className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-earth-gold font-mono text-base uppercase transition-all"
                       placeholder="H01S1"
                     />
-                    {newItem.qrImage && (qrImageOrigin === 'manual' || qrImageOrigin === 'existing') && (
-                      <p className="text-earth-gold/80 text-[10px] mt-2 leading-snug font-medium flex items-start gap-1">
-                        <span className="shrink-0 text-amber-500">⚠️</span>
-                        <span>Vergrendeld omdat er een gekoppelde QR-afbeelding is. Verwijder deze of klik op &quot;Genereer opnieuw&quot; om de code aan te passen.</span>
-                      </p>
-                    )}
-                    {qrImageOrigin === 'auto' && newItem.id && (
+                    {newItem.id && (
                       <p className="text-emerald-400/80 text-[10px] mt-2 leading-snug font-mono truncate">
                         → {buildRedirectQrUrl(newItem.id)}
+                      </p>
+                    )}
+                    {editingQRCode && newItem.id && newItem.id !== editingQRCode.id && (
+                      <p className="text-earth-gold/80 text-[10px] mt-1 leading-snug font-medium flex items-start gap-1">
+                        <span className="shrink-0 text-amber-500">ℹ️</span>
+                        <span>Code aangepast — klik eventueel op &quot;Auto-genereer&quot; om ook de QR-afbeelding bij te werken.</span>
                       </p>
                     )}
                   </div>
