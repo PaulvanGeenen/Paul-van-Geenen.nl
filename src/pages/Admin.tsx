@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, ChevronUp, ChevronDown, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText, ClipboardPaste, HardDrive, Share2 } from 'lucide-react';
+import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, ChevronUp, ChevronDown, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText, ClipboardPaste, HardDrive, Share2, Film } from 'lucide-react';
 import { convertImageFileToNotebookLmPdf } from '../utils/notebookLmPdf';
 import {
   BOOK_DEFAULT_QR_STYLE,
@@ -40,6 +40,7 @@ import { MusicDbManager } from '../components/MusicDbManager';
 import { TrackLocksManager } from '../components/TrackLocksManager';
 import { LogboekManager } from '../components/LogboekManager';
 import { InkijkStatsManager } from '../components/InkijkStatsManager';
+import { AudioVideoStudio } from '../components/AudioVideoStudio';
 import { FileManager } from '../components/FileManager';
 import { SocialComposer } from '../components/SocialComposer';
 
@@ -260,7 +261,7 @@ const isListenInAlbumOrBook = (
 export function Admin() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social' | 'inkijk'>('qrcodes');
+  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social' | 'inkijk' | 'video_studio'>('qrcodes');
   
   // Data lists
   const [qrcodes, setQrcodes] = useState<QRCodeData[]>([]);
@@ -1756,6 +1757,19 @@ export function Admin() {
           >
             <BookOpen className="w-4 h-4 text-emerald-400" />
             Inkijkexemplaar
+          </button>
+
+          <button
+            onClick={() => setActiveTab('video_studio')}
+            className={cn(
+              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
+              activeTab === 'video_studio'
+                ? "border-earth-gold text-white"
+                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
+            )}
+          >
+            <Film className="w-4 h-4 text-amber-400" />
+            Audio → Video Studio
           </button>
         </div>
 
@@ -4094,6 +4108,11 @@ export function Admin() {
         {/* TAB 12: INKIJKEXEMPLAAR STATISTIEKEN */}
         {activeTab === 'inkijk' && !loading && (
           <InkijkStatsManager />
+        )}
+
+        {/* TAB 13: AUDIO -> VIDEO STUDIO */}
+        {activeTab === 'video_studio' && !loading && (
+          <AudioVideoStudio />
         )}
 
         <p className="mt-8 text-center text-earth-light/20 text-xs">
