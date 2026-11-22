@@ -687,13 +687,15 @@ export function BookSampleReader() {
       maxHeight: pageH,
       drawShadow: true,
       maxShadowOpacity: 0.45,
-      flippingTime: 720,
+      flippingTime: isPortraitViewport ? 520 : 720,
       usePortrait: isPortraitViewport,
       showCover: true,
       autoSize: false,
-      showPageCorners: true,
-      useMouseEvents: true,
-      disableFlipByClick: true,
+      showPageCorners: !isPortraitViewport,
+      // On mobile portrait, disable StPageFlip's internal touch/click handlers (which conflict with tap zones
+      // and cause flipPrev/bouncing bugs on iOS Safari) and handle both tap & swipe cleanly in React.
+      useMouseEvents: !isPortraitViewport,
+      disableFlipByClick: false,
       mobileScrollSupport: false,
       swipeDistance: 25,
       startPage: restoredPage - 1,
@@ -719,9 +721,14 @@ export function BookSampleReader() {
       }
     });
 
+    pageFlip.on('changeState', (e) => {
+      isFlippingRef.current = e.data === 'flipping';
+    });
+
     pageFlipRef.current = pageFlip;
 
     return () => {
+      isFlippingRef.current = false;
       pageFlipRef.current = null;
       try {
         pageFlip.destroy();
@@ -738,33 +745,49 @@ export function BookSampleReader() {
     ? currentPage === 1 || currentPage + 1 < totalPages
     : currentPage < totalPages;
 
+  const isFlippingRef = useRef<boolean>(false);
+
   const goNext = useCallback(() => {
-    if (!canGoNext) return;
-    pageFlipRef.current?.flipNext('bottom');
-  }, [canGoNext]);
+    const pf = pageFlipRef.current;
+    if (!pf || isFlippingRef.current) return;
+    const curIdx = pf.getCurrentPageIndex();
+    const maxIdx = Math.max(0, totalPages - 1);
+    const hasNext = isSpread ? curIdx === 0 || curIdx + 2 <= maxIdx : curIdx < maxIdx;
+    if (!hasNext) return;
+    pf.flipNext('bottom');
+  }, [totalPages, isSpread]);
 
   const goPrev = useCallback(() => {
-    if (!canGoPrev) return;
-    pageFlipRef.current?.flipPrev('bottom');
-  }, [canGoPrev]);
+    const pf = pageFlipRef.current;
+    if (!pf || isFlippingRef.current) return;
+    if (pf.getCurrentPageIndex() <= 0) return;
+    pf.flipPrev('bottom');
+  }, []);
 
-  // Tap-to-turn zones on the book stage (left 38% = previous page, right 38% = next page)
-  // Uses pointerdown/pointerup capture so both effortless tapping AND drag/swipe page-curl work together.
+  // Unified mobile portrait tap & swipe handler on the book stage:
+  // - Tap right 40% -> next page, tap left 40% -> previous page, center 20% neutral
+  // - Swipe left (>= 32px) -> next page, swipe right (>= 32px) -> previous page
+  // Because StPageFlip's useMouseEvents is disabled in portrait mode, there is zero event conflict or page bouncing.
   const tapStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const lastTapFlipRef = useRef<number>(0);
 
-  const handleStagePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    const target = e.target as HTMLElement | null;
-    if (target?.closest('a, button, input, select, textarea')) {
-      tapStartRef.current = null;
-      return;
-    }
-    tapStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now() };
-  }, []);
+  const handleStagePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!isPortraitViewport) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('a, button, input, select, textarea')) {
+        tapStartRef.current = null;
+        return;
+      }
+      tapStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now() };
+    },
+    [isPortraitViewport]
+  );
 
   const handleStagePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!isPortraitViewport) return;
       const start = tapStartRef.current;
       tapStartRef.current = null;
       if (!start) return;
@@ -774,35 +797,47 @@ export function BookSampleReader() {
 
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
       const dt = Date.now() - start.time;
 
-      // Only treat as a tap if the finger/cursor barely moved and was released quickly (not a swipe/drag)
-      if (Math.hypot(dx, dy) > 14 || dt > 380) return;
-
       if (showToc || showTypography || showShareModal) {
-        setShowToc(false);
-        setShowTypography(false);
+        if (Math.hypot(dx, dy) <= 16) {
+          setShowToc(false);
+          setShowTypography(false);
+        }
         return;
       }
 
       const now = Date.now();
-      if (now - lastTapFlipRef.current < 260) return;
+      if (now - lastTapFlipRef.current < 320) return;
 
-      const stageEl = stageRef.current;
-      if (!stageEl) return;
-      const rect = stageEl.getBoundingClientRect();
-      if (rect.width <= 0) return;
+      // 1. Horizontal swipe
+      if (absDx >= 32 && absDx > absDy * 1.2 && dt < 700) {
+        lastTapFlipRef.current = now;
+        if (dx < 0) goNext();
+        else goPrev();
+        return;
+      }
 
-      const ratio = (e.clientX - rect.left) / rect.width;
-      if (ratio >= 0.62) {
-        lastTapFlipRef.current = now;
-        goNext();
-      } else if (ratio <= 0.38) {
-        lastTapFlipRef.current = now;
-        goPrev();
+      // 2. Clean tap on left or right side of the screen
+      if (Math.hypot(dx, dy) <= 18 && dt < 420) {
+        const stageEl = stageRef.current;
+        if (!stageEl) return;
+        const rect = stageEl.getBoundingClientRect();
+        if (rect.width <= 0) return;
+
+        const ratio = (e.clientX - rect.left) / rect.width;
+        if (ratio >= 0.6) {
+          lastTapFlipRef.current = now;
+          goNext();
+        } else if (ratio <= 0.4) {
+          lastTapFlipRef.current = now;
+          goPrev();
+        }
       }
     },
-    [goNext, goPrev, showToc, showTypography, showShareModal]
+    [isPortraitViewport, goNext, goPrev, showToc, showTypography, showShareModal]
   );
 
   const jumpToPage = useCallback(
@@ -1496,7 +1531,9 @@ export function BookSampleReader() {
             ref={stageRef}
             onPointerDownCapture={handleStagePointerDown}
             onPointerUpCapture={handleStagePointerUp}
-            className="relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-5 md:p-6"
+            className={`relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-5 md:p-6 ${
+              isPortraitViewport ? 'touch-none select-none' : ''
+            }`}
           >
             {/* Left / Right page-curl arrows */}
             <button
