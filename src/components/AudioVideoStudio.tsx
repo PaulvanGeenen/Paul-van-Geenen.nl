@@ -12,10 +12,87 @@ import {
   AlertCircle,
   Loader2,
   Volume2,
+  Subtitles,
+  Wand2,
 } from 'lucide-react';
 
 type AspectPreset = '9:16' | '1:1' | '16:9';
 type WaveStyle = 'bars' | 'mirror' | 'wave';
+type SubtitleSizePreset = 'sm' | 'md' | 'lg';
+
+interface SubtitleCue {
+  start: number;
+  end: number;
+  text: string;
+}
+
+function parseSrtTime(ts: string): number {
+  const m = ts.trim().match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+  if (!m) return 0;
+  return (
+    parseInt(m[1], 10) * 3600 +
+    parseInt(m[2], 10) * 60 +
+    parseInt(m[3], 10) +
+    parseInt(m[4].padEnd(3, '0').slice(0, 3), 10) / 1000
+  );
+}
+
+function formatSrtTime(sec: number): string {
+  const s = Math.max(0, sec);
+  const hh = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = Math.floor(s % 60);
+  const ms = Math.round((s - Math.floor(s)) * 1000);
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')},${String(Math.min(999, ms)).padStart(3, '0')}`;
+}
+
+function parseSrtContent(raw: string): SubtitleCue[] {
+  const cleaned = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (!cleaned) return [];
+
+  const blocks = cleaned.split(/\n{2,}/);
+  const cues: SubtitleCue[] = [];
+  for (const block of blocks) {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    const timeLineIdx = lines.findIndex((l) => l.includes('-->'));
+    if (timeLineIdx === -1) continue;
+    const [startStr, endStr] = lines[timeLineIdx].split('-->');
+    const text = lines
+      .slice(timeLineIdx + 1)
+      .join(' ')
+      .replace(/<[^>]+>/g, '')
+      .trim();
+    if (text) {
+      cues.push({
+        start: parseSrtTime(startStr),
+        end: parseSrtTime(endStr),
+        text,
+      });
+    }
+  }
+  return cues.sort((a, b) => a.start - b.start);
+}
+
+function wrapCanvasLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (ctx.measureText(test).width <= maxWidth) {
+      current = test;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
 
 interface FormatConfig {
   label: string;
@@ -96,6 +173,9 @@ export function AudioVideoStudio() {
   const [waveHeightPct, setWaveHeightPct] = useState<number>(16);
   const [showBottomFade, setShowBottomFade] = useState<boolean>(true);
   const [captionText, setCaptionText] = useState<string>('');
+  const [subtitleText, setSubtitleText] = useState<string>('');
+  const [subtitleSize, setSubtitleSize] = useState<SubtitleSizePreset>('md');
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
 
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
   const [isRendering, setIsRendering] = useState<boolean>(false);
@@ -159,7 +239,58 @@ export function AudioVideoStudio() {
     });
   };
 
-  // Draw one frame (image cover-fit + optional vignette + live/idle audio waveform)
+  const handleSrtPick = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const content = await file.text();
+      setSubtitleText(content);
+      setSubtitleCues(parseSrtContent(content));
+    } catch {
+      setStatusError('Kon het ondertitelbestand (.srt) niet lezen.');
+    }
+  };
+
+  const handleSubtitleTextChange = (value: string) => {
+    setSubtitleText(value);
+    setSubtitleCues(parseSrtContent(value));
+  };
+
+  // Auto-generate timed SRT cues from plain spoken text distributed across audioDuration
+  const handleAutoTimePlainText = () => {
+    const raw = subtitleText.trim();
+    if (!raw) return;
+    if (raw.includes('-->')) {
+      setSubtitleCues(parseSrtContent(raw));
+      return;
+    }
+    const duration = audioDuration > 2 ? audioDuration : 60;
+    // Split into natural sentence/line chunks
+    const chunks = raw
+      .replace(/\r\n/g, '\n')
+      .split(/\n+|(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (chunks.length === 0) return;
+
+    const totalWeight = chunks.reduce((acc, c) => acc + Math.max(8, c.length), 0);
+    let cursor = 0.4;
+    const usableDuration = Math.max(2, duration - 0.8);
+    const srtBlocks: string[] = [];
+
+    chunks.forEach((chunk, i) => {
+      const share = (Math.max(8, chunk.length) / totalWeight) * usableDuration;
+      const start = cursor;
+      const end = Math.min(duration, start + Math.max(1.2, share - 0.12));
+      cursor = start + share;
+      srtBlocks.push(`${i + 1}\n${formatSrtTime(start)} --> ${formatSrtTime(end)}\n${chunk}`);
+    });
+
+    const generated = srtBlocks.join('\n\n');
+    setSubtitleText(generated);
+    setSubtitleCues(parseSrtContent(generated));
+  };
+
+  // Draw one frame (image cover-fit + optional vignette + live/idle symmetrical audio waveform + synchronized subtitles)
   const drawFrame = useCallback(
     (
       ctx: CanvasRenderingContext2D,
@@ -167,7 +298,8 @@ export function AudioVideoStudio() {
       h: number,
       freqData: Uint8Array | null,
       timeData: Uint8Array | null,
-      idlePhase: number
+      idlePhase: number,
+      currentTimeSec: number
     ) => {
       // Background
       ctx.fillStyle = '#0e0d0c';
@@ -200,34 +332,84 @@ export function AudioVideoStudio() {
         ctx.fillText('Kies een afbeelding en audio-bestand', w / 2, h / 2);
       }
 
-      // Subtle bottom dark gradient so the soundwave is always crisp & readable
+      // Subtle bottom dark gradient so the soundwave & spoken text are always crisp & readable
       if (showBottomFade) {
-        const grad = ctx.createLinearGradient(0, h * 0.62, 0, h);
+        const fadeStart = subtitleCues.length > 0 ? h * 0.52 : h * 0.62;
+        const grad = ctx.createLinearGradient(0, fadeStart, 0, h);
         grad.addColorStop(0, 'rgba(10, 9, 8, 0)');
-        grad.addColorStop(0.55, 'rgba(10, 9, 8, 0.55)');
-        grad.addColorStop(1, 'rgba(10, 9, 8, 0.88)');
+        grad.addColorStop(0.5, 'rgba(10, 9, 8, 0.58)');
+        grad.addColorStop(1, 'rgba(10, 9, 8, 0.9)');
         ctx.fillStyle = grad;
-        ctx.fillRect(0, h * 0.62, w, h * 0.38);
+        ctx.fillRect(0, fadeStart, w, h - fadeStart);
       }
 
-      // Optional caption above wave
+      // Wave geometry
       const waveAreaH = Math.round((h * waveHeightPct) / 100);
-      const bottomMargin = Math.round(h * 0.055);
+      const bottomMargin = Math.round(h * 0.05);
       const waveCenterY = h - bottomMargin - waveAreaH / 2;
+      const waveTopY = waveCenterY - waveAreaH / 2;
 
-      if (captionText.trim()) {
+      // Active spoken subtitle (from SRT cues) OR preview of first cue when idle
+      let activeSubtitle = '';
+      if (subtitleCues.length > 0) {
+        if (freqData) {
+          const match = subtitleCues.find(
+            (c) => currentTimeSec >= c.start && currentTimeSec <= c.end
+          );
+          if (match) activeSubtitle = match.text;
+        } else {
+          activeSubtitle = subtitleCues[0].text;
+        }
+      }
+
+      if (activeSubtitle) {
+        const sizeScale = subtitleSize === 'sm' ? 0.031 : subtitleSize === 'lg' ? 0.045 : 0.038;
+        const fontPx = Math.max(22, Math.round(Math.min(w, h) * sizeScale));
+        const lineH = Math.round(fontPx * 1.35);
+        const maxTextW = Math.round(w * 0.84);
+
+        ctx.save();
+        ctx.font = `600 ${fontPx}px Georgia, 'Palatino Linotype', serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const lines = wrapCanvasLines(ctx, activeSubtitle, maxTextW);
+        const boxPadX = Math.round(fontPx * 0.7);
+        const boxPadY = Math.round(fontPx * 0.45);
+        const blockH = lines.length * lineH;
+        const maxLineW = Math.max(...lines.map((l) => ctx.measureText(l).width), 0);
+        const boxW = Math.min(w * 0.9, maxLineW + boxPadX * 2);
+        const boxH = blockH + boxPadY * 2;
+        const boxBottomY = waveTopY - Math.round(h * 0.025);
+        const boxTopY = boxBottomY - boxH;
+
+        // Soft glass pill behind spoken text for crisp readability
+        ctx.fillStyle = 'rgba(12, 10, 9, 0.58)';
+        ctx.beginPath();
+        ctx.roundRect((w - boxW) / 2, boxTopY, boxW, boxH, Math.round(fontPx * 0.45));
+        ctx.fill();
+
+        ctx.fillStyle = '#fffaf0';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+        ctx.shadowBlur = 10;
+        lines.forEach((line, idx) => {
+          const y = boxTopY + boxPadY + lineH * (idx + 0.5);
+          ctx.fillText(line, w / 2, y);
+        });
+        ctx.restore();
+      } else if (captionText.trim()) {
         ctx.save();
         ctx.font = `italic 600 ${Math.round(w * 0.034)}px Georgia, serif`;
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255, 250, 240, 0.92)';
         ctx.shadowColor = 'rgba(0,0,0,0.75)';
         ctx.shadowBlur = 12;
-        ctx.fillText(captionText.trim(), w / 2, waveCenterY - waveAreaH / 2 - Math.round(h * 0.024));
+        ctx.fillText(captionText.trim(), w / 2, waveTopY - Math.round(h * 0.024));
         ctx.restore();
       }
 
-      // Draw waveform / equalizer
-      const sidePad = Math.round(w * 0.08);
+      // Draw waveform / equalizer (symmetrical across full width, tuned for human speech & music)
+      const sidePad = Math.round(w * 0.075);
       const waveW = w - sidePad * 2;
       const barCount = 56;
       const smoothed = smoothedBarsRef.current;
@@ -247,7 +429,6 @@ export function AudioVideoStudio() {
         for (let i = 0; i <= points; i++) {
           const t = i / points;
           const x = sidePad + t * waveW;
-          // Smooth envelope so edges taper gracefully to zero
           const env = Math.sin(t * Math.PI);
           let sample = 0;
           if (timeData && timeData.length > 0) {
@@ -266,26 +447,31 @@ export function AudioVideoStudio() {
       } else {
         const gap = Math.max(3, Math.round(waveW / (barCount * 3.1)));
         const barW = Math.max(3, (waveW - gap * (barCount - 1)) / barCount);
+        const centerIdx = (barCount - 1) / 2;
 
         for (let i = 0; i < barCount; i++) {
           const t = i / (barCount - 1);
-          const env = 0.28 + 0.72 * Math.sin(t * Math.PI);
+          const distFromCenter = Math.abs(i - centerIdx) / centerIdx; // 0 at center, 1 at edges
+          const env = 0.34 + 0.66 * Math.cos((distFromCenter * Math.PI) / 2);
           let targetVal = 0.08;
 
           if (freqData && freqData.length > 0) {
-            // Focus on voice/music frequencies (lower 65% of FFT spectrum)
-            const bin = Math.floor(Math.pow(t, 1.15) * (freqData.length * 0.58));
-            const raw = freqData[Math.min(freqData.length - 1, bin)] / 255;
-            targetVal = Math.max(0.06, Math.min(1, raw * 1.18 * env));
+            // Map active speech/music range (bins 1..38) symmetrically from center outward so BOTH left & right dance evenly!
+            const maxSpeechBin = Math.min(freqData.length - 1, 38);
+            const bin = 1 + Math.floor(Math.pow(distFromCenter, 0.92) * (maxSpeechBin - 1));
+            const raw = freqData[bin] / 255;
+            // Subtle organic shimmer between left & right mirror bars so it feels alive, not robotic
+            const shimmer = 0.92 + 0.16 * Math.sin(i * 1.7 + idlePhase * 2.2);
+            targetVal = Math.max(0.06, Math.min(1, raw * 1.25 * env * shimmer));
           } else {
             targetVal =
               (0.14 +
-                0.18 * Math.abs(Math.sin(i * 0.35 + idlePhase)) +
-                0.1 * Math.abs(Math.cos(i * 0.6 - idlePhase * 0.7))) *
+                0.2 * Math.abs(Math.sin(distFromCenter * 5.5 + idlePhase)) +
+                0.1 * Math.abs(Math.cos(i * 0.55 - idlePhase * 0.7))) *
               env;
           }
 
-          smoothed[i] = smoothed[i] * 0.62 + targetVal * 0.38;
+          smoothed[i] = smoothed[i] * 0.6 + targetVal * 0.4;
           const barH = Math.max(barW, smoothed[i] * waveAreaH);
           const x = sidePad + i * (barW + gap);
           const radius = barW / 2;
@@ -307,7 +493,7 @@ export function AudioVideoStudio() {
 
       ctx.restore();
     },
-    [imageEl, showBottomFade, waveHeightPct, captionText, waveColor, waveStyle]
+    [imageEl, showBottomFade, waveHeightPct, captionText, waveColor, waveStyle, subtitleCues, subtitleSize]
   );
 
   // Redraw static/idle preview whenever settings or image change while not playing/rendering
@@ -320,7 +506,7 @@ export function AudioVideoStudio() {
     canvas.height = cfg.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    drawFrame(ctx, cfg.width, cfg.height, null, null, 0.8);
+    drawFrame(ctx, cfg.width, cfg.height, null, null, 0.8, 0);
   }, [aspect, drawFrame, isPreviewing, isRendering]);
 
   const stopAll = useCallback(() => {
@@ -441,7 +627,15 @@ export function AudioVideoStudio() {
       const loop = () => {
         analyser.getByteFrequencyData(freqData);
         analyser.getByteTimeDomainData(timeData);
-        drawFrame(ctx, cfg.width, cfg.height, freqData, timeData, performance.now() / 600);
+        drawFrame(
+          ctx,
+          cfg.width,
+          cfg.height,
+          freqData,
+          timeData,
+          performance.now() / 600,
+          audio.currentTime
+        );
 
         if (record && audio.duration > 0) {
           setRenderProgress(Math.min(99, Math.round((audio.currentTime / audio.duration) * 100)));
@@ -685,6 +879,78 @@ export function AudioVideoStudio() {
                 <span>Subtiele donkere schaduw onderaan (zodat de golf beter zichtbaar is)</span>
               </label>
             </div>
+          </div>
+
+          {/* 3. Gesproken tekst / Ondertiteling (.srt of plakken) */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-earth-gold font-mono flex items-center gap-2">
+                <Subtitles className="w-3.5 h-3.5" />
+                3. Gesproken tekst (Ondertiteling)
+              </h3>
+              {subtitleCues.length > 0 && (
+                <span className="text-[11px] font-mono text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full">
+                  {subtitleCues.length} regels actief
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/30 border border-white/10 hover:border-earth-gold/60 text-xs text-white transition-colors">
+                <Subtitles className="w-3.5 h-3.5 text-earth-gold" />
+                <span>Laad .srt bestand</span>
+                <input
+                  type="file"
+                  accept=".srt,.txt"
+                  className="hidden"
+                  onChange={(e) => handleSrtPick(e.target.files?.[0])}
+                />
+              </label>
+
+              <button
+                type="button"
+                disabled={isRendering || !subtitleText.trim() || subtitleText.includes('-->')}
+                onClick={handleAutoTimePlainText}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-earth-gold/15 hover:bg-earth-gold/25 border border-earth-gold/30 text-xs text-earth-gold font-medium transition-colors disabled:opacity-35"
+                title="Zet losse zinnen automatisch om in getimede SRT-regels over de duur van de audio"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                <span>Verdeel tekst over audio</span>
+              </button>
+
+              <div className="ml-auto flex items-center gap-1 bg-black/30 border border-white/10 rounded-lg p-0.5">
+                {(
+                  [
+                    { id: 'sm', label: 'S' },
+                    { id: 'md', label: 'M' },
+                    { id: 'lg', label: 'L' },
+                  ] as const
+                ).map((sz) => (
+                  <button
+                    key={sz.id}
+                    type="button"
+                    disabled={isRendering}
+                    onClick={() => setSubtitleSize(sz.id)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                      subtitleSize === sz.id
+                        ? 'bg-earth-gold text-black'
+                        : 'text-earth-light/60 hover:text-white'
+                    }`}
+                  >
+                    {sz.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <textarea
+              rows={4}
+              value={subtitleText}
+              disabled={isRendering}
+              onChange={(e) => handleSubtitleTextChange(e.target.value)}
+              placeholder="Plak hier een .srt-bestand OF typ/plak gewoon de gesproken tekst (elke zin op een nieuwe regel) en klik op 'Verdeel tekst over audio'..."
+              className="w-full bg-black/30 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs font-mono text-white placeholder:text-earth-light/30 focus:outline-none focus:border-earth-gold resize-y"
+            />
           </div>
 
           {/* 3. Actions */}
