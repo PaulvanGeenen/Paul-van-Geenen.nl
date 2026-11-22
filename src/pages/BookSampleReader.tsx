@@ -693,8 +693,9 @@ export function BookSampleReader() {
       autoSize: false,
       showPageCorners: true,
       useMouseEvents: true,
+      disableFlipByClick: true,
       mobileScrollSupport: false,
-      swipeDistance: 30,
+      swipeDistance: 25,
       startPage: restoredPage - 1,
     });
 
@@ -746,6 +747,63 @@ export function BookSampleReader() {
     if (!canGoPrev) return;
     pageFlipRef.current?.flipPrev('bottom');
   }, [canGoPrev]);
+
+  // Tap-to-turn zones on the book stage (left 38% = previous page, right 38% = next page)
+  // Uses pointerdown/pointerup capture so both effortless tapping AND drag/swipe page-curl work together.
+  const tapStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const lastTapFlipRef = useRef<number>(0);
+
+  const handleStagePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('a, button, input, select, textarea')) {
+      tapStartRef.current = null;
+      return;
+    }
+    tapStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now() };
+  }, []);
+
+  const handleStagePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const start = tapStartRef.current;
+      tapStartRef.current = null;
+      if (!start) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('a, button, input, select, textarea')) return;
+
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      const dt = Date.now() - start.time;
+
+      // Only treat as a tap if the finger/cursor barely moved and was released quickly (not a swipe/drag)
+      if (Math.hypot(dx, dy) > 14 || dt > 380) return;
+
+      if (showToc || showTypography || showShareModal) {
+        setShowToc(false);
+        setShowTypography(false);
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastTapFlipRef.current < 260) return;
+
+      const stageEl = stageRef.current;
+      if (!stageEl) return;
+      const rect = stageEl.getBoundingClientRect();
+      if (rect.width <= 0) return;
+
+      const ratio = (e.clientX - rect.left) / rect.width;
+      if (ratio >= 0.62) {
+        lastTapFlipRef.current = now;
+        goNext();
+      } else if (ratio <= 0.38) {
+        lastTapFlipRef.current = now;
+        goPrev();
+      }
+    },
+    [goNext, goPrev, showToc, showTypography, showShareModal]
+  );
 
   const jumpToPage = useCallback(
     (page: number) => {
@@ -1436,6 +1494,8 @@ export function BookSampleReader() {
           {/* Main Book Stage */}
           <div
             ref={stageRef}
+            onPointerDownCapture={handleStagePointerDown}
+            onPointerUpCapture={handleStagePointerUp}
             className="relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-5 md:p-6"
           >
             {/* Left / Right page-curl arrows */}
