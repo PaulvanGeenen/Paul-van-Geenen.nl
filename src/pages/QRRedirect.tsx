@@ -389,6 +389,28 @@ export function QRRedirect() {
             data.nextButtonLabel || ''
           );
 
+          // If this QR points to a direct MP4/WebM video, start warming up the video buffer immediately
+          // while the 2.6-second book cover is shown so iPhone/Safari starts playback instantly.
+          if (targetUrl.startsWith('/video-play?')) {
+            try {
+              const parsedTarget = new URL(targetUrl, window.location.origin);
+              const rawVideoSrc = parsedTarget.searchParams.get('src');
+              if (rawVideoSrc) {
+                const preloadLink = document.createElement('link');
+                preloadLink.rel = 'preload';
+                preloadLink.as = 'video';
+                preloadLink.href = rawVideoSrc;
+                document.head.appendChild(preloadLink);
+
+                // Warm up the first ~512 KB into the browser HTTP cache (faststart moov atom + opening frames)
+                fetch(rawVideoSrc, {
+                  headers: { Range: 'bytes=0-524287' },
+                  mode: 'cors',
+                }).catch(() => {});
+              }
+            } catch {}
+          }
+
           if (active) {
             setWasAlreadyUnlocked(alreadyOpen);
             setMatchedBook(foundBook);

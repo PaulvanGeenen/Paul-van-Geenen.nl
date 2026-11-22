@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Volume2, BookOpen, RotateCcw } from 'lucide-react';
+import { Volume2, BookOpen, RotateCcw, Loader2 } from 'lucide-react';
 
 export function QrVideoPlayer() {
   const [searchParams] = useSearchParams();
@@ -19,6 +19,7 @@ export function QrVideoPlayer() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Start with button visible until <video> actually fires 'playing' so mobile browsers never get stuck on a black screen
   const [needsTapToStart, setNeedsTapToStart] = useState<boolean>(true);
+  const [isBuffering, setIsBuffering] = useState<boolean>(false);
   const [phase, setPhase] = useState<'playing' | 'fadingOut' | 'ended'>('playing');
 
   // Append #t=0.001 so iOS Safari / Android Chrome decode and display the first video frame (Ginger) immediately instead of black
@@ -37,6 +38,7 @@ export function QrVideoPlayer() {
     if (playPromise !== undefined) {
       playPromise.catch(() => {
         setNeedsTapToStart(true);
+        setIsBuffering(false);
       });
     }
   }, [src]);
@@ -44,6 +46,7 @@ export function QrVideoPlayer() {
   const handleTapToStart = () => {
     const vid = videoRef.current;
     if (!vid) return;
+    setIsBuffering(true);
     vid.muted = false;
     if (vid.currentTime < 0.05) {
       try {
@@ -54,9 +57,11 @@ export function QrVideoPlayer() {
       .play()
       .then(() => {
         setNeedsTapToStart(false);
+        setIsBuffering(false);
         setPhase('playing');
       })
       .catch(() => {
+        setIsBuffering(false);
         setNeedsTapToStart(true);
       });
   };
@@ -122,7 +127,16 @@ export function QrVideoPlayer() {
         preload="auto"
         onPlaying={() => {
           setNeedsTapToStart(false);
+          setIsBuffering(false);
           setPhase('playing');
+        }}
+        onWaiting={() => {
+          if (!needsTapToStart) {
+            setIsBuffering(true);
+          }
+        }}
+        onCanPlay={() => {
+          setIsBuffering(false);
         }}
         onEnded={handleVideoEnded}
         onClick={needsTapToStart ? handleTapToStart : undefined}
@@ -133,7 +147,7 @@ export function QrVideoPlayer() {
 
       {/* Familiar bottom golden button if mobile browser requires tap to start with sound */}
       <AnimatePresence>
-        {needsTapToStart && phase === 'playing' && (
+        {(needsTapToStart || isBuffering) && phase === 'playing' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -143,10 +157,22 @@ export function QrVideoPlayer() {
             <button
               type="button"
               onClick={handleTapToStart}
-              className="flex items-center gap-2.5 px-6 py-3.5 rounded-full bg-earth-gold hover:bg-amber-400 text-black text-sm sm:text-base font-bold border border-white/30 shadow-[0_10px_40px_rgba(212,175,55,0.65)] cursor-pointer transition-all hover:scale-105 active:scale-95 animate-bounce"
+              disabled={isBuffering}
+              className={`flex items-center gap-2.5 px-6 py-3.5 rounded-full bg-earth-gold hover:bg-amber-400 text-black text-sm sm:text-base font-bold border border-white/30 shadow-[0_10px_40px_rgba(212,175,55,0.65)] cursor-pointer transition-all hover:scale-105 active:scale-95 ${
+                isBuffering ? 'opacity-90' : 'animate-bounce'
+              }`}
             >
-              <Volume2 className="w-4 h-4 text-black shrink-0" />
-              <span>Tik hier om af te spelen</span>
+              {isBuffering ? (
+                <>
+                  <Loader2 className="w-4 h-4 text-black shrink-0 animate-spin" />
+                  <span>Video laden...</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-4 h-4 text-black shrink-0" />
+                  <span>Tik hier om af te spelen</span>
+                </>
+              )}
             </button>
           </motion.div>
         )}
