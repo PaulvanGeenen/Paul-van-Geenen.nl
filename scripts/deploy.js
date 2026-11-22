@@ -199,6 +199,50 @@ async function deploy() {
       console.log(`✅ ${inkijkUploaded} van ${inkijkFiles.length} inkijkexemplaar-pagina's gesynchroniseerd!`);
     }
 
+    // 3d. Upload videos (dist/videos/**)
+    const localVideosDir = path.join(DIST_DIR, 'videos');
+    const remoteVideosDir = `${REMOTE_ROOT}/videos`;
+    if (fs.existsSync(localVideosDir)) {
+      const videoFiles = [];
+      function walkVideos(dir) {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walkVideos(full);
+          else if (entry.isFile()) videoFiles.push(full);
+        }
+      }
+      walkVideos(localVideosDir);
+
+      let videosUploaded = 0;
+      for (const localPath of videoFiles) {
+        const relativePath = path.relative(localVideosDir, localPath).replace(/\\/g, '/');
+        const remotePath = `${remoteVideosDir}/${relativePath}`;
+        const remoteSubdir = remotePath.substring(0, remotePath.lastIndexOf('/'));
+        const localStat = fs.statSync(localPath);
+
+        let needUpload = true;
+        try {
+          const stat = await sftp.stat(remotePath);
+          const localMtimeSec = Math.floor(localStat.mtimeMs / 1000);
+          if (stat.size === localStat.size && localMtimeSec <= stat.modifyTime + 2) {
+            needUpload = false;
+          }
+        } catch (e) {
+          needUpload = true;
+        }
+
+        if (needUpload) {
+          try {
+            await sftp.mkdir(remoteSubdir, true);
+          } catch {}
+          await sftp.fastPut(localPath, remotePath);
+          videosUploaded++;
+        }
+      }
+      console.log(`✅ ${videosUploaded} van ${videoFiles.length} video-bestanden gesynchroniseerd!`);
+    }
+
     // 4. Upload .htaccess & manifest.json
     const localHtaccess = path.join(DIST_DIR, '.htaccess');
     if (fs.existsSync(localHtaccess)) {
