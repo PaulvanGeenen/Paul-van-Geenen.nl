@@ -2512,6 +2512,11 @@ export function Music() {
     let incomingEl: HTMLMediaElement | null = null;
     if (targetEffectiveFormat === 'video') {
       incomingEl = videoRef.current;
+    } else if (isIOS) {
+      // On iOS/iPadOS, keep reusing the same unlocked <audio> element (deck A) so Bluetooth AVRCP /
+      // CarPlay Now Playing metadata and skip controls never detach between tracks.
+      activeDeckRef.current = 'A';
+      incomingEl = audioRefA.current;
     } else {
       // Alternate audio deck for true acoustic crossfading
       const nextDeck = activeDeckRef.current === 'A' ? 'B' : 'A';
@@ -3285,7 +3290,82 @@ export function Music() {
     }
   }, [volume, isMuted]);
 
-  // iOS / Android Lock Screen, Control Center & Car Radio (Bluetooth AVRCP / CarPlay / Android Auto) MediaSession Integration
+  // Keep always-fresh callbacks for MediaSession action handlers so we register them ONCE on mount
+  // and NEVER clear them to `null` between tracks/duration updates (clearing to null disables Bluetooth AVRCP skip buttons!)
+  const mediaSessionCallbacksRef = useRef({
+    isPlaying: false,
+    togglePlayPause: () => {},
+    handlePrev: () => {},
+    handleNext: () => {},
+    seekTo: (_time: number) => {},
+  });
+
+  mediaSessionCallbacksRef.current = {
+    isPlaying,
+    togglePlayPause,
+    handlePrev,
+    handleNext,
+    seekTo: (seekTime: number) => {
+      const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
+      const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
+      if (el) el.currentTime = seekTime;
+      setCurrentTime(seekTime);
+    },
+  };
+
+  // Register MediaSession action handlers ONCE on mount (and clean up only on unmount).
+  // Deliberately omits seekbackward/seekforward because iOS Safari / Bluetooth AVRCP replaces
+  // Previous/Next Track buttons with ±10s seek buttons when both are registered.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+
+    const actionHandlers: [MediaSessionAction, MediaSessionActionHandler][] = [
+      ['play', () => {
+        if (!mediaSessionCallbacksRef.current.isPlaying) {
+          mediaSessionCallbacksRef.current.togglePlayPause();
+        }
+      }],
+      ['pause', () => {
+        if (mediaSessionCallbacksRef.current.isPlaying) {
+          mediaSessionCallbacksRef.current.togglePlayPause();
+        }
+      }],
+      ['previoustrack', () => {
+        mediaSessionCallbacksRef.current.handlePrev();
+      }],
+      ['nexttrack', () => {
+        mediaSessionCallbacksRef.current.handleNext();
+      }],
+      ['seekto', (details) => {
+        if (details.seekTime != null) {
+          mediaSessionCallbacksRef.current.seekTo(details.seekTime);
+        }
+      }],
+    ];
+
+    actionHandlers.forEach(([action, handler]) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch (err) {}
+    });
+
+    // Explicitly ensure seekbackward/seekforward are unset so car radios always bind hardware skip buttons to prev/next track
+    (['seekbackward', 'seekforward'] as MediaSessionAction[]).forEach((action) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, null);
+      } catch (err) {}
+    });
+
+    return () => {
+      actionHandlers.forEach(([action]) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch (err) {}
+      });
+    };
+  }, []);
+
+  // iOS / Android Lock Screen, Control Center & Car Radio (Bluetooth AVRCP / CarPlay / Android Auto) MediaSession Metadata
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
 
@@ -3305,6 +3385,12 @@ export function Music() {
       absoluteArtworkUrl = encodeURI(absoluteArtworkUrl);
     }
 
+    const artworkMimeType = /\.png(\?|$)/i.test(absoluteArtworkUrl)
+      ? 'image/png'
+      : /\.webp(\?|$)/i.test(absoluteArtworkUrl)
+      ? 'image/webp'
+      : 'image/jpeg';
+
     const trackTitle = currentTrack.title || 'SoundTrack';
     const bookTitle = currentTrack.album || 'Paul van Geenen';
 
@@ -3316,11 +3402,11 @@ export function Music() {
           album: bookTitle,
           artwork: absoluteArtworkUrl
             ? [
-                { src: absoluteArtworkUrl, sizes: '512x512', type: 'image/jpeg' },
-                { src: absoluteArtworkUrl, sizes: '384x384', type: 'image/jpeg' },
-                { src: absoluteArtworkUrl, sizes: '256x256', type: 'image/jpeg' },
-                { src: absoluteArtworkUrl, sizes: '128x128', type: 'image/jpeg' },
-                { src: absoluteArtworkUrl, sizes: '96x96', type: 'image/jpeg' },
+                { src: absoluteArtworkUrl, sizes: '512x512', type: artworkMimeType },
+                { src: absoluteArtworkUrl, sizes: '384x384', type: artworkMimeType },
+                { src: absoluteArtworkUrl, sizes: '256x256', type: artworkMimeType },
+                { src: absoluteArtworkUrl, sizes: '128x128', type: artworkMimeType },
+                { src: absoluteArtworkUrl, sizes: '96x96', type: artworkMimeType },
               ]
             : [],
         });
@@ -3340,69 +3426,26 @@ export function Music() {
     // herbevestig metadata kort nadat afspelen actief is.
     let refreshTimer: number | null = null;
     if (isPlaying) {
-      refreshTimer = window.setTimeout(applyMediaSessionMetadata, 350);
+      refreshTimer = window.setTimeout(applyMediaSessionMetadata, 400);
     }
 
-    const activeAudio = getActiveAudioEl();
-    const onAudioPlaying = () => applyMediaSessionMetadata();
-    activeAudio?.addEventListener('playing', onAudioPlaying);
-
-    return () => {
-      if (refreshTimer) window.clearTimeout(refreshTimer);
-      activeAudio?.removeEventListener('playing', onAudioPlaying);
-      document.title = prevDocTitle;
-    };
-  }, [currentTrack, isPlaying]);
-
-  // Update MediaSession playback state & action handlers (enables lockscreen skip, pause, play, seek)
-  useEffect(() => {
-    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
-
-    try {
-      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-    } catch (e) {}
-
-    const actionHandlers: [MediaSessionAction, MediaSessionActionHandler | null][] = [
-      ['play', () => { if (!isPlaying) togglePlayPause(); }],
-      ['pause', () => { if (isPlaying) togglePlayPause(); }],
-      ['previoustrack', () => { handlePrev(); }],
-      ['nexttrack', () => { handleNext(); }],
-      ['seekto', (details) => {
-        if (details.seekTime != null) {
-          const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
-          const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
-          if (el) el.currentTime = details.seekTime;
-          setCurrentTime(details.seekTime);
-        }
-      }],
-      ['seekbackward', (details) => {
-        const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
-        const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
-        const skip = details.seekOffset || 10;
-        if (el) el.currentTime = Math.max(0, el.currentTime - skip);
-      }],
-      ['seekforward', (details) => {
-        const effectiveFmt = getEffectiveFormat(currentTrack, selectedFormat);
-        const el = effectiveFmt === 'video' ? videoRef.current : getActiveAudioEl();
-        const skip = details.seekOffset || 10;
-        if (el) el.currentTime = Math.min(duration || 0, el.currentTime + skip);
-      }]
-    ];
-
-    actionHandlers.forEach(([action, handler]) => {
-      try {
-        navigator.mediaSession.setActionHandler(action, handler);
-      } catch (err) {}
+    // Luister op ALLE media-elementen (deck A, deck B én video) zodat een deck-wissel nooit een 'playing' event mist
+    const mediaEls = [audioRefA.current, audioRefB.current, videoRef.current].filter(Boolean) as HTMLMediaElement[];
+    const onMediaEvent = () => applyMediaSessionMetadata();
+    mediaEls.forEach((el) => {
+      el.addEventListener('playing', onMediaEvent);
+      el.addEventListener('loadedmetadata', onMediaEvent);
     });
 
     return () => {
-      actionHandlers.forEach(([action]) => {
-        try {
-          navigator.mediaSession.setActionHandler(action, null);
-        } catch (err) {}
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      mediaEls.forEach((el) => {
+        el.removeEventListener('playing', onMediaEvent);
+        el.removeEventListener('loadedmetadata', onMediaEvent);
       });
+      document.title = prevDocTitle;
     };
-  }, [isPlaying, currentTrack, selectedFormat, duration]);
+  }, [currentTrack, isPlaying]);
 
   // Keep screen awake while music is playing or in Car Mode (Screen Wake Lock API)
   // Overrides Android system sleep timeout (e.g. 5-min corporate policy) without user-visible interruptions
