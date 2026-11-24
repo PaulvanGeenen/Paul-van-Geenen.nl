@@ -35,7 +35,6 @@ const LANDSCAPE_ALT_VIDEOS = [
   '/videos/logboek/logboek_20261117_062955_bb9ae069.mp4',
 ];
 
-const HOME_BG_VISIT_KEY = 'pv_home_bg_visit_count';
 const HOME_BG_LAST_ALT_KEY = 'pv_home_bg_last_alt';
 
 function getIsPortrait(): boolean {
@@ -59,19 +58,12 @@ function pickRandomAltVideo(isPortrait: boolean): string {
 
 function decideInitialHeroVideo(): { src: string; isAlt: boolean; isPortrait: boolean } {
   const isPortrait = getIsPortrait();
-  let useAlt = false;
-  try {
-    const prevCount = parseInt(localStorage.getItem(HOME_BG_VISIT_KEY) || '0', 10) || 0;
-    const nextCount = prevCount + 1;
-    localStorage.setItem(HOME_BG_VISIT_KEY, String(nextCount));
-    // 1 op de 3 bezoeken toont een alternatieve achtergrondvideo
-    useAlt = nextCount % 3 === 0;
-  } catch {
-    useAlt = Math.random() < 1 / 3;
-  }
+  // random(3): 1 = bloesem + hond-foto, 2 of 3 = willekeurige video uit portrait/landscape lijst (zonder hond-foto)
+  const roll = Math.floor(Math.random() * 3) + 1;
+  const useBlossom = roll === 1;
   return {
-    src: useAlt ? pickRandomAltVideo(isPortrait) : DEFAULT_HERO_VIDEO,
-    isAlt: useAlt,
+    src: useBlossom ? DEFAULT_HERO_VIDEO : pickRandomAltVideo(isPortrait),
+    isAlt: !useBlossom,
     isPortrait,
   };
 }
@@ -183,33 +175,35 @@ export function Home() {
             </div>
           </motion.div>
 
-          {/* Photo shown on md even if 1 column, but below the text */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1 }}
-            className="md:block relative self-center w-full max-w-sm mx-auto mt-8 lg:mt-0"
-          >
-            <motion.div 
-              initial={{ rotate: 2 }}
-              animate={{ rotate: isPhotoHovered ? 0 : 2 }}
-              onMouseEnter={() => setIsPhotoHovered(true)}
-              onMouseLeave={() => setIsPhotoHovered(false)}
-              onTapStart={() => setIsPhotoHovered(true)}
-              whileTap={{ scale: 0.98 }}
-              transition={{ duration: 0.7, ease: "easeOut" }}
-              className="relative z-10 rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.3)] max-w-[280px] lg:max-w-sm mx-auto cursor-pointer"
+          {/* Photo shown only when the original blossom background is active */}
+          {!heroBg.isAlt && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 1 }}
+              className="md:block relative self-center w-full max-w-sm mx-auto mt-8 lg:mt-0"
             >
-              <img 
-                src={page9Img} 
-                alt="Hoofdstuk 9" 
-                className="w-full h-auto block"
-              />
+              <motion.div 
+                initial={{ rotate: 2 }}
+                animate={{ rotate: isPhotoHovered ? 0 : 2 }}
+                onMouseEnter={() => setIsPhotoHovered(true)}
+                onMouseLeave={() => setIsPhotoHovered(false)}
+                onTapStart={() => setIsPhotoHovered(true)}
+                whileTap={{ scale: 0.98 }}
+                transition={{ duration: 0.7, ease: "easeOut" }}
+                className="relative z-10 rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.3)] max-w-[280px] lg:max-w-sm mx-auto cursor-pointer"
+              >
+                <img 
+                  src={page9Img} 
+                  alt="Hoofdstuk 9" 
+                  className="w-full h-auto block"
+                />
+              </motion.div>
+              
+              <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-earth-gold/10 rounded-full blur-3xl" />
+              <div className="absolute -top-6 -right-6 w-32 h-32 bg-earth-moss/10 rounded-full blur-3xl" />
             </motion.div>
-            
-            <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-earth-gold/10 rounded-full blur-3xl" />
-            <div className="absolute -top-6 -right-6 w-32 h-32 bg-earth-moss/10 rounded-full blur-3xl" />
-          </motion.div>
+          )}
         </div>
 
 
