@@ -23,6 +23,16 @@ function getOrientation(): 'portrait' | 'landscape' {
   return window.innerHeight > window.innerWidth ? 'portrait' : 'landscape';
 }
 
+function getIsPhoneOrPortrait(): boolean {
+  if (typeof window === 'undefined') return false;
+  const isPortrait = window.innerHeight > window.innerWidth;
+  const shortSide = Math.min(window.innerWidth, window.innerHeight);
+  const isMobilePhoneUA =
+    typeof navigator !== 'undefined' &&
+    /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(navigator.userAgent);
+  return isPortrait || shortSide <= 540 || isMobilePhoneUA;
+}
+
 function shuffleArray<T>(items: T[]): T[] {
   const arr = [...items];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -190,8 +200,8 @@ export function Home() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
-  // Portrait mode: auto-hide hero text after 10s of inactivity so the .mov shines in full glory;
-  // bring it back immediately on tap/click/swipe and restart the 10s inactivity timer.
+  // Mobile (both portrait AND landscape on phones): auto-hide hero text after 10s of inactivity
+  // so the .mov shines in full glory; bring it back immediately on tap/click/swipe and restart the 10s timer.
   useEffect(() => {
     const clearTextTimer = () => {
       if (heroTextTimerRef.current) {
@@ -200,7 +210,7 @@ export function Home() {
       }
     };
 
-    if (orientation !== 'portrait' || usingFallbackBlossom) {
+    if (!getIsPhoneOrPortrait() || usingFallbackBlossom) {
       clearTextTimer();
       setHeroTextVisible(true);
       return;
