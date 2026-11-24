@@ -235,19 +235,39 @@ export function Home() {
 
   // Auto-hide the green "Ontdek de reeks" button + volume control after 5s of inactivity on the hero video area;
   // clicking/tapping the hero area brings both smoothly back in and restarts the 5s timer.
-  const wakeHeroControls = useCallback(() => {
+  const wakeHeroControls = useCallback((durationMs = 5000) => {
     setHeroControlsVisible(true);
     if (heroControlsTimerRef.current) {
       window.clearTimeout(heroControlsTimerRef.current);
     }
     heroControlsTimerRef.current = window.setTimeout(() => {
       setHeroControlsVisible(false);
-    }, 5000);
+    }, durationMs);
   }, []);
 
   useEffect(() => {
-    wakeHeroControls();
+    // If LionBooksIntro hasn't been dismissed yet in this session, keep controls visible until
+    // after the intro fades out (2.2s) + 5 full seconds so the visitor always sees them initially.
+    let introPending = false;
+    try {
+      const hasSeen = sessionStorage.getItem('lion_books_intro_seen_v6');
+      introPending = !hasSeen;
+    } catch {}
+
+    if (introPending) {
+      setHeroControlsVisible(true);
+    } else {
+      wakeHeroControls(5000);
+    }
+
+    const onIntroDismissed = () => {
+      // 2.2s intro fade-out + 5s visible on the homepage = 7.2s
+      wakeHeroControls(7200);
+    };
+    window.addEventListener('lion-intro-dismissed', onIntroDismissed);
+
     return () => {
+      window.removeEventListener('lion-intro-dismissed', onIntroDismissed);
       if (heroControlsTimerRef.current) {
         window.clearTimeout(heroControlsTimerRef.current);
         heroControlsTimerRef.current = null;
@@ -402,8 +422,8 @@ export function Home() {
       {/* Hero Section — fills the full viewport below the fixed navbar in both portrait & landscape */}
       <section
         ref={heroSectionRef}
-        onClick={wakeHeroControls}
-        onTouchStart={wakeHeroControls}
+        onClick={() => wakeHeroControls()}
+        onTouchStart={() => wakeHeroControls()}
         className="relative min-h-[calc(100svh-4rem)] md:min-h-[calc(100svh-5rem)] flex items-center bg-earth-dark pt-4"
       >
         <div className="absolute inset-0 z-0 overflow-hidden bg-earth-dark">

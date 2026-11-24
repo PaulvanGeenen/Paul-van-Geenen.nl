@@ -52,6 +52,7 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
     // Synchronously unlock & start homepage soundtrack inside the user's click gesture
     // (plays if homepage volume is enabled / > 0)
     homeSoundtrack.unlockFromIntroClick();
+    window.dispatchEvent(new Event('lion-intro-dismissed'));
     if (onComplete) {
       setTimeout(onComplete, 2200);
     }
