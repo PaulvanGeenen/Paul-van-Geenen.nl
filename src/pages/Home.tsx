@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Volume2, Volume1, VolumeX } from 'lucide-react';
 import { IvoryHeartPendant } from '../components/ui/IvoryHeartPendant';
 import { Link } from 'react-router-dom';
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -43,7 +43,7 @@ function shuffleArray<T>(items: T[]): T[] {
 }
 
 export function Home() {
-  const { ambientMuted, reportVideoAudioStatus } = useAudio();
+  const { reportVideoAudioStatus } = useAudio();
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(() => getOrientation());
   const [playlist, setPlaylist] = useState<string[]>([]);
   const [usingFallbackBlossom, setUsingFallbackBlossom] = useState(false);
@@ -172,17 +172,12 @@ export function Home() {
   // Start / resume homepage soundtrack when Home mounts, fade out & pause when navigating away
   useEffect(() => {
     reportVideoAudioStatus(true);
-    homeSoundtrack.enterHome(ambientMuted);
+    homeSoundtrack.enterHome();
     return () => {
       homeSoundtrack.leaveHome();
       reportVideoAudioStatus(false);
     };
   }, [reportVideoAudioStatus]);
-
-  // Respect navbar mute toggle live
-  useEffect(() => {
-    homeSoundtrack.setMuted(ambientMuted);
-  }, [ambientMuted]);
 
   // Fade out & pause soundtrack when user scrolls hero video out of view;
   // resume & fade in only when hero video is more than 50% back in view.
@@ -553,6 +548,51 @@ export function Home() {
               </motion.div>
             )}
           </AnimatePresence>
+          {/* Dedicated Homepage Soundtrack Speaker & Volume Control (bottom-right of Hero) */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className={`absolute right-4 sm:right-8 md:right-12 bottom-7 sm:bottom-10 md:bottom-12 z-40 flex items-center gap-2.5 bg-black/75 backdrop-blur-xl px-3.5 py-2 rounded-full border border-earth-gold/45 shadow-[0_10px_30px_rgba(0,0,0,0.75)] transition-opacity duration-700 ${
+              heroTextVisible ? 'opacity-100' : 'opacity-35 hover:opacity-100'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => homeSoundtrack.toggleMute()}
+              aria-label={soundtrackState?.muted ? 'Geluid aanzetten' : 'Geluid dempen'}
+              title={soundtrackState?.muted ? 'Geluid aanzetten' : 'Geluid dempen'}
+              className="text-earth-gold hover:text-amber-300 transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+            >
+              {soundtrackState?.muted || (soundtrackState?.volume ?? 0.65) <= 0.01 ? (
+                <VolumeX className="w-5 h-5" />
+              ) : (soundtrackState?.volume ?? 0.65) < 0.5 ? (
+                <Volume1 className="w-5 h-5" />
+              ) : (
+                <Volume2 className="w-5 h-5" />
+              )}
+            </button>
+
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={
+                soundtrackState?.muted
+                  ? 0
+                  : Math.round((soundtrackState?.volume ?? 0.65) * 100)
+              }
+              onChange={(e) => homeSoundtrack.setVolume(Number(e.target.value) / 100)}
+              aria-label="Volume homepage soundtrack"
+              className="w-20 sm:w-28 h-1.5 rounded-lg appearance-none cursor-pointer bg-white/20 accent-[#e0bd82]"
+            />
+
+            <span className="hidden sm:inline text-[11px] font-mono text-stone-300 w-8 text-right select-none">
+              {soundtrackState?.muted
+                ? '0%'
+                : `${Math.round((soundtrackState?.volume ?? 0.65) * 100)}%`}
+            </span>
+          </div>
         </section>
 
       {/* Logboek Sectie — net voor Het keerpunt */}

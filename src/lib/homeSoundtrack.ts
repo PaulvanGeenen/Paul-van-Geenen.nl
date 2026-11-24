@@ -31,9 +31,59 @@ export interface HomeSoundtrackSnapshot {
   track: HomeSoundtrackTrack;
   isPlaying: boolean;
   showTitleBadge: boolean;
+  volume: number;
+  muted: boolean;
 }
 
 type Listener = (snapshot: HomeSoundtrackSnapshot) => void;
+
+const HOME_VOL_KEY = 'pv_home_soundtrack_volume';
+const HOME_MUTED_KEY = 'pv_home_soundtrack_muted';
+const DEFAULT_HOME_VOLUME = 0.65;
+
+function readStoredString(key: string): string | null {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const val = localStorage.getItem(key);
+      if (val !== null) return val;
+    }
+    if (typeof document !== 'undefined') {
+      const m = document.cookie.match(new RegExp(`(^| )${key}=([^;]+)`));
+      if (m) return decodeURIComponent(m[2]);
+    }
+  } catch {}
+  return null;
+}
+
+function writeStoredString(key: string, val: string): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, val);
+    }
+  } catch {}
+  try {
+    if (typeof document !== 'undefined') {
+      const maxAge = 365 * 24 * 60 * 60;
+      document.cookie = `${key}=${encodeURIComponent(val)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+    }
+  } catch {}
+}
+
+function readStoredVolume(): number {
+  const raw = readStoredString(HOME_VOL_KEY);
+  if (raw !== null) {
+    const parsed = parseFloat(raw);
+    if (!isNaN(parsed) && isFinite(parsed)) {
+      return Math.max(0, Math.min(1, parsed));
+    }
+  }
+  return DEFAULT_HOME_VOLUME;
+}
+
+function readStoredMuted(): boolean {
+  const raw = readStoredString(HOME_MUTED_KEY);
+  return raw === 'true';
+}
 
 class HomeSoundtrackController {
   private audio: HTMLAudioElement | null = null;
@@ -41,8 +91,8 @@ class HomeSoundtrackController {
   private savedTime = 0;
   private isOnHome = false;
   private heroInView = true;
-  private muted = false;
-  private targetVolume = 0.65;
+  private muted = readStoredMuted();
+  private targetVolume = readStoredVolume();
   private fadeTimer: number | null = null;
   private titleBadgeTimer: number | null = null;
   private badgedTrackIndex: number | null = null;
@@ -71,6 +121,8 @@ class HomeSoundtrackController {
       track: HOME_SOUNDTRACK_TRACKS[this.trackIndex] || HOME_SOUNDTRACK_TRACKS[0],
       isPlaying: this.isPlaying,
       showTitleBadge: this.showTitleBadge,
+      volume: this.targetVolume,
+      muted: this.muted,
     };
     this.listeners.forEach((fn) => fn(snap));
   }
@@ -81,6 +133,8 @@ class HomeSoundtrackController {
       track: HOME_SOUNDTRACK_TRACKS[this.trackIndex] || HOME_SOUNDTRACK_TRACKS[0],
       isPlaying: this.isPlaying,
       showTitleBadge: this.showTitleBadge,
+      volume: this.targetVolume,
+      muted: this.muted,
     });
     return () => {
       this.listeners.delete(fn);
@@ -241,13 +295,14 @@ class HomeSoundtrackController {
     }
   }
 
-  public enterHome(muted: boolean) {
+  public enterHome() {
     this.isOnHome = true;
     this.heroInView = true;
-    this.muted = muted;
     this.badgedTrackIndex = null;
-    if (!muted && !document.hidden) {
+    if (!this.muted && this.targetVolume > 0 && !document.hidden) {
       this.startOrResume(true);
+    } else {
+      this.emit();
     }
   }
 
@@ -301,6 +356,7 @@ class HomeSoundtrackController {
   public setMuted(muted: boolean) {
     if (this.muted === muted) return;
     this.muted = muted;
+    writeStoredString(HOME_MUTED_KEY, muted ? 'true' : 'false');
     const a = this.audio;
     if (muted) {
       this.clearGestureFallback();
@@ -315,8 +371,55 @@ class HomeSoundtrackController {
           }
         });
       }
+    } else {
+      if (this.targetVolume <= 0.02) {
+        this.targetVolume = DEFAULT_HOME_VOLUME;
+        writeStoredString(HOME_VOL_KEY, String(this.targetVolume));
+      }
+      this.emit();
+      if (this.isOnHome && this.heroInView && !document.hidden) {
+        this.startOrResume(true);
+      }
+    }
+  }
+
+  public toggleMute() {
+    this.setMuted(!this.muted);
+  }
+
+  public setVolume(nextVolume: number) {
+    const clamped = Math.max(0, Math.min(1, nextVolume));
+    this.targetVolume = clamped;
+    writeStoredString(HOME_VOL_KEY, String(clamped));
+
+    if (clamped <= 0.001) {
+      this.muted = true;
+      writeStoredString(HOME_MUTED_KEY, 'true');
+      this.clearFade();
+      if (this.audio) {
+        this.audio.volume = 0;
+        if (!this.audio.paused) {
+          this.savedTime = this.audio.currentTime || this.savedTime;
+          this.audio.pause();
+        }
+      }
+      this.emit();
+      return;
+    }
+
+    const wasMuted = this.muted;
+    this.muted = false;
+    writeStoredString(HOME_MUTED_KEY, 'false');
+    this.clearFade();
+
+    if (this.audio && !this.audio.paused) {
+      this.audio.volume = clamped;
+      this.emit();
     } else if (this.isOnHome && this.heroInView && !document.hidden) {
-      this.startOrResume(true);
+      this.emit();
+      this.startOrResume(wasMuted);
+    } else {
+      this.emit();
     }
   }
 
