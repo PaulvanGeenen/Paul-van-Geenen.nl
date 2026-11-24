@@ -127,8 +127,8 @@ export function Home() {
 
   return (
     <div className="flex flex-col">
-      {/* Hero Section */}
-      <section className="relative min-h-[65vh] lg:min-h-[75vh] flex items-center bg-earth-dark pt-4">
+      {/* Hero Section — fills the full viewport below the fixed navbar in both portrait & landscape */}
+      <section className="relative min-h-[calc(100svh-4rem)] md:min-h-[calc(100svh-5rem)] flex items-center bg-earth-dark pt-4">
         <div className="absolute inset-0 z-0 overflow-hidden">
           <video
             key={heroBg.src}
@@ -142,7 +142,7 @@ export function Home() {
             onCanPlay={handleVideoStart}
             onLoadedData={handleVideoStart}
             onError={handleVideoError}
-            className={`w-full h-full object-cover transition-opacity duration-1500 ${videoLoaded ? 'opacity-80' : 'opacity-0'}`}
+            className={`w-full h-full object-cover object-center transition-opacity duration-1500 ${videoLoaded ? 'opacity-80' : 'opacity-0'}`}
           />
           
           {/* Moody overlays for high contrast and atmosphere */}
