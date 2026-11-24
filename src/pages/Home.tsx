@@ -522,28 +522,28 @@ export function Home() {
             </motion.div>
           )}
         </div>
-          {/* Same Song Credit Badge visual as the MediaPlayer (title only) at the start of each track */}
+          {/* Prominent Song Credit Badge at the start of each track */}
           <AnimatePresence mode="wait">
             {soundtrackState?.showTitleBadge && soundtrackState?.track && (
               <motion.div
                 key={`home-song-credit-${soundtrackState.track.index}`}
-                initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
-                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                className="absolute left-3 sm:left-4 md:left-6 bottom-5 sm:bottom-7 md:bottom-8 z-40 pointer-events-none select-none max-w-[82%] sm:max-w-[320px] md:max-w-[360px]"
+                initial={{ opacity: 0, y: 18, scale: 0.96, filter: 'blur(6px)' }}
+                animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, y: 12, scale: 0.97, filter: 'blur(6px)' }}
+                transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute left-4 sm:left-8 md:left-12 bottom-7 sm:bottom-10 md:bottom-12 z-40 pointer-events-none select-none max-w-[90%] sm:max-w-md md:max-w-lg"
               >
-                <div className="flex items-center gap-2.5 sm:gap-3 bg-black/85 backdrop-blur-xl px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-earth-gold/35 shadow-[0_8px_24px_rgba(0,0,0,0.85)] ring-1 ring-black/50">
-                  <div className="shrink-0 -my-0.5">
-                    <div className="animate-pendant-dangle w-5 h-6 sm:w-6 sm:h-7 md:w-7 md:h-8 flex items-center justify-center drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">
-                      <IvoryHeartPendant size="sm" className="w-5 h-5 sm:w-6 sm:h-6" />
+                <div className="flex items-center gap-3.5 sm:gap-4 bg-black/80 backdrop-blur-xl px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl border border-earth-gold/55 shadow-[0_14px_40px_rgba(0,0,0,0.85),0_0_28px_rgba(212,175,55,0.22)] ring-1 ring-white/10">
+                  <div className="shrink-0">
+                    <div className="animate-pendant-dangle w-8 h-9 sm:w-9 sm:h-10 flex items-center justify-center drop-shadow-[0_3px_10px_rgba(212,175,55,0.45)]">
+                      <IvoryHeartPendant size="md" className="w-8 h-8 sm:w-9 sm:h-9" />
                     </div>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p
-                      className="text-earth-gold font-sans font-bold tracking-tight text-xs sm:text-sm md:text-base leading-snug truncate"
+                      className="text-earth-gold font-serif italic font-semibold tracking-wide text-lg sm:text-2xl md:text-3xl leading-tight truncate"
                       style={{
-                        textShadow: '0 1px 3px #000, 0 0 8px rgba(0,0,0,0.9), 1px 1px 1px #000',
+                        textShadow: '0 2px 6px #000, 0 0 14px rgba(0,0,0,0.95), 1px 1px 2px #000',
                       }}
                     >
                       &ldquo;{soundtrackState.track.title}&rdquo;
