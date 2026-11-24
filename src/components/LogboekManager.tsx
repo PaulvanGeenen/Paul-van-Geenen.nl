@@ -186,14 +186,22 @@ export function LogboekManager() {
     setErrorMsg(null);
     try {
       let finalAudioUrl = audioUrl.trim() || null;
+      let mp3Failed = false;
 
       if (autoGenerateOnSave && tekst.trim() && (!finalAudioUrl || editingId !== null)) {
-        if (!geminiKey.trim()) {
-          setErrorMsg('Notitie is opgeslagen, maar er kon geen mannenstem-MP3 worden gemaakt omdat de Gemini API-sleutel bovenaan nog niet is ingevuld.');
+        const trimmedKey = geminiKey.trim();
+        if (!trimmedKey || !trimmedKey.startsWith('AIza')) {
+          mp3Failed = true;
+          setErrorMsg(
+            !trimmedKey
+              ? 'Notitie is opgeslagen, maar er kon geen mannenstem-MP3 worden gemaakt omdat de Gemini API-sleutel bovenaan nog niet is ingevuld.'
+              : 'Notitie is opgeslagen, maar de opgeslagen Gemini API-sleutel is ongeldig (mogelijk automatisch ingevuld met je wachtwoord — plak bovenaan je echte AIza...-sleutel en sla opnieuw op).'
+          );
         } else {
           try {
             finalAudioUrl = await handleGenerateMp3(datum.trim(), tekst.trim());
           } catch (ttsErr: any) {
+            mp3Failed = true;
             setErrorMsg(`Notitie is opgeslagen, maar MP3 genereren mislukte: ${ttsErr?.message || ttsErr}`);
           }
         }
@@ -207,13 +215,15 @@ export function LogboekManager() {
         audio_url: finalAudioUrl,
         audio_enabled: audioEnabled,
       });
-      showStatus(
-        finalAudioUrl
-          ? 'Notitie + mannenstem-MP3 opgeslagen!'
-          : editingId
-            ? 'Notitie bijgewerkt!'
-            : 'Nieuwe logboek-notitie toegevoegd!'
-      );
+      if (!mp3Failed) {
+        showStatus(
+          finalAudioUrl
+            ? 'Notitie + mannenstem-MP3 opgeslagen!'
+            : editingId
+              ? 'Notitie bijgewerkt!'
+              : 'Nieuwe logboek-notitie toegevoegd!'
+        );
+      }
       resetForm();
       await load(false);
     } catch (err: any) {
@@ -300,20 +310,40 @@ export function LogboekManager() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 min-w-[280px]">
+        <div className="flex flex-col gap-1.5 min-w-[280px]">
           <input
             type="password"
+            name="gemini_tts_api_key_nofill"
+            autoComplete="new-password"
+            spellCheck={false}
+            data-lpignore="true"
+            data-1p-ignore="true"
             value={geminiKey}
             onChange={(e) => {
-              setGeminiKey(e.target.value);
-              saveGeminiTtsKey(e.target.value);
+              const val = e.target.value;
+              setGeminiKey(val);
+              if (!val.trim() || val.trim().startsWith('AIza')) {
+                saveGeminiTtsKey(val);
+              }
             }}
             onBlur={(e) => {
-              saveLogboekGeminiKeyToServer(e.target.value.trim() || null).catch(() => {});
+              const val = e.target.value.trim();
+              if (!val || val.startsWith('AIza')) {
+                saveLogboekGeminiKeyToServer(val || null).catch(() => {});
+              }
             }}
-            placeholder="Gemini API-sleutel (automatisch gesynchroniseerd)"
-            className="flex-1 bg-black/40 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-earth-gold"
+            placeholder="AIza... (Gemini API-sleutel)"
+            className={`w-full bg-black/40 border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-earth-gold ${
+              geminiKey.trim() && !geminiKey.trim().startsWith('AIza')
+                ? 'border-amber-400/70'
+                : 'border-white/15'
+            }`}
           />
+          {geminiKey.trim() && !geminiKey.trim().startsWith('AIza') && (
+            <span className="text-[11px] text-amber-300">
+              Let op: dit lijkt geen geldige Gemini-sleutel (begint met <code className="font-mono">AIza</code>). Plak hier je echte sleutel.
+            </span>
+          )}
         </div>
       </div>
 
@@ -620,7 +650,7 @@ export function LogboekManager() {
           </div>
 
           {audioUrl && (
-            <audio controls src={audioUrl} className="w-full h-9 mt-1" />
+            <audio key={audioUrl} controls src={audioUrl} className="w-full h-9 mt-1" />
           )}
         </div>
 
@@ -705,7 +735,7 @@ export function LogboekManager() {
                     </div>
                     <p className="text-sm text-white/90 whitespace-pre-wrap break-words">{entry.tekst}</p>
                     {entry.audio_url && entry.audio_enabled && (
-                      <audio controls src={entry.audio_url} className="h-8 max-w-xs pt-1" />
+                      <audio key={entry.audio_url} controls src={entry.audio_url} className="h-8 max-w-xs pt-1" />
                     )}
                   </div>
                 </div>
