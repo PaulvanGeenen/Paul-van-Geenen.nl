@@ -1,38 +1,136 @@
 import { motion } from 'motion/react';
-import { ArrowRight, Quote, Volume2, VolumeX } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { IvoryHeartPendant } from '../components/ui/IvoryHeartPendant';
 import { Link } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
-import { useAudio } from '../context/AudioContext';
 import page9Img from '../assets/images/hoofdstuk9.jpg';
 import { LogboekPreviewSection } from '../components/LogboekPreviewSection';
 
+const DEFAULT_HERO_VIDEO = '/videos/home.mp4';
+
+const PORTRAIT_ALT_VIDEOS = [
+  '/videos/Demon.mov',
+  '/videos/fragment-boek-2-mobile.mov',
+  '/videos/fragment-boek-3-mobile.mov',
+  '/videos/fragment-boek-4-mobile.mov',
+  '/videos/leeuw-in-de-kerk-mobile.mov',
+  '/videos/luna-story-mobile.mov',
+  '/videos/LunaWorriedFuneral-mobile.mov',
+  '/videos/vlaai-mobile.mov',
+  '/videos/Ik_ben_hier_Paul_ik_ga_nergens_heen-mobile.mov',
+  '/videos/Brullende_leeuw.mov',
+];
+
+const LANDSCAPE_ALT_VIDEOS = [
+  '/videos/AngryLion.mov',
+  '/videos/fragment-boek-2.mp4',
+  '/videos/fragment-boek-3.mp4',
+  '/videos/fragment-boek-4.mp4',
+  '/videos/fragments-bg.mp4',
+  '/videos/Ik_ben_hier_Paul_ik_ga_nergens_heen.mov',
+  '/videos/leeuw-in-de-kerk.mp4',
+  '/videos/luna-story.mp4',
+  '/videos/LunaWorriedFuneral.mov',
+  '/videos/vlaai.mov',
+  '/videos/logboek/logboek_20261117_062955_bb9ae069.mp4',
+];
+
+const HOME_BG_VISIT_KEY = 'pv_home_bg_visit_count';
+const HOME_BG_LAST_ALT_KEY = 'pv_home_bg_last_alt';
+
+function getIsPortrait(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.innerHeight > window.innerWidth;
+}
+
+function pickRandomAltVideo(isPortrait: boolean): string {
+  const list = isPortrait ? PORTRAIT_ALT_VIDEOS : LANDSCAPE_ALT_VIDEOS;
+  let lastAlt = '';
+  try {
+    lastAlt = localStorage.getItem(HOME_BG_LAST_ALT_KEY) || '';
+  } catch {}
+  const candidates = list.length > 1 ? list.filter((v) => v !== lastAlt) : list;
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)] || list[0];
+  try {
+    localStorage.setItem(HOME_BG_LAST_ALT_KEY, chosen);
+  } catch {}
+  return chosen;
+}
+
+function decideInitialHeroVideo(): { src: string; isAlt: boolean; isPortrait: boolean } {
+  const isPortrait = getIsPortrait();
+  let useAlt = false;
+  try {
+    const prevCount = parseInt(localStorage.getItem(HOME_BG_VISIT_KEY) || '0', 10) || 0;
+    const nextCount = prevCount + 1;
+    localStorage.setItem(HOME_BG_VISIT_KEY, String(nextCount));
+    // 1 op de 3 bezoeken toont een alternatieve achtergrondvideo
+    useAlt = nextCount % 3 === 0;
+  } catch {
+    useAlt = Math.random() < 1 / 3;
+  }
+  return {
+    src: useAlt ? pickRandomAltVideo(isPortrait) : DEFAULT_HERO_VIDEO,
+    isAlt: useAlt,
+    isPortrait,
+  };
+}
+
 export function Home() {
-  const { ambientMuted, toggleAmbientMute, setIsAmbientPlaying, masterVolume } = useAudio();
+  const [heroBg, setHeroBg] = useState(() => decideInitialHeroVideo());
   const [videoLoaded, setVideoLoaded] = useState(false);
-  const [videoError, setVideoError] = useState(false);
   const [isPhotoHovered, setIsPhotoHovered] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Als de bezoeker op een alternatieve video zit en het toestel draait (portrait <-> landscape),
+  // kies automatisch een bijpassende video voor de nieuwe oriëntatie.
+  useEffect(() => {
+    if (!heroBg.isAlt) return;
+    const handleOrientation = () => {
+      const nowPortrait = getIsPortrait();
+      if (nowPortrait !== heroBg.isPortrait) {
+        setVideoLoaded(false);
+        setHeroBg({
+          src: pickRandomAltVideo(nowPortrait),
+          isAlt: true,
+          isPortrait: nowPortrait,
+        });
+      }
+    };
+    window.addEventListener('resize', handleOrientation);
+    window.addEventListener('orientationchange', handleOrientation);
+    return () => {
+      window.removeEventListener('resize', handleOrientation);
+      window.removeEventListener('orientationchange', handleOrientation);
+    };
+  }, [heroBg.isAlt, heroBg.isPortrait]);
 
   useEffect(() => {
     const playVideo = async () => {
       if (videoRef.current) {
-        videoRef.current.volume = masterVolume;
+        videoRef.current.muted = true;
+        videoRef.current.defaultMuted = true;
         try {
-          // Add a small delay to ensure DOM is ready and interaction might have happened
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
           await videoRef.current.play();
-        } catch (err) {
+        } catch {
           // Silence warning as it's common with autoplay policies
         }
       }
     };
     playVideo();
-  }, [masterVolume]);
+  }, [heroBg.src]);
 
   const handleVideoStart = () => {
     setVideoLoaded(true);
-    setVideoError(false);
+  };
+
+  const handleVideoError = () => {
+    // Val altijd naadloos terug op de bloesemvideo als een browser bijv. .mov niet ondersteunt
+    if (heroBg.src !== DEFAULT_HERO_VIDEO) {
+      setVideoLoaded(false);
+      setHeroBg((prev) => ({ ...prev, src: DEFAULT_HERO_VIDEO, isAlt: false }));
+    }
   };
 
   return (
@@ -40,21 +138,20 @@ export function Home() {
       {/* Hero Section */}
       <section className="relative min-h-[65vh] lg:min-h-[75vh] flex items-center bg-earth-dark pt-4">
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <video 
+          <video
+            key={heroBg.src}
             ref={videoRef}
-            autoPlay 
-            muted 
-            loop 
+            src={heroBg.src}
+            autoPlay
+            muted
+            loop
             playsInline
             onPlaying={handleVideoStart}
             onCanPlay={handleVideoStart}
             onLoadedData={handleVideoStart}
-            onError={() => setVideoError(true)}
+            onError={handleVideoError}
             className={`w-full h-full object-cover transition-opacity duration-1500 ${videoLoaded ? 'opacity-80' : 'opacity-0'}`}
-          >
-            <source src="/videos/home.mp4" type="video/mp4" />
-            <source src="/videos/Demon.mov" type="video/quicktime" />
-          </video>
+          />
           
           {/* Moody overlays for high contrast and atmosphere */}
           <div className="absolute inset-0 bg-black/20 pointer-events-none" />
