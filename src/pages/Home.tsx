@@ -42,6 +42,7 @@ export function Home() {
   const [deckAReady, setDeckAReady] = useState(false);
   const [deckBReady, setDeckBReady] = useState(false);
   const [isPhotoHovered, setIsPhotoHovered] = useState(false);
+  const [heroTextVisible, setHeroTextVisible] = useState(true);
 
   const videoRefA = useRef<HTMLVideoElement>(null);
   const videoRefB = useRef<HTMLVideoElement>(null);
@@ -50,6 +51,7 @@ export function Home() {
   const slotIndexBRef = useRef<number>(1);
   const crossfadingRef = useRef<boolean>(false);
   const cleanupTimerRef = useRef<number | null>(null);
+  const heroTextTimerRef = useRef<number | null>(null);
   const errorCountRef = useRef<number>(0);
 
   activeSlotRef.current = activeSlot;
@@ -161,6 +163,53 @@ export function Home() {
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
+
+  // Portrait mode: auto-hide hero text after 10s of inactivity so the .mov shines in full glory;
+  // bring it back immediately on tap/click/swipe and restart the 10s inactivity timer.
+  useEffect(() => {
+    const clearTextTimer = () => {
+      if (heroTextTimerRef.current) {
+        window.clearTimeout(heroTextTimerRef.current);
+        heroTextTimerRef.current = null;
+      }
+    };
+
+    if (orientation !== 'portrait' || usingFallbackBlossom) {
+      clearTextTimer();
+      setHeroTextVisible(true);
+      return;
+    }
+
+    const scheduleHide = () => {
+      clearTextTimer();
+      heroTextTimerRef.current = window.setTimeout(() => {
+        setHeroTextVisible(false);
+      }, 10000);
+    };
+
+    const handleUserActivity = () => {
+      setHeroTextVisible(true);
+      scheduleHide();
+    };
+
+    setHeroTextVisible(true);
+    scheduleHide();
+
+    window.addEventListener('pointerdown', handleUserActivity, { passive: true });
+    window.addEventListener('touchstart', handleUserActivity, { passive: true });
+    window.addEventListener('touchmove', handleUserActivity, { passive: true });
+    window.addEventListener('click', handleUserActivity, { passive: true });
+    window.addEventListener('scroll', handleUserActivity, { passive: true });
+
+    return () => {
+      clearTextTimer();
+      window.removeEventListener('pointerdown', handleUserActivity);
+      window.removeEventListener('touchstart', handleUserActivity);
+      window.removeEventListener('touchmove', handleUserActivity);
+      window.removeEventListener('click', handleUserActivity);
+      window.removeEventListener('scroll', handleUserActivity);
+    };
+  }, [orientation, usingFallbackBlossom]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -285,7 +334,11 @@ export function Home() {
               onError={() => handleError('A')}
               style={{ transitionDuration: `${CROSSFADE_MS}ms` }}
               className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity ease-in-out ${
-                deckAVisible ? 'opacity-80 z-[2]' : 'opacity-0 z-[1]'
+                deckAVisible
+                  ? heroTextVisible
+                    ? 'opacity-80 z-[2]'
+                    : 'opacity-100 z-[2]'
+                  : 'opacity-0 z-[1]'
               }`}
             />
           )}
@@ -313,22 +366,39 @@ export function Home() {
               onError={() => handleError('B')}
               style={{ transitionDuration: `${CROSSFADE_MS}ms` }}
               className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity ease-in-out ${
-                deckBVisible ? 'opacity-80 z-[2]' : 'opacity-0 z-[1]'
+                deckBVisible
+                  ? heroTextVisible
+                    ? 'opacity-80 z-[2]'
+                    : 'opacity-100 z-[2]'
+                  : 'opacity-0 z-[1]'
               }`}
             />
           )}
 
-          {/* Moody overlays for high contrast and atmosphere */}
-          <div className="absolute inset-0 z-[3] bg-black/20 pointer-events-none" />
-          <div className="absolute inset-0 z-[3] bg-gradient-to-r from-earth-dark/95 via-earth-dark/50 to-transparent pointer-events-none" />
+          {/* Moody overlays for high contrast and atmosphere — soften in portrait when text fades out */}
+          <div
+            className={`absolute inset-0 z-[3] bg-black/20 pointer-events-none transition-opacity duration-1000 ${
+              heroTextVisible ? 'opacity-100' : 'opacity-20'
+            }`}
+          />
+          <div
+            className={`absolute inset-0 z-[3] bg-gradient-to-r from-earth-dark/95 via-earth-dark/50 to-transparent pointer-events-none transition-opacity duration-1000 ${
+              heroTextVisible ? 'opacity-100' : 'opacity-10'
+            }`}
+          />
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center py-6 md:py-12 lg:py-16">
           <motion.div
             initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
-            className="flex flex-col justify-center text-center lg:text-left items-center lg:items-start"
+            animate={{
+              opacity: heroTextVisible ? 1 : 0,
+              x: 0,
+            }}
+            transition={{ duration: 0.85, ease: 'easeInOut' }}
+            className={`flex flex-col justify-center text-center lg:text-left items-center lg:items-start ${
+              heroTextVisible ? 'pointer-events-auto' : 'pointer-events-none'
+            }`}
           >
             <span className="inline-block text-earth-gold uppercase tracking-[0.25em] text-[10px] md:text-[11px] font-bold mb-4 drop-shadow-sm">
               Vier boeken over het koesteren van het leven
