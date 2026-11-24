@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { isLionBooksDomain } from '../../utils/domain';
+import { homeSoundtrack } from '../../lib/homeSoundtrack';
 
 interface LionBooksIntroProps {
   forceShow?: boolean;
@@ -35,9 +36,22 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
     setIsTouch(checkTouch);
   }, []);
 
+  // Keep homepage soundtrack paused while Lion Books intro overlay is visible
+  useEffect(() => {
+    if (isVisible) {
+      homeSoundtrack.setIntroActive(true);
+    }
+    return () => {
+      homeSoundtrack.setIntroActive(false);
+    };
+  }, [isVisible]);
+
   const handleDismiss = () => {
     setIsVisible(false);
     sessionStorage.setItem('lion_books_intro_seen_v6', 'true');
+    // Synchronously unlock & start homepage soundtrack inside the user's click gesture
+    // (plays if homepage volume is enabled / > 0)
+    homeSoundtrack.unlockFromIntroClick();
     if (onComplete) {
       setTimeout(onComplete, 2200);
     }

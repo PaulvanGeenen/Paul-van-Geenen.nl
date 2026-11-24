@@ -91,6 +91,7 @@ class HomeSoundtrackController {
   private savedTime = 0;
   private isOnHome = false;
   private heroInView = true;
+  private introActive = false;
   private muted = readStoredMuted();
   private targetVolume = readStoredVolume();
   private fadeTimer: number | null = null;
@@ -178,7 +179,7 @@ class HomeSoundtrackController {
     if (this.gestureCleanup || typeof window === 'undefined') return;
     const onGesture = () => {
       this.clearGestureFallback();
-      if (this.isOnHome && this.heroInView && !this.muted && !document.hidden) {
+      if (this.isOnHome && this.heroInView && !this.introActive && !this.muted && this.targetVolume > 0 && !document.hidden) {
         this.startOrResume(true);
       }
     };
@@ -255,9 +256,9 @@ class HomeSoundtrackController {
     this.startOrResume(true);
   };
 
-  private startOrResume(showBadge: boolean) {
+  private startOrResume(showBadge: boolean, fadeInMs = 950) {
     const a = this.ensureAudio();
-    if (!a || !this.isOnHome || !this.heroInView || this.muted || document.hidden) return;
+    if (!a || !this.isOnHome || !this.heroInView || this.introActive || this.muted || this.targetVolume <= 0.001 || document.hidden) return;
 
     const track = HOME_SOUNDTRACK_TRACKS[this.trackIndex] || HOME_SOUNDTRACK_TRACKS[0];
     const absoluteTarget = new URL(track.url, window.location.origin).href;
@@ -280,11 +281,11 @@ class HomeSoundtrackController {
     if (p && typeof p.then === 'function') {
       p.then(() => {
         this.clearGestureFallback();
-        if (!this.isOnHome || this.muted) {
+        if (!this.isOnHome || this.muted || this.introActive) {
           a.pause();
           return;
         }
-        this.fadeVolume(0, this.targetVolume, 950);
+        this.fadeVolume(0, this.targetVolume, fadeInMs);
         if (showBadge) {
           this.triggerTitleBadge(7500);
         }
@@ -295,11 +296,26 @@ class HomeSoundtrackController {
     }
   }
 
+  public setIntroActive(active: boolean) {
+    this.introActive = active;
+    if (active && this.audio && !this.audio.paused) {
+      this.audio.pause();
+    }
+  }
+
+  public unlockFromIntroClick() {
+    this.introActive = false;
+    this.badgedTrackIndex = null;
+    if (this.isOnHome && this.heroInView && !this.muted && this.targetVolume > 0.001 && !document.hidden) {
+      this.startOrResume(true, 1600);
+    }
+  }
+
   public enterHome() {
     this.isOnHome = true;
     this.heroInView = true;
     this.badgedTrackIndex = null;
-    if (!this.muted && this.targetVolume > 0 && !document.hidden) {
+    if (!this.introActive && !this.muted && this.targetVolume > 0.001 && !document.hidden) {
       this.startOrResume(true);
     } else {
       this.emit();
