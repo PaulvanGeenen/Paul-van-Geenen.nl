@@ -41,6 +41,7 @@ import { TrackLocksManager } from '../components/TrackLocksManager';
 import { LogboekManager } from '../components/LogboekManager';
 import { InkijkStatsManager } from '../components/InkijkStatsManager';
 import { AudioVideoStudio } from '../components/AudioVideoStudio';
+import { HomeVideosManager } from '../components/HomeVideosManager';
 import { FileManager } from '../components/FileManager';
 import { SocialComposer } from '../components/SocialComposer';
 
@@ -263,7 +264,7 @@ const isListenInAlbumOrBook = (
 export function Admin() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social' | 'inkijk' | 'video_studio'>('qrcodes');
+  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social' | 'inkijk' | 'video_studio' | 'home_videos'>('qrcodes');
   
   // Data lists
   const [qrcodes, setQrcodes] = useState<QRCodeData[]>([]);
@@ -1774,6 +1775,19 @@ export function Admin() {
           >
             <Film className="w-4 h-4 text-amber-400" />
             Audio → Video Studio
+          </button>
+
+          <button
+            onClick={() => setActiveTab('home_videos')}
+            className={cn(
+              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
+              activeTab === 'home_videos'
+                ? "border-earth-gold text-white"
+                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
+            )}
+          >
+            <Film className="w-4 h-4 text-emerald-400" />
+            Home Video&apos;s
           </button>
         </div>
 
@@ -4117,6 +4131,11 @@ export function Admin() {
         {/* TAB 13: AUDIO -> VIDEO STUDIO */}
         {activeTab === 'video_studio' && !loading && (
           <AudioVideoStudio />
+        )}
+
+        {/* TAB 14: HOMEPAGE ACHTERGRONDVIDEO'S */}
+        {activeTab === 'home_videos' && !loading && (
+          <HomeVideosManager />
         )}
 
         <p className="mt-8 text-center text-earth-light/20 text-xs">
