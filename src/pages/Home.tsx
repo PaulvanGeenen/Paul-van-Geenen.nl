@@ -58,6 +58,7 @@ export function Home() {
   const [isPhotoHovered, setIsPhotoHovered] = useState(false);
   const [heroTextVisible, setHeroTextVisible] = useState(true);
   const [heroControlsVisible, setHeroControlsVisible] = useState(true);
+  const [heroInView, setHeroInView] = useState(true);
 
   const heroSectionRef = useRef<HTMLElement>(null);
   const heroInViewRef = useRef<boolean>(true);
@@ -195,11 +196,13 @@ export function Home() {
 
         if (heroInViewRef.current && ratio <= 0.05) {
           heroInViewRef.current = false;
+          setHeroInView(false);
           homeSoundtrack.setHeroInView(false);
           const activeEl = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
           activeEl?.pause();
         } else if (!heroInViewRef.current && ratio > 0.5) {
           heroInViewRef.current = true;
+          setHeroInView(true);
           homeSoundtrack.setHeroInView(true);
           const activeEl = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
           if (activeEl && !document.hidden) {
@@ -272,8 +275,24 @@ export function Home() {
         window.clearTimeout(heroControlsTimerRef.current);
         heroControlsTimerRef.current = null;
       }
+      window.dispatchEvent(new CustomEvent('home-immersive-mode', { detail: { active: false } }));
     };
   }, [wakeHeroControls]);
+
+  // Enter fullpage immersive cinema mode whenever controls fade out while hero is in view
+  const isImmersiveFullpage = !heroControlsVisible && heroInView;
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('home-immersive-mode', { detail: { active: isImmersiveFullpage } })
+    );
+    if (isImmersiveFullpage && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {
+        // Browsers may block requestFullscreen outside a direct click gesture;
+        // the immersive edge-to-edge fullpage cinema view still activates cleanly!
+      });
+    }
+  }, [isImmersiveFullpage]);
 
   // Mobile (both portrait AND landscape on phones): auto-hide hero text after 10s of inactivity
   // so the .mov shines in full glory; bring it back immediately on tap/click/swipe and restart the 10s timer.
@@ -419,12 +438,16 @@ export function Home() {
 
   return (
     <div className="flex flex-col">
-      {/* Hero Section — fills the full viewport below the fixed navbar in both portrait & landscape */}
+      {/* Hero Section — expands seamlessly into fullpage edge-to-edge cinema mode when controls fade out */}
       <section
         ref={heroSectionRef}
         onClick={() => wakeHeroControls()}
         onTouchStart={() => wakeHeroControls()}
-        className="relative min-h-[calc(100svh-4rem)] md:min-h-[calc(100svh-5rem)] flex items-center bg-earth-dark pt-4"
+        className={`relative flex items-center bg-earth-dark pt-4 transition-all duration-700 ease-in-out ${
+          isImmersiveFullpage
+            ? '-mt-16 md:-mt-20 min-h-[100svh]'
+            : 'min-h-[calc(100svh-4rem)] md:min-h-[calc(100svh-5rem)]'
+        }`}
       >
         <div className="absolute inset-0 z-0 overflow-hidden bg-earth-dark">
           {/* Deck A */}
