@@ -40,6 +40,7 @@ class HomeSoundtrackController {
   private trackIndex = 0;
   private savedTime = 0;
   private isOnHome = false;
+  private heroInView = true;
   private muted = false;
   private targetVolume = 0.65;
   private fadeTimer: number | null = null;
@@ -119,7 +120,7 @@ class HomeSoundtrackController {
     if (this.gestureCleanup || typeof window === 'undefined') return;
     const onGesture = () => {
       this.clearGestureFallback();
-      if (this.isOnHome && !this.muted && !document.hidden) {
+      if (this.isOnHome && this.heroInView && !this.muted && !document.hidden) {
         this.startOrResume(true);
       }
     };
@@ -170,7 +171,7 @@ class HomeSoundtrackController {
   };
 
   private handleEnded = () => {
-    if (!this.isOnHome) return;
+    if (!this.isOnHome || !this.heroInView) return;
     this.trackIndex = (this.trackIndex + 1) % HOME_SOUNDTRACK_TRACKS.length;
     this.savedTime = 0;
     this.startOrResume(true);
@@ -178,7 +179,7 @@ class HomeSoundtrackController {
 
   private startOrResume(showBadge: boolean) {
     const a = this.ensureAudio();
-    if (!a || !this.isOnHome || this.muted || document.hidden) return;
+    if (!a || !this.isOnHome || !this.heroInView || this.muted || document.hidden) return;
 
     const track = HOME_SOUNDTRACK_TRACKS[this.trackIndex] || HOME_SOUNDTRACK_TRACKS[0];
     const absoluteTarget = new URL(track.url, window.location.origin).href;
@@ -218,9 +219,34 @@ class HomeSoundtrackController {
 
   public enterHome(muted: boolean) {
     this.isOnHome = true;
+    this.heroInView = true;
     this.muted = muted;
     if (!muted && !document.hidden) {
       this.startOrResume(true);
+    }
+  }
+
+  public setHeroInView(inView: boolean) {
+    if (this.heroInView === inView) return;
+    this.heroInView = inView;
+    if (!this.isOnHome) return;
+
+    const a = this.audio;
+    if (!inView) {
+      this.clearGestureFallback();
+      if (a && !a.paused) {
+        const startVol = a.volume;
+        this.fadeVolume(startVol, 0, 850, () => {
+          if (!this.heroInView && this.audio) {
+            this.savedTime = this.audio.currentTime || this.savedTime;
+            this.audio.pause();
+          }
+        });
+      } else if (a) {
+        this.savedTime = a.currentTime || this.savedTime;
+      }
+    } else if (!this.muted && !document.hidden) {
+      this.startOrResume(false);
     }
   }
 
@@ -260,7 +286,7 @@ class HomeSoundtrackController {
           }
         });
       }
-    } else if (this.isOnHome && !document.hidden) {
+    } else if (this.isOnHome && this.heroInView && !document.hidden) {
       this.startOrResume(false);
     }
   }
@@ -273,7 +299,7 @@ class HomeSoundtrackController {
         this.savedTime = a.currentTime || this.savedTime;
         a.pause();
       }
-    } else if (!this.muted) {
+    } else if (!this.muted && this.heroInView) {
       this.startOrResume(false);
     }
   }

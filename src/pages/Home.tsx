@@ -58,6 +58,8 @@ export function Home() {
   const [isPhotoHovered, setIsPhotoHovered] = useState(false);
   const [heroTextVisible, setHeroTextVisible] = useState(true);
 
+  const heroSectionRef = useRef<HTMLElement>(null);
+  const heroInViewRef = useRef<boolean>(true);
   const videoRefA = useRef<HTMLVideoElement>(null);
   const videoRefB = useRef<HTMLVideoElement>(null);
   const activeSlotRef = useRef<'A' | 'B'>('A');
@@ -181,6 +183,40 @@ export function Home() {
   useEffect(() => {
     homeSoundtrack.setMuted(ambientMuted);
   }, [ambientMuted]);
+
+  // Fade out & pause soundtrack when user scrolls hero video out of view;
+  // resume & fade in only when hero video is more than 50% back in view.
+  useEffect(() => {
+    const heroEl = heroSectionRef.current;
+    if (!heroEl || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        const ratio = entry.intersectionRatio;
+
+        if (heroInViewRef.current && ratio <= 0.05) {
+          heroInViewRef.current = false;
+          homeSoundtrack.setHeroInView(false);
+          const activeEl = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
+          activeEl?.pause();
+        } else if (!heroInViewRef.current && ratio > 0.5) {
+          heroInViewRef.current = true;
+          homeSoundtrack.setHeroInView(true);
+          const activeEl = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
+          if (activeEl && !document.hidden) {
+            activeEl.muted = true;
+            activeEl.play().catch(() => {});
+          }
+        }
+      },
+      { threshold: [0, 0.05, 0.25, 0.5, 0.52, 0.75] }
+    );
+
+    observer.observe(heroEl);
+    return () => observer.disconnect();
+  }, []);
 
   // Pause playback when homepage tab is hidden, resume active deck when visible again
   useEffect(() => {
@@ -345,7 +381,10 @@ export function Home() {
   return (
     <div className="flex flex-col">
       {/* Hero Section — fills the full viewport below the fixed navbar in both portrait & landscape */}
-      <section className="relative min-h-[calc(100svh-4rem)] md:min-h-[calc(100svh-5rem)] flex items-center bg-earth-dark pt-4">
+      <section
+        ref={heroSectionRef}
+        className="relative min-h-[calc(100svh-4rem)] md:min-h-[calc(100svh-5rem)] flex items-center bg-earth-dark pt-4"
+      >
         <div className="absolute inset-0 z-0 overflow-hidden bg-earth-dark">
           {/* Deck A */}
           {srcA && (
