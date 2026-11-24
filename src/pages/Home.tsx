@@ -57,6 +57,7 @@ export function Home() {
   const [deckBReady, setDeckBReady] = useState(false);
   const [isPhotoHovered, setIsPhotoHovered] = useState(false);
   const [heroTextVisible, setHeroTextVisible] = useState(true);
+  const [heroControlsVisible, setHeroControlsVisible] = useState(true);
 
   const heroSectionRef = useRef<HTMLElement>(null);
   const heroInViewRef = useRef<boolean>(true);
@@ -68,6 +69,7 @@ export function Home() {
   const crossfadingRef = useRef<boolean>(false);
   const cleanupTimerRef = useRef<number | null>(null);
   const heroTextTimerRef = useRef<number | null>(null);
+  const heroControlsTimerRef = useRef<number | null>(null);
   const errorCountRef = useRef<number>(0);
 
   activeSlotRef.current = activeSlot;
@@ -231,6 +233,28 @@ export function Home() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
+  // Auto-hide the green "Ontdek de reeks" button + volume control after 5s of inactivity on the hero video area;
+  // clicking/tapping the hero area brings both smoothly back in and restarts the 5s timer.
+  const wakeHeroControls = useCallback(() => {
+    setHeroControlsVisible(true);
+    if (heroControlsTimerRef.current) {
+      window.clearTimeout(heroControlsTimerRef.current);
+    }
+    heroControlsTimerRef.current = window.setTimeout(() => {
+      setHeroControlsVisible(false);
+    }, 5000);
+  }, []);
+
+  useEffect(() => {
+    wakeHeroControls();
+    return () => {
+      if (heroControlsTimerRef.current) {
+        window.clearTimeout(heroControlsTimerRef.current);
+        heroControlsTimerRef.current = null;
+      }
+    };
+  }, [wakeHeroControls]);
+
   // Mobile (both portrait AND landscape on phones): auto-hide hero text after 10s of inactivity
   // so the .mov shines in full glory; bring it back immediately on tap/click/swipe and restart the 10s timer.
   useEffect(() => {
@@ -378,6 +402,8 @@ export function Home() {
       {/* Hero Section — fills the full viewport below the fixed navbar in both portrait & landscape */}
       <section
         ref={heroSectionRef}
+        onClick={wakeHeroControls}
+        onTouchStart={wakeHeroControls}
         className="relative min-h-[calc(100svh-4rem)] md:min-h-[calc(100svh-5rem)] flex items-center bg-earth-dark pt-4"
       >
         <div className="absolute inset-0 z-0 overflow-hidden bg-earth-dark">
@@ -480,7 +506,13 @@ export function Home() {
             <p className="text-base md:text-lg lg:text-xl text-white/80 mb-10 max-w-lg leading-relaxed font-light">
               Een tumor als keerpunt. Ontdek mijn persoonlijke verhaal door een unieke literaire reis van geboorte tot aan de diepste echo&apos;s van mijn hart.
             </p>
-            <div className="flex flex-wrap gap-6 items-center justify-center lg:justify-start">
+            <div
+              className={`flex flex-wrap gap-6 items-center justify-center lg:justify-start transition-opacity duration-700 ease-in-out ${
+                heroControlsVisible
+                  ? 'opacity-100 pointer-events-auto'
+                  : 'opacity-0 pointer-events-none'
+              }`}
+            >
               <Link to="/boeken" className="btn-primary flex items-center gap-2 shadow-xl hover:-translate-y-1 transition-all duration-300">
                 Ontdek de reeks <ArrowRight className="w-5 h-5" />
               </Link>
@@ -550,15 +582,26 @@ export function Home() {
           </AnimatePresence>
           {/* Dedicated Homepage Soundtrack Speaker & Volume Control (bottom-right of Hero) */}
           <div
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            className={`absolute right-4 sm:right-8 md:right-12 bottom-7 sm:bottom-10 md:bottom-12 z-40 flex items-center gap-2.5 bg-black/75 backdrop-blur-xl px-3.5 py-2 rounded-full border border-earth-gold/45 shadow-[0_10px_30px_rgba(0,0,0,0.75)] transition-opacity duration-700 ${
-              heroTextVisible ? 'opacity-100' : 'opacity-35 hover:opacity-100'
+            onClick={(e) => {
+              e.stopPropagation();
+              wakeHeroControls();
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              wakeHeroControls();
+            }}
+            className={`absolute right-4 sm:right-8 md:right-12 bottom-7 sm:bottom-10 md:bottom-12 z-40 flex items-center gap-2.5 bg-black/75 backdrop-blur-xl px-3.5 py-2 rounded-full border border-earth-gold/45 shadow-[0_10px_30px_rgba(0,0,0,0.75)] transition-opacity duration-700 ease-in-out ${
+              heroControlsVisible
+                ? 'opacity-100 pointer-events-auto'
+                : 'opacity-0 pointer-events-none'
             }`}
           >
             <button
               type="button"
-              onClick={() => homeSoundtrack.toggleMute()}
+              onClick={() => {
+                wakeHeroControls();
+                homeSoundtrack.toggleMute();
+              }}
               aria-label={soundtrackState?.muted ? 'Geluid aanzetten' : 'Geluid dempen'}
               title={soundtrackState?.muted ? 'Geluid aanzetten' : 'Geluid dempen'}
               className="text-earth-gold hover:text-amber-300 transition-colors cursor-pointer shrink-0 flex items-center justify-center"
@@ -582,7 +625,10 @@ export function Home() {
                   ? 0
                   : Math.round((soundtrackState?.volume ?? 0.65) * 100)
               }
-              onChange={(e) => homeSoundtrack.setVolume(Number(e.target.value) / 100)}
+              onChange={(e) => {
+                wakeHeroControls();
+                homeSoundtrack.setVolume(Number(e.target.value) / 100);
+              }}
               aria-label="Volume homepage soundtrack"
               className="w-20 sm:w-28 h-1.5 rounded-lg appearance-none cursor-pointer bg-white/20 accent-[#e0bd82]"
             />
