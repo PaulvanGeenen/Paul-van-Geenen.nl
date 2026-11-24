@@ -58,7 +58,8 @@ _private_manuscripts/
 public/@music/**/*.mov
 public/@music/*.mov
 
-# Large homepage background videos (synced directly via deploy.js / SFTP)
+# Large homepage background videos & soundtrack MP3s (synced directly via deploy.js / SFTP)
 public/videos/home/**/*.mov
 public/videos/home/**/*.mp4
+public/videos/home/Music/*.mp3
 

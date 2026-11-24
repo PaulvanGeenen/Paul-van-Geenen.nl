@@ -1,10 +1,12 @@
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
 import { IvoryHeartPendant } from '../components/ui/IvoryHeartPendant';
 import { Link } from 'react-router-dom';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import page9Img from '../assets/images/hoofdstuk9.jpg';
 import { LogboekPreviewSection } from '../components/LogboekPreviewSection';
+import { useAudio } from '../context/AudioContext';
+import { homeSoundtrack, HomeSoundtrackSnapshot } from '../lib/homeSoundtrack';
 
 const DEFAULT_HERO_VIDEO = '/videos/home.mp4';
 const CROSSFADE_MS = 1100;
@@ -31,9 +33,11 @@ function shuffleArray<T>(items: T[]): T[] {
 }
 
 export function Home() {
+  const { ambientMuted, reportVideoAudioStatus } = useAudio();
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(() => getOrientation());
   const [playlist, setPlaylist] = useState<string[]>([]);
   const [usingFallbackBlossom, setUsingFallbackBlossom] = useState(false);
+  const [soundtrackState, setSoundtrackState] = useState<HomeSoundtrackSnapshot | null>(null);
 
   // Dual-deck state for true simultaneous crossfade (outgoing fades out while incoming fades in)
   const [activeSlot, setActiveSlot] = useState<'A' | 'B'>('A');
@@ -147,11 +151,33 @@ export function Home() {
     return () => window.clearTimeout(t);
   }, [srcA, orientation, usingFallbackBlossom]);
 
+  // Subscribe to persistent homepage soundtrack controller (survives navigation with fade-out & resume fade-in)
+  useEffect(() => {
+    const unsubscribe = homeSoundtrack.subscribe(setSoundtrackState);
+    return unsubscribe;
+  }, []);
+
+  // Start / resume homepage soundtrack when Home mounts, fade out & pause when navigating away
+  useEffect(() => {
+    reportVideoAudioStatus(true);
+    homeSoundtrack.enterHome(ambientMuted);
+    return () => {
+      homeSoundtrack.leaveHome();
+      reportVideoAudioStatus(false);
+    };
+  }, [reportVideoAudioStatus]);
+
+  // Respect navbar mute toggle live
+  useEffect(() => {
+    homeSoundtrack.setMuted(ambientMuted);
+  }, [ambientMuted]);
+
   // Pause playback when homepage tab is hidden, resume active deck when visible again
   useEffect(() => {
     const onVisibilityChange = () => {
       const activeEl = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
       const idleEl = activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current;
+      homeSoundtrack.handleVisibilityChange(document.hidden);
       if (document.hidden) {
         activeEl?.pause();
         idleEl?.pause();
@@ -447,7 +473,38 @@ export function Home() {
             </motion.div>
           )}
         </div>
-      </section>
+          {/* Same Song Credit Badge visual as the MediaPlayer (title only) at the start of each track */}
+          <AnimatePresence mode="wait">
+            {soundtrackState?.showTitleBadge && soundtrackState?.track && (
+              <motion.div
+                key={`home-song-credit-${soundtrackState.track.index}`}
+                initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute left-3 sm:left-4 md:left-6 bottom-5 sm:bottom-7 md:bottom-8 z-40 pointer-events-none select-none max-w-[82%] sm:max-w-[320px] md:max-w-[360px]"
+              >
+                <div className="flex items-center gap-2.5 sm:gap-3 bg-black/85 backdrop-blur-xl px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-earth-gold/35 shadow-[0_8px_24px_rgba(0,0,0,0.85)] ring-1 ring-black/50">
+                  <div className="shrink-0 -my-0.5">
+                    <div className="animate-pendant-dangle w-5 h-6 sm:w-6 sm:h-7 md:w-7 md:h-8 flex items-center justify-center drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">
+                      <IvoryHeartPendant size="sm" className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="text-earth-gold font-sans font-bold tracking-tight text-xs sm:text-sm md:text-base leading-snug truncate"
+                      style={{
+                        textShadow: '0 1px 3px #000, 0 0 8px rgba(0,0,0,0.9), 1px 1px 1px #000',
+                      }}
+                    >
+                      &ldquo;{soundtrackState.track.title}&rdquo;
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
 
       {/* Logboek Sectie — net voor Het keerpunt */}
       <LogboekPreviewSection />
