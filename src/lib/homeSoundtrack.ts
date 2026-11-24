@@ -59,6 +59,7 @@ class HomeSoundtrackController {
       a.addEventListener('ended', this.handleEnded);
       a.addEventListener('playing', this.handlePlaying);
       a.addEventListener('pause', this.handlePause);
+      a.addEventListener('timeupdate', this.handleTimeUpdate);
       this.audio = a;
     }
     return this.audio;
@@ -104,6 +105,7 @@ class HomeSoundtrackController {
     this.showTitleBadge = true;
     this.emit();
     this.titleBadgeTimer = window.setTimeout(() => {
+      this.titleBadgeTimer = null;
       this.showTitleBadge = false;
       this.emit();
     }, durationMs);
@@ -159,7 +161,21 @@ class HomeSoundtrackController {
 
   private handlePlaying = () => {
     this.isPlaying = true;
-    this.emit();
+    // Show title badge whenever a track starts playing from the beginning
+    if (this.isOnHome && this.heroInView && !this.muted && this.audio && this.audio.currentTime < 3) {
+      this.triggerTitleBadge(7500);
+    } else {
+      this.emit();
+    }
+  };
+
+  private handleTimeUpdate = () => {
+    if (!this.audio || !this.isOnHome || !this.heroInView || this.muted || this.audio.paused) return;
+    const t = this.audio.currentTime || 0;
+    // Mirror Music.tsx behavior: guarantee the title badge is visible during the opening seconds (1.0s..8.5s) of every track
+    if (t >= 1.0 && t <= 8.5 && !this.showTitleBadge && this.titleBadgeTimer === null) {
+      this.triggerTitleBadge(Math.max(2500, Math.round((8.5 - t) * 1000)));
+    }
   };
 
   private handlePause = () => {
@@ -274,10 +290,14 @@ class HomeSoundtrackController {
   }
 
   public setMuted(muted: boolean) {
+    if (this.muted === muted) return;
     this.muted = muted;
     const a = this.audio;
     if (muted) {
       this.clearGestureFallback();
+      this.clearTitleBadgeTimer();
+      this.showTitleBadge = false;
+      this.emit();
       if (a && !a.paused) {
         this.fadeVolume(a.volume, 0, 450, () => {
           if (this.muted && this.audio) {
@@ -287,7 +307,7 @@ class HomeSoundtrackController {
         });
       }
     } else if (this.isOnHome && this.heroInView && !document.hidden) {
-      this.startOrResume(false);
+      this.startOrResume(true);
     }
   }
 
