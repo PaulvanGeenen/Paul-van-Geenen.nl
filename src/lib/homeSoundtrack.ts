@@ -45,6 +45,7 @@ class HomeSoundtrackController {
   private targetVolume = 0.65;
   private fadeTimer: number | null = null;
   private titleBadgeTimer: number | null = null;
+  private badgedTrackIndex: number | null = null;
   private showTitleBadge = false;
   private isPlaying = false;
   private listeners = new Set<Listener>();
@@ -102,6 +103,7 @@ class HomeSoundtrackController {
 
   private triggerTitleBadge(durationMs = 7500) {
     this.clearTitleBadgeTimer();
+    this.badgedTrackIndex = this.trackIndex;
     this.showTitleBadge = true;
     this.emit();
     this.titleBadgeTimer = window.setTimeout(() => {
@@ -161,8 +163,13 @@ class HomeSoundtrackController {
 
   private handlePlaying = () => {
     this.isPlaying = true;
-    // Show title badge whenever a track starts playing from the beginning
-    if (this.isOnHome && this.heroInView && !this.muted && this.audio && this.audio.currentTime < 3) {
+    // Show title badge once per track when playback starts
+    if (
+      this.isOnHome &&
+      this.heroInView &&
+      !this.muted &&
+      this.badgedTrackIndex !== this.trackIndex
+    ) {
       this.triggerTitleBadge(7500);
     } else {
       this.emit();
@@ -171,10 +178,10 @@ class HomeSoundtrackController {
 
   private handleTimeUpdate = () => {
     if (!this.audio || !this.isOnHome || !this.heroInView || this.muted || this.audio.paused) return;
+    if (this.badgedTrackIndex === this.trackIndex) return;
     const t = this.audio.currentTime || 0;
-    // Mirror Music.tsx behavior: guarantee the title badge is visible during the opening seconds (1.0s..8.5s) of every track
-    if (t >= 1.0 && t <= 8.5 && !this.showTitleBadge && this.titleBadgeTimer === null) {
-      this.triggerTitleBadge(Math.max(2500, Math.round((8.5 - t) * 1000)));
+    if (t >= 0.5 && t <= 8.5 && !this.showTitleBadge && this.titleBadgeTimer === null) {
+      this.triggerTitleBadge(7500);
     }
   };
 
@@ -190,6 +197,7 @@ class HomeSoundtrackController {
     if (!this.isOnHome || !this.heroInView) return;
     this.trackIndex = (this.trackIndex + 1) % HOME_SOUNDTRACK_TRACKS.length;
     this.savedTime = 0;
+    this.badgedTrackIndex = null;
     this.startOrResume(true);
   };
 
@@ -237,6 +245,7 @@ class HomeSoundtrackController {
     this.isOnHome = true;
     this.heroInView = true;
     this.muted = muted;
+    this.badgedTrackIndex = null;
     if (!muted && !document.hidden) {
       this.startOrResume(true);
     }
