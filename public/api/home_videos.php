@@ -55,17 +55,25 @@ if (!$pdo) {
     exit;
 }
 
-// Zorg dat tabel `home_videos` altijd bestaat
+// Zorg dat tabel `home_videos` altijd bestaat (incl. `deleted` vlag zodat verwijderde video's nooit terugkeren na deploy)
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS home_videos (
         id INT AUTO_INCREMENT PRIMARY KEY,
         orientation VARCHAR(20) NOT NULL,
         filename VARCHAR(255) NOT NULL,
         enabled TINYINT(1) NOT NULL DEFAULT 1,
+        deleted TINYINT(1) NOT NULL DEFAULT 0,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_orient_file (orientation, filename)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ");
+
+// Voeg `deleted` kolom toe bij bestaande tabellen
+try {
+    $pdo->exec("ALTER TABLE home_videos ADD COLUMN deleted TINYINT(1) NOT NULL DEFAULT 0 AFTER enabled");
+} catch (PDOException $e) {
+    // Kolom bestaat al
+}
 
 // ==========================================
 // 2. HELPERS VOOR MAPPEN & BESTANDEN
@@ -111,12 +119,13 @@ function listVideosForOrientation(PDO $pdo, string $baseDir, string $orientation
     if (!$folder || !$dir || !is_dir($dir)) return [];
 
     // Haal alle bekende DB-instellingen op voor deze oriëntatie
-    $stmt = $pdo->prepare("SELECT filename, enabled, updated_at FROM home_videos WHERE orientation = ?");
+    $stmt = $pdo->prepare("SELECT filename, enabled, deleted, updated_at FROM home_videos WHERE orientation = ?");
     $stmt->execute([$norm]);
     $dbMap = [];
     foreach ($stmt->fetchAll() as $row) {
         $dbMap[$row['filename']] = [
             'enabled' => ((int)$row['enabled']) === 1,
+            'deleted' => ((int)($row['deleted'] ?? 0)) === 1,
             'updated_at' => $row['updated_at'],
         ];
     }
@@ -125,7 +134,7 @@ function listVideosForOrientation(PDO $pdo, string $baseDir, string $orientation
     if (!is_array($entries)) return [];
 
     $result = [];
-    $insertStmt = $pdo->prepare("INSERT IGNORE INTO home_videos (orientation, filename, enabled) VALUES (?, ?, 1)");
+    $insertStmt = $pdo->prepare("INSERT IGNORE INTO home_videos (orientation, filename, enabled, deleted) VALUES (?, ?, 1, 0)");
 
     foreach ($entries as $entry) {
         if ($entry === '.' || $entry === '..') continue;
@@ -143,6 +152,11 @@ function listVideosForOrientation(PDO $pdo, string $baseDir, string $orientation
             $enabled = true;
             $updatedAt = date('Y-m-d H:i:s', filemtime($fullPath) ?: time());
         } else {
+            if ($dbMap[$entry]['deleted']) {
+                // Bestand is eerder bewust verwijderd in /beheer — ruim eventuele kopie direct op en toon niet
+                @unlink($fullPath);
+                continue;
+            }
             $enabled = $dbMap[$entry]['enabled'];
             $updatedAt = $dbMap[$entry]['updated_at'];
         }
@@ -299,9 +313,9 @@ if ($action === 'upload') {
     $errors = [];
 
     $upsertStmt = $pdo->prepare("
-        INSERT INTO home_videos (orientation, filename, enabled)
-        VALUES (?, ?, 1)
-        ON DUPLICATE KEY UPDATE enabled = 1
+        INSERT INTO home_videos (orientation, filename, enabled, deleted)
+        VALUES (?, ?, 1, 0)
+        ON DUPLICATE KEY UPDATE enabled = 1, deleted = 0
     ");
 
     foreach ($uploadedList as $file) {
@@ -370,10 +384,23 @@ if ($action === 'delete') {
         @unlink($fullPath);
     }
 
-    $stmt = $pdo->prepare("DELETE FROM home_videos WHERE orientation = ? AND filename = ?");
+    // Markeer als definitief verwijderd zodat een deploy dit bestand nooit meer terugzet
+    $stmt = $pdo->prepare("
+        INSERT INTO home_videos (orientation, filename, enabled, deleted)
+        VALUES (?, ?, 0, 1)
+        ON DUPLICATE KEY UPDATE enabled = 0, deleted = 1
+    ");
     $stmt->execute([$orientation, $filename]);
 
     echo json_encode(['success' => true, 'deleted' => $filename]);
+    exit;
+}
+
+// F. LIJST VAN VERWIJDERDE VIDEO'S (voor deploy.js zodat lokale kopieën niet worden teruggeüpload)
+if ($action === 'deleted_list') {
+    $stmt = $pdo->query("SELECT orientation, filename FROM home_videos WHERE deleted = 1");
+    $rows = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'deleted' => $rows]);
     exit;
 }
 

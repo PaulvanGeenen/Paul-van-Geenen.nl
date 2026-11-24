@@ -199,10 +199,27 @@ async function deploy() {
       console.log(`✅ ${inkijkUploaded} van ${inkijkFiles.length} inkijkexemplaar-pagina's gesynchroniseerd!`);
     }
 
-    // 3d. Upload videos (dist/videos/**)
+    // 3d. Upload videos (dist/videos/**), maar sla video's over die in /beheer zijn verwijderd en ruim hun lokale kopie op
     const localVideosDir = path.join(DIST_DIR, 'videos');
     const remoteVideosDir = `${REMOTE_ROOT}/videos`;
     if (fs.existsSync(localVideosDir)) {
+      const deletedHomeVideos = new Set();
+      try {
+        const delRes = await fetch('https://paulvangeenen.nl/api/home_videos.php?action=deleted_list');
+        if (delRes.ok) {
+          const delData = await delRes.json();
+          if (Array.isArray(delData?.deleted)) {
+            for (const item of delData.deleted) {
+              const orient = String(item.orientation || '').toLowerCase();
+              const fname = String(item.filename || '');
+              if (orient && fname) {
+                deletedHomeVideos.add(`${orient}/${fname}`);
+              }
+            }
+          }
+        }
+      } catch {}
+
       const videoFiles = [];
       function walkVideos(dir) {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -215,8 +232,25 @@ async function deploy() {
       walkVideos(localVideosDir);
 
       let videosUploaded = 0;
+      let deletedSkipped = 0;
       for (const localPath of videoFiles) {
         const relativePath = path.relative(localVideosDir, localPath).replace(/\\/g, '/');
+
+        // Controleer of dit een in /beheer verwijderde homepage-video is
+        const homeMatch = relativePath.match(/^home\/(Portrait|Landscape)\/(.+)$/i);
+        if (homeMatch) {
+          const delKey = `${homeMatch[1].toLowerCase()}/${homeMatch[2]}`;
+          if (deletedHomeVideos.has(delKey)) {
+            deletedSkipped++;
+            // Ruim ook de lokale kopie in public/videos/ op zodat deze niet blijft liggen
+            const publicCopy = path.join(PUBLIC_DIR, 'videos', relativePath);
+            try {
+              if (fs.existsSync(publicCopy)) fs.unlinkSync(publicCopy);
+            } catch {}
+            continue;
+          }
+        }
+
         const remotePath = `${remoteVideosDir}/${relativePath}`;
         const remoteSubdir = remotePath.substring(0, remotePath.lastIndexOf('/'));
         const localStat = fs.statSync(localPath);
@@ -240,7 +274,10 @@ async function deploy() {
           videosUploaded++;
         }
       }
-      console.log(`✅ ${videosUploaded} van ${videoFiles.length} video-bestanden gesynchroniseerd!`);
+      console.log(
+        `✅ ${videosUploaded} van ${videoFiles.length} video-bestanden gesynchroniseerd!` +
+          (deletedSkipped > 0 ? ` (${deletedSkipped} verwijderde homepage-video's overgeslagen & lokaal opgeruimd)` : '')
+      );
     }
 
     // 4. Upload .htaccess & manifest.json
