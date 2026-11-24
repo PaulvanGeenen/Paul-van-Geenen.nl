@@ -7,6 +7,8 @@ import page9Img from '../assets/images/hoofdstuk9.jpg';
 import { LogboekPreviewSection } from '../components/LogboekPreviewSection';
 
 const DEFAULT_HERO_VIDEO = '/videos/home.mp4';
+const CROSSFADE_MS = 1100;
+const CROSSFADE_LEAD_SEC = 1.2;
 
 const HOME_VIDEOS_API =
   typeof window !== 'undefined' &&
@@ -31,15 +33,28 @@ function shuffleArray<T>(items: T[]): T[] {
 export function Home() {
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(() => getOrientation());
   const [playlist, setPlaylist] = useState<string[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [usingFallbackBlossom, setUsingFallbackBlossom] = useState(false);
-  const [videoVisible, setVideoVisible] = useState(false);
+
+  // Dual-deck state for true simultaneous crossfade (outgoing fades out while incoming fades in)
+  const [activeSlot, setActiveSlot] = useState<'A' | 'B'>('A');
+  const [slotIndexA, setSlotIndexA] = useState<number>(0);
+  const [slotIndexB, setSlotIndexB] = useState<number>(1);
+  const [deckAReady, setDeckAReady] = useState(false);
+  const [deckBReady, setDeckBReady] = useState(false);
   const [isPhotoHovered, setIsPhotoHovered] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const advancingRef = useRef(false);
-  const fadeTimerRef = useRef<number | null>(null);
-  const errorCountRef = useRef(0);
+  const videoRefA = useRef<HTMLVideoElement>(null);
+  const videoRefB = useRef<HTMLVideoElement>(null);
+  const activeSlotRef = useRef<'A' | 'B'>('A');
+  const slotIndexARef = useRef<number>(0);
+  const slotIndexBRef = useRef<number>(1);
+  const crossfadingRef = useRef<boolean>(false);
+  const cleanupTimerRef = useRef<number | null>(null);
+  const errorCountRef = useRef<number>(0);
+
+  activeSlotRef.current = activeSlot;
+  slotIndexARef.current = slotIndexA;
+  slotIndexBRef.current = slotIndexB;
 
   // Detect portrait <-> landscape switches
   useEffect(() => {
@@ -58,13 +73,17 @@ export function Home() {
   // Fetch enabled .mov videos for current orientation and shuffle into a new random playlist
   useEffect(() => {
     let cancelled = false;
-    if (fadeTimerRef.current) {
-      window.clearTimeout(fadeTimerRef.current);
-      fadeTimerRef.current = null;
+    if (cleanupTimerRef.current) {
+      window.clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
     }
-    advancingRef.current = false;
+    crossfadingRef.current = false;
     errorCountRef.current = 0;
-    setVideoVisible(false);
+    setDeckAReady(false);
+    setDeckBReady(false);
+    setActiveSlot('A');
+    setSlotIndexA(0);
+    setSlotIndexB(1);
 
     const loadPlaylist = async () => {
       try {
@@ -81,17 +100,14 @@ export function Home() {
 
         if (urls.length > 0) {
           setPlaylist(shuffleArray(urls));
-          setCurrentIndex(0);
           setUsingFallbackBlossom(false);
         } else {
           setPlaylist([]);
-          setCurrentIndex(0);
           setUsingFallbackBlossom(true);
         }
       } catch {
         if (cancelled) return;
         setPlaylist([]);
-        setCurrentIndex(0);
         setUsingFallbackBlossom(true);
       }
     };
@@ -102,134 +118,209 @@ export function Home() {
     };
   }, [orientation]);
 
-  const currentSrc =
-    usingFallbackBlossom || playlist.length === 0
-      ? DEFAULT_HERO_VIDEO
-      : playlist[currentIndex % playlist.length];
-
   const isLoopingSingle = usingFallbackBlossom || playlist.length <= 1;
 
-  // Pause playback when homepage tab is hidden, resume when visible again
+  const srcA =
+    usingFallbackBlossom || playlist.length === 0
+      ? DEFAULT_HERO_VIDEO
+      : playlist[slotIndexA % playlist.length];
+
+  const srcB =
+    !isLoopingSingle && playlist.length > 1
+      ? playlist[slotIndexB % playlist.length]
+      : '';
+
+  // Start playback on deck A when playlist initializes or switches to fallback
+  useEffect(() => {
+    const elA = videoRefA.current;
+    if (!elA || !srcA) return;
+    if (activeSlotRef.current !== 'A') return;
+    elA.muted = true;
+    elA.defaultMuted = true;
+    const t = window.setTimeout(() => {
+      if (!document.hidden && videoRefA.current && activeSlotRef.current === 'A') {
+        videoRefA.current.play().catch(() => {});
+      }
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [srcA, orientation, usingFallbackBlossom]);
+
+  // Pause playback when homepage tab is hidden, resume active deck when visible again
   useEffect(() => {
     const onVisibilityChange = () => {
-      const el = videoRef.current;
-      if (!el) return;
+      const activeEl = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
+      const idleEl = activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current;
       if (document.hidden) {
-        el.pause();
-      } else {
-        el.muted = true;
-        el.play().catch(() => {});
+        activeEl?.pause();
+        idleEl?.pause();
+      } else if (activeEl) {
+        activeEl.muted = true;
+        activeEl.play().catch(() => {});
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
-  // Trigger muted autoplay whenever currentSrc changes
-  useEffect(() => {
-    if (!currentSrc) return;
-    advancingRef.current = false;
-    setVideoVisible(false);
-
-    const el = videoRef.current;
-    if (!el) return;
-    el.muted = true;
-    el.defaultMuted = true;
-
-    const timer = window.setTimeout(() => {
-      if (!document.hidden && videoRef.current) {
-        videoRef.current.play().catch(() => {});
-      }
-    }, 60);
-
-    return () => window.clearTimeout(timer);
-  }, [currentSrc]);
-
-  // Cleanup fade timer on unmount
+  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
-      if (fadeTimerRef.current) {
-        window.clearTimeout(fadeTimerRef.current);
+      if (cleanupTimerRef.current) {
+        window.clearTimeout(cleanupTimerRef.current);
       }
     };
   }, []);
 
-  const advanceToNextVideo = useCallback(() => {
-    if (advancingRef.current || playlist.length <= 1) return;
-    advancingRef.current = true;
-    setVideoVisible(false);
+  // Trigger simultaneous crossfade from current active deck to the preloaded other deck
+  const triggerCrossfade = useCallback(() => {
+    if (crossfadingRef.current || isLoopingSingle || playlist.length <= 1) return;
+    crossfadingRef.current = true;
 
-    if (fadeTimerRef.current) window.clearTimeout(fadeTimerRef.current);
-    fadeTimerRef.current = window.setTimeout(() => {
-      setCurrentIndex((prev) => (prev + 1) % playlist.length);
-      advancingRef.current = false;
-    }, 250);
-  }, [playlist.length]);
+    const outgoingSlot = activeSlotRef.current;
+    const incomingSlot: 'A' | 'B' = outgoingSlot === 'A' ? 'B' : 'A';
+    const outgoingEl = outgoingSlot === 'A' ? videoRefA.current : videoRefB.current;
+    const incomingEl = incomingSlot === 'A' ? videoRefA.current : videoRefB.current;
 
-  const handleVideoStart = () => {
-    errorCountRef.current = 0;
-    if (!advancingRef.current) {
-      setVideoVisible(true);
+    if (incomingEl) {
+      incomingEl.muted = true;
+      incomingEl.defaultMuted = true;
+      try {
+        if (incomingEl.currentTime > 0.25) incomingEl.currentTime = 0;
+      } catch {}
+      if (!document.hidden) {
+        incomingEl.play().catch(() => {});
+      }
     }
-  };
 
-  const handleTimeUpdate = () => {
-    if (isLoopingSingle || advancingRef.current) return;
-    const el = videoRef.current;
+    // Flip active slot immediately so outgoing fades out AND incoming fades in at the exact same time
+    if (incomingSlot === 'A') setDeckAReady(true);
+    else setDeckBReady(true);
+    setActiveSlot(incomingSlot);
+
+    // After the crossfade finishes, pause the outgoing deck and preload the next video onto it
+    const incomingIdx = incomingSlot === 'A' ? slotIndexARef.current : slotIndexBRef.current;
+    const nextPreloadIdx = (incomingIdx + 1) % playlist.length;
+
+    if (cleanupTimerRef.current) window.clearTimeout(cleanupTimerRef.current);
+    cleanupTimerRef.current = window.setTimeout(() => {
+      if (outgoingEl) {
+        outgoingEl.pause();
+        try {
+          outgoingEl.currentTime = 0;
+        } catch {}
+      }
+      if (outgoingSlot === 'A') {
+        setDeckAReady(false);
+        setSlotIndexA(nextPreloadIdx);
+      } else {
+        setDeckBReady(false);
+        setSlotIndexB(nextPreloadIdx);
+      }
+      crossfadingRef.current = false;
+    }, CROSSFADE_MS + 100);
+  }, [isLoopingSingle, playlist.length]);
+
+  const handleTimeUpdate = (slot: 'A' | 'B') => {
+    if (isLoopingSingle || crossfadingRef.current || activeSlotRef.current !== slot) return;
+    const el = slot === 'A' ? videoRefA.current : videoRefB.current;
     if (!el || !el.duration || !isFinite(el.duration)) return;
     const remaining = el.duration - el.currentTime;
-    // Start smooth fade-out ~0.85s before the video ends
-    if (remaining > 0 && remaining <= 0.85) {
-      setVideoVisible(false);
+    if (remaining > 0 && remaining <= CROSSFADE_LEAD_SEC) {
+      triggerCrossfade();
     }
   };
 
-  const handleVideoEnded = () => {
-    if (isLoopingSingle) return;
-    advanceToNextVideo();
+  const handleEnded = (slot: 'A' | 'B') => {
+    if (isLoopingSingle || activeSlotRef.current !== slot) return;
+    triggerCrossfade();
   };
 
-  const handleVideoError = () => {
+  const handleError = (slot: 'A' | 'B') => {
     if (usingFallbackBlossom) return;
     errorCountRef.current += 1;
-    // If all videos in the playlist fail (e.g. unsupported codec), fall back cleanly to blossom
     if (playlist.length <= 1 || errorCountRef.current >= playlist.length) {
       setUsingFallbackBlossom(true);
-      setVideoVisible(false);
       return;
     }
-    advancingRef.current = false;
-    setCurrentIndex((prev) => (prev + 1) % playlist.length);
+    if (slot === activeSlotRef.current) {
+      crossfadingRef.current = false;
+      triggerCrossfade();
+    } else {
+      // Skip broken preloaded video on idle deck
+      const curIdx = slot === 'A' ? slotIndexARef.current : slotIndexBRef.current;
+      const nextIdx = (curIdx + 1) % playlist.length;
+      if (slot === 'A') setSlotIndexA(nextIdx);
+      else setSlotIndexB(nextIdx);
+    }
   };
+
+  const deckAVisible = activeSlot === 'A' && deckAReady;
+  const deckBVisible = activeSlot === 'B' && deckBReady;
 
   return (
     <div className="flex flex-col">
       {/* Hero Section — fills the full viewport below the fixed navbar in both portrait & landscape */}
       <section className="relative min-h-[calc(100svh-4rem)] md:min-h-[calc(100svh-5rem)] flex items-center bg-earth-dark pt-4">
         <div className="absolute inset-0 z-0 overflow-hidden bg-earth-dark">
-          {currentSrc && (
+          {/* Deck A */}
+          {srcA && (
             <video
-              key={`${orientation}:${currentIndex}:${currentSrc}`}
-              ref={videoRef}
-              src={currentSrc}
-              autoPlay
+              key={`A:${orientation}:${srcA}`}
+              ref={videoRefA}
+              src={srcA}
+              autoPlay={activeSlot === 'A'}
               muted
               loop={isLoopingSingle}
               playsInline
-              onPlaying={handleVideoStart}
-              onCanPlay={handleVideoStart}
-              onTimeUpdate={handleTimeUpdate}
-              onEnded={handleVideoEnded}
-              onError={handleVideoError}
-              className={`w-full h-full object-cover object-center transition-opacity duration-700 ease-in-out ${
-                videoVisible ? 'opacity-80' : 'opacity-0'
+              preload="auto"
+              onPlaying={() => {
+                errorCountRef.current = 0;
+                setDeckAReady(true);
+              }}
+              onCanPlay={() => {
+                if (activeSlotRef.current === 'A') setDeckAReady(true);
+              }}
+              onTimeUpdate={() => handleTimeUpdate('A')}
+              onEnded={() => handleEnded('A')}
+              onError={() => handleError('A')}
+              style={{ transitionDuration: `${CROSSFADE_MS}ms` }}
+              className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity ease-in-out ${
+                deckAVisible ? 'opacity-80 z-[2]' : 'opacity-0 z-[1]'
+              }`}
+            />
+          )}
+
+          {/* Deck B (preloaded & crossfaded simultaneously with Deck A) */}
+          {srcB && (
+            <video
+              key={`B:${orientation}:${srcB}`}
+              ref={videoRefB}
+              src={srcB}
+              autoPlay={activeSlot === 'B'}
+              muted
+              loop={false}
+              playsInline
+              preload="auto"
+              onPlaying={() => {
+                errorCountRef.current = 0;
+                setDeckBReady(true);
+              }}
+              onCanPlay={() => {
+                if (activeSlotRef.current === 'B') setDeckBReady(true);
+              }}
+              onTimeUpdate={() => handleTimeUpdate('B')}
+              onEnded={() => handleEnded('B')}
+              onError={() => handleError('B')}
+              style={{ transitionDuration: `${CROSSFADE_MS}ms` }}
+              className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity ease-in-out ${
+                deckBVisible ? 'opacity-80 z-[2]' : 'opacity-0 z-[1]'
               }`}
             />
           )}
 
           {/* Moody overlays for high contrast and atmosphere */}
-          <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-r from-earth-dark/95 via-earth-dark/50 to-transparent pointer-events-none" />
+          <div className="absolute inset-0 z-[3] bg-black/20 pointer-events-none" />
+          <div className="absolute inset-0 z-[3] bg-gradient-to-r from-earth-dark/95 via-earth-dark/50 to-transparent pointer-events-none" />
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center py-6 md:py-12 lg:py-16">
