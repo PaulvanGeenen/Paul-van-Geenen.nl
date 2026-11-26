@@ -243,7 +243,7 @@ async function deploy() {
           if (deletedHomeVideos.has(delKey)) {
             deletedSkipped++;
             // Ruim ook de lokale kopie in public/videos/ op zodat deze niet blijft liggen
-            const publicCopy = path.join(__dirname, '..', 'public', 'videos', relativePath);
+            const publicCopy = path.join(DIST_DIR, '..', 'public', 'videos', relativePath);
             try {
               if (fs.existsSync(publicCopy)) fs.unlinkSync(publicCopy);
             } catch {}
