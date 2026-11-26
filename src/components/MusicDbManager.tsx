@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Database, RefreshCw, Plus, Trash2, Edit3, CheckCircle2, AlertCircle, 
   Music, Folder, FileAudio, FileVideo, Image, Subtitles, ExternalLink,
-  Sparkles, Layers, Shield, Check, X, Eye, HelpCircle, ChevronRight,
+  Sparkles, Layers, Shield, Check, X, Eye, EyeOff, HelpCircle, ChevronRight,
   FolderSync, Lock, LockOpen, RotateCcw, QrCode
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -26,6 +26,7 @@ interface DbAlbum {
   order_num: number;
   cover?: string;
   locks_enabled?: number | boolean;
+  is_hidden?: number | boolean;
   free_track_1?: string | null;
   free_track_2?: string | null;
 }
@@ -36,6 +37,7 @@ interface DbTrack {
   track_order: number;
   title: string;
   foldername: string;
+  is_hidden?: number | boolean;
   media_detected?: {
     mp3?: string;
     audiobook?: string | null;
@@ -371,6 +373,38 @@ export function MusicDbManager() {
       alert('Fout: ' + err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Toggle Album Visibility (Hidden for visitors, visible for admin)
+  const handleToggleAlbumHidden = async (album: DbAlbum) => {
+    const currentlyHidden = album.is_hidden === 1 || album.is_hidden === true;
+    const nextHidden = currentlyHidden ? 0 : 1;
+    setAlbums(prev => prev.map(a => a.id === album.id ? { ...a, is_hidden: nextHidden } : a));
+    try {
+      const res = await fetchBridge('toggle_album_hidden', 'POST', { album_id: album.id, is_hidden: nextHidden });
+      if (!res?.success) {
+        throw new Error(res?.error || 'Kon zichtbaarheid niet opslaan.');
+      }
+    } catch (err: any) {
+      setAlbums(prev => prev.map(a => a.id === album.id ? { ...a, is_hidden: currentlyHidden ? 1 : 0 } : a));
+      alert(`Zichtbaarheid wijzigen mislukt: ${err.message}`);
+    }
+  };
+
+  // Toggle Track Visibility (Hidden for visitors, visible for admin)
+  const handleToggleTrackHidden = async (track: DbTrack) => {
+    const currentlyHidden = track.is_hidden === 1 || track.is_hidden === true;
+    const nextHidden = currentlyHidden ? 0 : 1;
+    setTracks(prev => prev.map(t => t.id === track.id ? { ...t, is_hidden: nextHidden } : t));
+    try {
+      const res = await fetchBridge('toggle_track_hidden', 'POST', { track_id: track.id, is_hidden: nextHidden });
+      if (!res?.success) {
+        throw new Error(res?.error || 'Kon zichtbaarheid niet opslaan.');
+      }
+    } catch (err: any) {
+      setTracks(prev => prev.map(t => t.id === track.id ? { ...t, is_hidden: currentlyHidden ? 1 : 0 } : t));
+      alert(`Zichtbaarheid wijzigen mislukt: ${err.message}`);
     }
   };
 
@@ -793,6 +827,33 @@ export function MusicDbManager() {
                       </span>
                       <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                         <button
+                          type="button"
+                          onClick={() => handleToggleAlbumHidden(alb)}
+                          className={cn(
+                            "px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 border transition-colors cursor-pointer",
+                            (alb.is_hidden === 1 || alb.is_hidden === true)
+                              ? "bg-amber-500/20 text-amber-300 border-amber-400/40 hover:bg-amber-500/30"
+                              : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25"
+                          )}
+                          title={
+                            (alb.is_hidden === 1 || alb.is_hidden === true)
+                              ? "Verborgen voor bezoekers (wel zichtbaar voor admin). Klik om publiek te tonen."
+                              : "Publiek zichtbaar op de website. Klik om te verbergen voor bezoekers."
+                          }
+                        >
+                          {(alb.is_hidden === 1 || alb.is_hidden === true) ? (
+                            <>
+                              <EyeOff className="w-3 h-3" />
+                              <span>Verborgen</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3 h-3" />
+                              <span>Zichtbaar</span>
+                            </>
+                          )}
+                        </button>
+                        <button
                           onClick={() => {
                             setEditingAlbum(alb);
                             setAlbumForm({
@@ -1009,6 +1070,27 @@ export function MusicDbManager() {
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleTrackHidden(trk)}
+                            className={cn(
+                              "p-1.5 rounded-lg border transition-colors cursor-pointer",
+                              (trk.is_hidden === 1 || trk.is_hidden === true)
+                                ? "bg-amber-500/20 text-amber-300 border-amber-400/40 hover:bg-amber-500/30"
+                                : "bg-emerald-500/10 text-emerald-400/80 border-emerald-500/25 hover:bg-emerald-500/20"
+                            )}
+                            title={
+                              (trk.is_hidden === 1 || trk.is_hidden === true)
+                                ? "Nummer is verborgen voor bezoekers (wel zichtbaar voor admin). Klik om zichtbaar te maken."
+                                : "Nummer is zichtbaar op de website. Klik om te verbergen voor bezoekers."
+                            }
+                          >
+                            {(trk.is_hidden === 1 || trk.is_hidden === true) ? (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5" />
+                            )}
+                          </button>
                           <button
                             onClick={() => {
                               setEditingTrack(trk);

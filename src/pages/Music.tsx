@@ -62,6 +62,8 @@ interface Track {
     NL?: string;
     [lang: string]: string | undefined;
   };
+  isHidden?: boolean;
+  is_hidden?: number | boolean;
 }
 
 interface Album {
@@ -76,6 +78,8 @@ interface Album {
   locks_enabled?: number | boolean;
   adminLocksEnabled?: boolean;
   admin_locks_enabled?: number | boolean;
+  isHidden?: boolean;
+  is_hidden?: number | boolean;
   guid24h?: string | null;
   guid_24h?: string | null;
   guidUnlimited?: string | null;
@@ -1166,6 +1170,58 @@ export function Music() {
     async function loadTracks() {
       let loadedSuccessfully = false;
 
+      const isAdminViewer = (): boolean => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('admin') === '1' || params.get('preview') === 'admin') return true;
+          return Boolean(localStorage.getItem('krabbels_admin_token'));
+        } catch {
+          return false;
+        }
+      };
+
+      const applyLoadedCatalog = (rawAlbums: any[], rawTracks: any[]) => {
+        const admin = isAdminViewer();
+        const isRowHidden = (row: any) =>
+          row?.isHidden === true || row?.is_hidden === 1 || row?.is_hidden === true || row?.is_hidden === '1';
+
+        const visibleAlbums: Album[] = admin
+          ? rawAlbums
+          : rawAlbums.filter((a) => !isRowHidden(a));
+
+        const hiddenAlbumIds = new Set(
+          rawAlbums.filter((a) => isRowHidden(a)).map((a) => String(a.id))
+        );
+        const hiddenAlbumTitles = new Set(
+          rawAlbums.filter((a) => isRowHidden(a)).map((a) => String(a.title || '').toLowerCase().trim())
+        );
+
+        const normalizedAll = rawTracks.map(normalizeTrack);
+        const visibleTracks: Track[] = admin
+          ? normalizedAll
+          : normalizedAll.filter((t: any) => {
+              if (isRowHidden(t)) return false;
+              if (t.albumId !== undefined && hiddenAlbumIds.has(String(t.albumId))) return false;
+              if (t.album && hiddenAlbumTitles.has(String(t.album).toLowerCase().trim())) return false;
+              return true;
+            });
+
+        setTracks(visibleTracks);
+        if (visibleAlbums.length > 0) {
+          setAlbums(visibleAlbums);
+          const urlAlbumParam = new URLSearchParams(window.location.search).get('album')?.trim();
+          const matchedUrlAlbum = urlAlbumParam
+            ? visibleAlbums.find(
+                (a) =>
+                  String(a.id) === urlAlbumParam ||
+                  a.title.toLowerCase() === urlAlbumParam.toLowerCase() ||
+                  a.title.toLowerCase().includes(urlAlbumParam.toLowerCase())
+              )
+            : null;
+          setSelectedAlbum((prev) => matchedUrlAlbum?.title || prev || visibleAlbums[0].title);
+        }
+      };
+
       // Source 1: Direct TransIP Database Bridge (/api/music_database.php?action=get_catalog)
       try {
         const bridgeUrl = localStorage.getItem('transip_music_api_url') || '/api/music_database.php';
@@ -1186,12 +1242,7 @@ export function Music() {
         if (res.ok && contentType.includes('application/json')) {
           const data: any = await res.json();
           if (isMounted && data.success && data.tracks && data.tracks.length > 0) {
-            const normalized = data.tracks.map(normalizeTrack);
-            setTracks(normalized);
-            if (data.albums && data.albums.length > 0) {
-              setAlbums(data.albums);
-              setSelectedAlbum((prev) => prev || data.albums[0].title);
-            }
+            applyLoadedCatalog(Array.isArray(data.albums) ? data.albums : [], data.tracks);
             if (data.startupPortrait) setStartupPortrait(sanitizeMediaUrl(data.startupPortrait) || data.startupPortrait);
             if (data.startupLandscape) setStartupLandscape(sanitizeMediaUrl(data.startupLandscape) || data.startupLandscape);
             if (data.startupPortraitMov) setStartupPortraitMov(sanitizeMediaUrl(data.startupPortraitMov) || data.startupPortraitMov);
@@ -1212,12 +1263,7 @@ export function Music() {
           if (res.ok && contentType.includes('application/json')) {
             const data: any = await res.json();
             if (isMounted && data.tracks && data.tracks.length > 0) {
-              const normalized = data.tracks.map(normalizeTrack);
-              setTracks(normalized);
-              if (data.albums && data.albums.length > 0) {
-                setAlbums(data.albums);
-                setSelectedAlbum((prev) => prev || data.albums[0].title);
-              }
+              applyLoadedCatalog(Array.isArray(data.albums) ? data.albums : [], data.tracks);
               if (data.startupPortrait) setStartupPortrait(data.startupPortrait);
               if (data.startupLandscape) setStartupLandscape(data.startupLandscape);
               if (data.startupPortraitMov) setStartupPortraitMov(data.startupPortraitMov);

@@ -129,9 +129,12 @@ function findTrackCoverUrl(string $foldername, string $title, ?string $albumCove
         foreach ($files as $f) {
             if ($f === '.' || $f === '..') continue;
             $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
-            if (!in_array($ext, ['jpg', 'jpeg', 'webp'], true)) continue;
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) continue;
 
             $fLower = strtolower($f);
+            // Sla barcode / QR bestanden over zodat die nooit als soundtrack-cover op socials komen
+            if (str_contains($fLower, 'barcode') || str_contains($fLower, 'qrcode')) continue;
+
             $nameNoExt = strtolower(pathinfo($f, PATHINFO_FILENAME));
             if ($nameNoExt === $titleLower) {
                 $exactMatch = $baseUrl . '/' . rawurlencode($f);
@@ -139,7 +142,7 @@ function findTrackCoverUrl(string $foldername, string $title, ?string $albumCove
                 if (!$portraitMatch) $portraitMatch = $baseUrl . '/' . rawurlencode($f);
             } elseif (str_contains($fLower, 'landscape') || str_contains($fLower, 'liggend')) {
                 if (!$landscapeMatch) $landscapeMatch = $baseUrl . '/' . rawurlencode($f);
-            } else {
+            } elseif (!str_contains($fLower, 'thumb')) {
                 if (!$anyJpg) $anyJpg = $baseUrl . '/' . rawurlencode($f);
             }
         }
@@ -190,6 +193,10 @@ function applyOgMeta(string $html, ?string $title, ?string $description, ?string
         $html = preg_replace('/<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/i', "<meta property=\"og:image\" content=\"{$img}\" />", $html);
         $html = preg_replace('/<meta\s+property="og:image:secure_url"\s+content="[^"]*"\s*\/?>/i', "<meta property=\"og:image:secure_url\" content=\"{$img}\" />", $html);
         $html = preg_replace('/<meta\s+property="og:image:type"\s+content="[^"]*"\s*\/?>/i', "<meta property=\"og:image:type\" content=\"{$mime}\" />", $html);
+        if ($title !== null && $title !== '') {
+            $tAlt = $esc($title);
+            $html = preg_replace('/<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/i', "<meta property=\"og:image:alt\" content=\"{$tAlt}\" />", $html);
+        }
         $html = preg_replace('/<meta\s+property="og:image:width"\s+content="[^"]*"\s*\/?>/i', '', $html);
         $html = preg_replace('/<meta\s+property="og:image:height"\s+content="[^"]*"\s*\/?>/i', '', $html);
         $html = preg_replace('/<meta\s+itemprop="image"\s+content="[^"]*"\s*\/?>/i', "<meta itemprop=\"image\" content=\"{$img}\" />", $html);
@@ -300,6 +307,54 @@ elseif ($pdo && (str_starts_with($path, '/music') || str_starts_with($path, '/@m
                     $trk['album_cover'] ?? null,
                     $origin
                 );
+                $html = applyOgMeta($html, $ogTitle, $ogDesc, $ogImage, $pageUrl);
+            }
+        } catch (Throwable $e) {}
+    } elseif (!empty($_GET['album'])) {
+        $albumParam = trim((string)$_GET['album']);
+        try {
+            $stmtAlb = $pdo->prepare("
+                SELECT id, title, artist, description, cover
+                FROM albums
+                WHERE CAST(id AS CHAR) = ? OR LOWER(title) = LOWER(?) OR LOWER(title) LIKE LOWER(?)
+                LIMIT 1
+            ");
+            $stmtAlb->execute([$albumParam, $albumParam, '%' . $albumParam . '%']);
+            $alb = $stmtAlb->fetch();
+            if ($alb) {
+                $albumTitle = trim((string)$alb['title']);
+                $ogTitle = "{$albumTitle} — Soundtrack Album | Paul van Geenen";
+                $rawDesc = trim((string)($alb['description'] ?? ''));
+                $ogDesc = $rawDesc !== '' ? mb_substr($rawDesc, 0, 180) : "Luister naar het soundtrack-album \"{$albumTitle}\" van Paul van Geenen.";
+
+                $ogImage = null;
+                if (!empty($alb['cover'])) {
+                    $c = trim((string)$alb['cover']);
+                    $ogImage = str_starts_with($c, 'http') ? $c : ($origin . encodeUrlPath($c));
+                } else {
+                    // Zoek album-cover in /@music/_albums/ of val terug op de eerste track van dit album
+                    $albumsDir = dirname(__DIR__) . '/@music/_albums';
+                    if (is_dir($albumsDir)) {
+                        $cleanTitle = preg_replace('/[^\w]/', '', strtolower($albumTitle));
+                        foreach ((@scandir($albumsDir) ?: []) as $f) {
+                            if ($f === '.' || $f === '..') continue;
+                            $fClean = preg_replace('/[^\w]/', '', strtolower($f));
+                            if ($cleanTitle !== '' && (str_contains($fClean, $cleanTitle) || str_contains($cleanTitle, $fClean))) {
+                                $ogImage = $origin . '/@music/_albums/' . rawurlencode($f);
+                                break;
+                            }
+                        }
+                    }
+                    if (!$ogImage) {
+                        $stmtFirst = $pdo->prepare("SELECT title, foldername FROM tracks WHERE album_id = ? ORDER BY track_order ASC, id ASC LIMIT 1");
+                        $stmtFirst->execute([(int)$alb['id']]);
+                        $firstTrk = $stmtFirst->fetch();
+                        if ($firstTrk) {
+                            $ogImage = findTrackCoverUrl((string)$firstTrk['foldername'], (string)$firstTrk['title'], null, $origin);
+                        }
+                    }
+                }
+
                 $html = applyOgMeta($html, $ogTitle, $ogDesc, $ogImage, $pageUrl);
             }
         } catch (Throwable $e) {}

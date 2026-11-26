@@ -652,6 +652,14 @@ try {
     $pdo->exec("ALTER TABLE tracks ADD COLUMN always_unlocked TINYINT(1) NOT NULL DEFAULT 0;");
 } catch (Exception $e) {}
 
+try {
+    $pdo->exec("ALTER TABLE albums ADD COLUMN is_hidden TINYINT(1) NOT NULL DEFAULT 0;");
+} catch (Exception $e) {}
+
+try {
+    $pdo->exec("ALTER TABLE tracks ADD COLUMN is_hidden TINYINT(1) NOT NULL DEFAULT 0;");
+} catch (Exception $e) {}
+
 // Eenmalige migratie: zet always_unlocked = 1 voor de eerste 2 nummers (of free_track_1 / free_track_2) per album
 try {
     $unmigratedAlbums = $pdo->query("SELECT id, free_track_1, free_track_2 FROM albums WHERE locks_migrated = 0")->fetchAll();
@@ -691,13 +699,13 @@ try {
 // ==============================================================================
 if ($action === 'get_catalog') {
     try {
-        // Haal albums op inclusief slot-instellingen en GUIDs per boek/album
-        $stmtAlb = $pdo->query("SELECT id, title, artist, description, order_num, cover, locks_enabled, admin_locks_enabled, guid_24h, guid_unlimited, free_track_1, free_track_2 FROM albums ORDER BY order_num ASC, id ASC");
+        // Haal albums op inclusief slot-instellingen, zichtbaarheid (is_hidden) en GUIDs per boek/album
+        $stmtAlb = $pdo->query("SELECT id, title, artist, description, order_num, cover, locks_enabled, admin_locks_enabled, is_hidden, guid_24h, guid_unlimited, free_track_1, free_track_2 FROM albums ORDER BY order_num ASC, id ASC");
         $albums = $stmtAlb->fetchAll();
 
-        // Haal tracks op inclusief always_unlocked
+        // Haal tracks op inclusief always_unlocked en is_hidden
         $stmtTrk = $pdo->query("
-            SELECT t.id, t.album_id, t.track_order, t.title, t.foldername, t.always_unlocked, a.title as album_title
+            SELECT t.id, t.album_id, t.track_order, t.title, t.foldername, t.always_unlocked, t.is_hidden, a.title as album_title
             FROM tracks t
             JOIN albums a ON t.album_id = a.id
             ORDER BY a.order_num ASC, t.track_order ASC, t.id ASC
@@ -709,6 +717,7 @@ if ($action === 'get_catalog') {
             $orderCode = str_pad((string)$t['track_order'], 3, '0', STR_PAD_LEFT);
             $media = resolveTrackFiles($t['foldername'], $t['title']);
             $alwaysUnlockedBool = isset($t['always_unlocked']) && ((int)$t['always_unlocked'] === 1);
+            $trackHiddenBool = isset($t['is_hidden']) && ((int)$t['is_hidden'] === 1);
 
             $trackObj = [
                 "id" => (string)$t['id'],
@@ -719,6 +728,8 @@ if ($action === 'get_catalog') {
                 "folderName" => $t['foldername'],
                 "alwaysUnlocked" => $alwaysUnlockedBool,
                 "always_unlocked" => $alwaysUnlockedBool ? 1 : 0,
+                "isHidden" => $trackHiddenBool,
+                "is_hidden" => $trackHiddenBool ? 1 : 0,
                 "mp3" => $media['mp3'],
                 "audiobook" => $media['audiobook'],
                 "reflection" => $media['reflection'],
@@ -743,6 +754,7 @@ if ($action === 'get_catalog') {
             $albumCover = resolveAlbumCover($alb, $appTracks);
             $locksEnabledBool = isset($alb['locks_enabled']) ? ((int)$alb['locks_enabled'] === 1) : true;
             $adminLocksEnabledBool = isset($alb['admin_locks_enabled']) ? ((int)$alb['admin_locks_enabled'] === 1) : false;
+            $isHiddenBool = isset($alb['is_hidden']) && ((int)$alb['is_hidden'] === 1);
 
             $formattedAlbums[] = [
                 "id" => (string)$alb['id'],
@@ -755,6 +767,8 @@ if ($action === 'get_catalog') {
                 "locks_enabled" => $locksEnabledBool ? 1 : 0,
                 "adminLocksEnabled" => $adminLocksEnabledBool,
                 "admin_locks_enabled" => $adminLocksEnabledBool ? 1 : 0,
+                "isHidden" => $isHiddenBool,
+                "is_hidden" => $isHiddenBool ? 1 : 0,
                 "guid24h" => $alb['guid_24h'] ?? null,
                 "guid_24h" => $alb['guid_24h'] ?? null,
                 "guidUnlimited" => $alb['guid_unlimited'] ?? null,
@@ -825,8 +839,8 @@ if ($action === 'save_album') {
 
     try {
         if ($id) {
-            // Haal bestaande waarden op zodat slot- en GUID-instellingen behouden blijven als ze niet zijn meegestuurd
-            $stmtCur = $pdo->prepare("SELECT locks_enabled, admin_locks_enabled, guid_24h, guid_unlimited, free_track_1, free_track_2 FROM albums WHERE id = ?");
+            // Haal bestaande waarden op zodat slot-, zichtbaarheids- en GUID-instellingen behouden blijven als ze niet zijn meegestuurd
+            $stmtCur = $pdo->prepare("SELECT locks_enabled, admin_locks_enabled, is_hidden, guid_24h, guid_unlimited, free_track_1, free_track_2 FROM albums WHERE id = ?");
             $stmtCur->execute([$id]);
             $cur = $stmtCur->fetch() ?: [];
 
@@ -842,6 +856,13 @@ if ($action === 'save_album') {
                 $admin_locks_enabled = ((int)$input['admin_locks_enabled'] || $input['admin_locks_enabled'] === true || $input['admin_locks_enabled'] === 'true') ? 1 : 0;
             } elseif (array_key_exists('adminLocksEnabled', $input)) {
                 $admin_locks_enabled = ($input['adminLocksEnabled'] === true || $input['adminLocksEnabled'] === 1 || $input['adminLocksEnabled'] === '1' || $input['adminLocksEnabled'] === 'true') ? 1 : 0;
+            }
+
+            $is_hidden = isset($cur['is_hidden']) ? (int)$cur['is_hidden'] : 0;
+            if (array_key_exists('is_hidden', $input)) {
+                $is_hidden = ((int)$input['is_hidden'] || $input['is_hidden'] === true || $input['is_hidden'] === 'true') ? 1 : 0;
+            } elseif (array_key_exists('isHidden', $input)) {
+                $is_hidden = ($input['isHidden'] === true || $input['isHidden'] === 1 || $input['isHidden'] === '1' || $input['isHidden'] === 'true') ? 1 : 0;
             }
 
             $guid_24h = $cur['guid_24h'] ?? null;
@@ -868,14 +889,15 @@ if ($action === 'save_album') {
                 if ($free_track_2 === '') $free_track_2 = null;
             }
 
-            $stmt = $pdo->prepare("UPDATE albums SET title = ?, artist = ?, description = ?, order_num = ?, cover = ?, locks_enabled = ?, admin_locks_enabled = ?, guid_24h = ?, guid_unlimited = ?, free_track_1 = ?, free_track_2 = ? WHERE id = ?");
-            $stmt->execute([$title, $artist, $description, $order_num, $cover, $locks_enabled, $admin_locks_enabled, $guid_24h, $guid_unlimited, $free_track_1, $free_track_2, $id]);
+            $stmt = $pdo->prepare("UPDATE albums SET title = ?, artist = ?, description = ?, order_num = ?, cover = ?, locks_enabled = ?, admin_locks_enabled = ?, is_hidden = ?, guid_24h = ?, guid_unlimited = ?, free_track_1 = ?, free_track_2 = ? WHERE id = ?");
+            $stmt->execute([$title, $artist, $description, $order_num, $cover, $locks_enabled, $admin_locks_enabled, $is_hidden, $guid_24h, $guid_unlimited, $free_track_1, $free_track_2, $id]);
             echo json_encode(["success" => true, "id" => $id, "message" => "Album bijgewerkt."]);
         } else {
             $locks_enabled = array_key_exists('locks_enabled', $input) ? (((int)$input['locks_enabled'] || $input['locks_enabled'] === true) ? 1 : 0) : 1;
             $admin_locks_enabled = array_key_exists('admin_locks_enabled', $input) ? (((int)$input['admin_locks_enabled'] || $input['admin_locks_enabled'] === true) ? 1 : 0) : 0;
-            $stmt = $pdo->prepare("INSERT INTO albums (title, artist, description, order_num, cover, locks_enabled, admin_locks_enabled, locks_migrated) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
-            $stmt->execute([$title, $artist, $description, $order_num, $cover, $locks_enabled, $admin_locks_enabled]);
+            $is_hidden = array_key_exists('is_hidden', $input) ? (((int)$input['is_hidden'] || $input['is_hidden'] === true) ? 1 : 0) : 0;
+            $stmt = $pdo->prepare("INSERT INTO albums (title, artist, description, order_num, cover, locks_enabled, admin_locks_enabled, is_hidden, locks_migrated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)");
+            $stmt->execute([$title, $artist, $description, $order_num, $cover, $locks_enabled, $admin_locks_enabled, $is_hidden]);
             echo json_encode(["success" => true, "id" => $pdo->lastInsertId(), "message" => "Album toegevoegd."]);
         }
     } catch (PDOException $e) {
@@ -975,6 +997,60 @@ if ($action === 'toggle_track_always_unlocked') {
             "track_id" => $track_id,
             "always_unlocked" => $always_unlocked,
             "message" => $always_unlocked ? "SoundTrack ingesteld op 'Nooit op slot'." : "SoundTrack ingesteld op 'Op slot'."
+        ]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==============================================================================
+// ACTIE: TOGGLE_ALBUM_HIDDEN (VERBERG/TOON ALBUM VOOR BEZOEKERS; ADMIN ZIET ALLES)
+// ==============================================================================
+if ($action === 'toggle_album_hidden') {
+    $album_id = (int)($input['album_id'] ?? $input['id'] ?? 0);
+    if (!$album_id) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Geen geldig album ID opgegeven."]);
+        exit;
+    }
+    $is_hidden = ((int)($input['is_hidden'] ?? 0) || ($input['is_hidden'] ?? false) === true || ($input['is_hidden'] ?? '') === 'true') ? 1 : 0;
+    try {
+        $stmt = $pdo->prepare("UPDATE albums SET is_hidden = ? WHERE id = ?");
+        $stmt->execute([$is_hidden, $album_id]);
+        echo json_encode([
+            "success" => true,
+            "album_id" => $album_id,
+            "is_hidden" => $is_hidden,
+            "message" => $is_hidden ? "Album verborgen voor bezoekers (wel zichtbaar voor admin)." : "Album zichtbaar gemaakt voor iedereen."
+        ]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ==============================================================================
+// ACTIE: TOGGLE_TRACK_HIDDEN (VERBERG/TOON TRACK VOOR BEZOEKERS; ADMIN ZIET ALLES)
+// ==============================================================================
+if ($action === 'toggle_track_hidden') {
+    $track_id = (int)($input['track_id'] ?? $input['id'] ?? 0);
+    if (!$track_id) {
+        http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Geen geldig track ID opgegeven."]);
+        exit;
+    }
+    $is_hidden = ((int)($input['is_hidden'] ?? 0) || ($input['is_hidden'] ?? false) === true || ($input['is_hidden'] ?? '') === 'true') ? 1 : 0;
+    try {
+        $stmt = $pdo->prepare("UPDATE tracks SET is_hidden = ? WHERE id = ?");
+        $stmt->execute([$is_hidden, $track_id]);
+        echo json_encode([
+            "success" => true,
+            "track_id" => $track_id,
+            "is_hidden" => $is_hidden,
+            "message" => $is_hidden ? "Nummer verborgen voor bezoekers (wel zichtbaar voor admin)." : "Nummer zichtbaar gemaakt voor iedereen."
         ]);
     } catch (PDOException $e) {
         http_response_code(500);
