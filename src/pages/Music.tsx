@@ -10,6 +10,7 @@ import {
   Music2, Headphones, Film, Type, SlidersHorizontal, Home, Lock, LockOpen, KeyRound, Clock
 } from 'lucide-react';
 import { useAudio } from '../context/AudioContext';
+import { homeSoundtrack } from '../lib/homeSoundtrack';
 import { IvoryHeartPendant } from '../components/ui/IvoryHeartPendant';
 import { isOwnAnalyticsIgnored, getUserGeoLocation, getSubtitlePreferences, setSubtitlePreferences, recordMusicPlay, updateMusicPlay, recordMusicRating, SubtitleSize } from '../lib/analytics';
 import { EqualizerModal } from '../components/EqualizerModal';
@@ -552,8 +553,9 @@ export function Music() {
   const isDirectTrackRequested = useRef(checkHasDirectTrackRequest());
   const isDirectVideoRequested = useRef(checkHasDirectVideoRequest());
 
-  // Stop ambient bird sounds while visiting /music
+  // Stop ambient bird sounds & any lingering homepage soundtrack immediately while visiting /music
   useEffect(() => {
+    homeSoundtrack.stopImmediately();
     setIsAmbientPlaying(false);
     reportVideoAudioStatus(true);
     return () => {
@@ -2559,13 +2561,13 @@ export function Music() {
     let incomingEl: HTMLMediaElement | null = null;
     if (targetEffectiveFormat === 'video') {
       incomingEl = videoRef.current;
-    } else if (isIOS) {
-      // On iOS/iPadOS, keep reusing the same unlocked <audio> element (deck A) so Bluetooth AVRCP /
-      // CarPlay Now Playing metadata and skip controls never detach between tracks.
+    } else if (isIOS || isMobileDevice) {
+      // On all mobile devices (iOS & Android), keep reusing the same unlocked <audio> element (deck A)
+      // so Bluetooth AVRCP / CarPlay / Android Auto Now Playing metadata and skip buttons stay continuously bound.
       activeDeckRef.current = 'A';
       incomingEl = audioRefA.current;
     } else {
-      // Alternate audio deck for true acoustic crossfading
+      // Alternate audio deck for true acoustic crossfading on desktop
       const nextDeck = activeDeckRef.current === 'A' ? 'B' : 'A';
       activeDeckRef.current = nextDeck;
       incomingEl = nextDeck === 'A' ? audioRefA.current : audioRefB.current;
@@ -3360,10 +3362,10 @@ export function Music() {
     },
   };
 
-  // Register MediaSession action handlers ONCE on mount (and clean up only on unmount).
-  // Deliberately omits seekbackward/seekforward because iOS Safari / Bluetooth AVRCP replaces
-  // Previous/Next Track buttons with ±10s seek buttons when both are registered.
-  useEffect(() => {
+  // Helper to (re-)bind MediaSession action handlers using always-fresh refs.
+  // Called on mount AND re-confirmed whenever playback starts / metadata updates so Android Chrome,
+  // iOS Safari, and Bluetooth AVRCP car radios ALWAYS keep next/prev track buttons active.
+  const bindMediaSessionActionHandlers = () => {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
 
     const actionHandlers: [MediaSessionAction, MediaSessionActionHandler][] = [
@@ -3402,9 +3404,15 @@ export function Music() {
         navigator.mediaSession.setActionHandler(action, null);
       } catch (err) {}
     });
+  };
+
+  // Register MediaSession action handlers on mount and clean up ONLY on unmount.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+    bindMediaSessionActionHandlers();
 
     return () => {
-      actionHandlers.forEach(([action]) => {
+      (['play', 'pause', 'previoustrack', 'nexttrack', 'seekto'] as MediaSessionAction[]).forEach((action) => {
         try {
           navigator.mediaSession.setActionHandler(action, null);
         } catch (err) {}
@@ -3458,6 +3466,7 @@ export function Music() {
             : [],
         });
         navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+        bindMediaSessionActionHandlers();
       } catch (e) {
         console.log('[MediaSession] metadata setup error:', e);
       }
@@ -3469,24 +3478,29 @@ export function Music() {
 
     applyMediaSessionMetadata();
 
-    // iOS Safari & Bluetooth AVRCP resetten soms Now Playing direct na het starten van <audio>:
-    // herbevestig metadata kort nadat afspelen actief is.
-    let refreshTimer: number | null = null;
+    // iOS Safari, Android Chrome & Bluetooth AVRCP resetten soms Now Playing direct na het starten van <audio>:
+    // herbevestig metadata + action handlers kort nadat afspelen actief is.
+    let refreshTimer1: number | null = null;
+    let refreshTimer2: number | null = null;
     if (isPlaying) {
-      refreshTimer = window.setTimeout(applyMediaSessionMetadata, 400);
+      refreshTimer1 = window.setTimeout(applyMediaSessionMetadata, 350);
+      refreshTimer2 = window.setTimeout(applyMediaSessionMetadata, 1200);
     }
 
     // Luister op ALLE media-elementen (deck A, deck B én video) zodat een deck-wissel nooit een 'playing' event mist
     const mediaEls = [audioRefA.current, audioRefB.current, videoRef.current].filter(Boolean) as HTMLMediaElement[];
     const onMediaEvent = () => applyMediaSessionMetadata();
     mediaEls.forEach((el) => {
+      el.addEventListener('play', onMediaEvent);
       el.addEventListener('playing', onMediaEvent);
       el.addEventListener('loadedmetadata', onMediaEvent);
     });
 
     return () => {
-      if (refreshTimer) window.clearTimeout(refreshTimer);
+      if (refreshTimer1) window.clearTimeout(refreshTimer1);
+      if (refreshTimer2) window.clearTimeout(refreshTimer2);
       mediaEls.forEach((el) => {
+        el.removeEventListener('play', onMediaEvent);
         el.removeEventListener('playing', onMediaEvent);
         el.removeEventListener('loadedmetadata', onMediaEvent);
       });

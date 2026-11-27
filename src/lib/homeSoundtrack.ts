@@ -346,6 +346,22 @@ class HomeSoundtrackController {
     }
   }
 
+  public stopImmediately() {
+    this.isOnHome = false;
+    this.clearGestureFallback();
+    this.clearFade();
+    this.clearTitleBadgeTimer();
+    this.showTitleBadge = false;
+    this.emit();
+    if (this.audio) {
+      try {
+        this.savedTime = this.audio.currentTime || this.savedTime;
+        this.audio.volume = 0;
+        this.audio.pause();
+      } catch {}
+    }
+  }
+
   public leaveHome() {
     this.isOnHome = false;
     this.clearGestureFallback();
