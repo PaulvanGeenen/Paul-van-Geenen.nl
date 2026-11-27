@@ -2417,7 +2417,7 @@ export function Music() {
   };
 
   // Smooth volume ramp-out helper to fade out gently before pausing
-  const pausePlaybackWithVolumeRamp = (el: HTMLMediaElement | null, durationMs = 750, onPaused?: () => void) => {
+  const pausePlaybackWithVolumeRamp = (el: HTMLMediaElement | null, durationMs = 850, onPaused?: () => void) => {
     clearElFadeTimer(el);
     setIsPlaying(false);
     shouldAutoPlayRef.current = false;
@@ -2428,7 +2428,8 @@ export function Music() {
       return;
     }
 
-    if (isIOS || isMobileDevice || el.paused || el.volume === 0) {
+    // On iOS/iPadOS Safari, HTMLMediaElement.volume is read-only (hardware controls volume)
+    if (isIOS || el.paused || el.volume === 0) {
       if (!isIOS && !isMobileDevice) {
         equalizerEngine.onPauseMediaElement(el);
       }
@@ -2440,7 +2441,7 @@ export function Music() {
     }
 
     const targetVol = isMuted ? 0 : volume;
-    fadeToVolume(el, 0, Math.min(durationMs, 250), () => {
+    fadeToVolume(el, 0, Math.max(200, durationMs), () => {
       if (!isIOS && !isMobileDevice) {
         equalizerEngine.onPauseMediaElement(el);
       }
@@ -2493,10 +2494,10 @@ export function Music() {
     }
     const activeFormat = getEffectiveFormat(currentTrack, selectedFormat);
     const el = activeFormat === 'video' ? videoRef.current : getActiveAudioEl();
-    const isActuallyPlaying = el ? (!el.paused && !el.ended) : isPlaying;
+    const isActuallyPlaying = isPlaying && (el ? (!el.paused && !el.ended) : true);
 
     if (isActuallyPlaying) {
-      pausePlaybackWithVolumeRamp(el, 300);
+      pausePlaybackWithVolumeRamp(el, 850);
     } else {
       if (autoplayGestureCleanupRef.current) {
         autoplayGestureCleanupRef.current();
@@ -2530,7 +2531,7 @@ export function Music() {
         }
 
         // Start playback synchronously within the click gesture BEFORE requesting fullscreen
-        startPlaybackWithVolumeRamp(el, 750);
+        startPlaybackWithVolumeRamp(el, 900);
       }
 
       enterBrowserFullscreenSafely(true);
