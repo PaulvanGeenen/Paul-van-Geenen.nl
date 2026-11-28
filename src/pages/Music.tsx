@@ -14,6 +14,7 @@ import { homeSoundtrack } from '../lib/homeSoundtrack';
 import { IvoryHeartPendant } from '../components/ui/IvoryHeartPendant';
 import { isOwnAnalyticsIgnored, getUserGeoLocation, getSubtitlePreferences, setSubtitlePreferences, recordMusicPlay, updateMusicPlay, recordMusicRating, SubtitleSize } from '../lib/analytics';
 import { EqualizerModal } from '../components/EqualizerModal';
+import { TrackSlideshowLayer, SlideshowMediaItem } from '../components/TrackSlideshowLayer';
 import { getEqualizerPreferences, equalizerEngine, EqualizerPreferences } from '../lib/equalizer';
 import {
   isLockSystemEnabled,
@@ -2032,6 +2033,95 @@ export function Music() {
 
   // Current track background image synchronously calculated (eliminates 1-frame state lag/flicker)
   const currBgImage = currentTrack ? getTrackBgImage(currentTrack, effectiveOrientation) : null;
+
+  // Dynamic slideshow data per track folder (auto-detected from /@music/<folder>/slideshow/portrait|landscape)
+  const slideshowCacheRef = useRef<Record<string, { portrait: SlideshowMediaItem[]; landscape: SlideshowMediaItem[] }>>({});
+  const [activeTrackSlideshow, setActiveTrackSlideshow] = useState<{
+    folder: string;
+    portrait: SlideshowMediaItem[];
+    landscape: SlideshowMediaItem[];
+  } | null>(null);
+
+  const currentTrackFolder = React.useMemo(() => {
+    if (!currentTrack) return '';
+    if (currentTrack.folderName && currentTrack.folderName.trim() !== '') {
+      return currentTrack.folderName.trim();
+    }
+    const candidateUrl = currentTrack.mp3 || currentTrack.coverJpg || currentTrack.portraitJpg || currentTrack.landscapeJpg || '';
+    const m = candidateUrl.match(/\/@music\/([^/]+)\//i);
+    if (m && m[1]) {
+      try {
+        return decodeURIComponent(m[1]);
+      } catch {
+        return m[1];
+      }
+    }
+    return '';
+  }, [currentTrack]);
+
+  useEffect(() => {
+    if (!currentTrackFolder) {
+      setActiveTrackSlideshow(null);
+      return;
+    }
+
+    const cached = slideshowCacheRef.current[currentTrackFolder];
+    if (cached) {
+      setActiveTrackSlideshow({ folder: currentTrackFolder, ...cached });
+      return;
+    }
+
+    let cancelled = false;
+    const isLocalHost =
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const apiBase = isLocalHost
+      ? 'https://paulvangeenen.nl/api/slideshow_studio.php'
+      : '/api/slideshow_studio.php';
+    const mediaOrigin = isLocalHost ? 'https://paulvangeenen.nl' : '';
+
+    fetch(`${apiBase}?action=get_slideshow&folder=${encodeURIComponent(currentTrackFolder)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const normalizeItems = (list: any[]): SlideshowMediaItem[] =>
+          Array.isArray(list)
+            ? list.map((item) => ({
+                seconds: Number(item.seconds) || 0,
+                mmSs: String(item.mmSs || '00_00'),
+                url:
+                  typeof item.url === 'string' && !item.url.startsWith('http')
+                    ? `${mediaOrigin}${item.url}`
+                    : String(item.url || ''),
+                type: item.type === 'video' ? 'video' : 'image',
+                filename: item.filename,
+              }))
+            : [];
+
+        const entry = {
+          portrait: data?.success ? normalizeItems(data.portrait) : [],
+          landscape: data?.success ? normalizeItems(data.landscape) : [],
+        };
+        slideshowCacheRef.current[currentTrackFolder] = entry;
+        setActiveTrackSlideshow({ folder: currentTrackFolder, ...entry });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setActiveTrackSlideshow({ folder: currentTrackFolder, portrait: [], landscape: [] });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrackFolder]);
+
+  const activeOrientationSlides: SlideshowMediaItem[] =
+    activeTrackSlideshow && activeTrackSlideshow.folder === currentTrackFolder
+      ? effectiveOrientation === 'landscape'
+        ? activeTrackSlideshow.landscape
+        : activeTrackSlideshow.portrait
+      : [];
 
   // Calculate background images for current, previous, and next track (for 0-gap side-by-side swipe)
   const prevTrackIndex = getPrevTrackIndex();
@@ -4730,7 +4820,7 @@ export function Music() {
                 </div>
               )}
 
-              {/* Center Panel: Current Track Image (Full image always visible via object-contain over full-bleed ambient blur) */}
+              {/* Center Panel: Current Track Image / Dynamic Slideshow (Full image always visible via object-contain over full-bleed ambient blur) */}
               {currBgImage && (
                 <div
                   className="absolute inset-0 w-full h-full overflow-hidden z-10 bg-black"
@@ -4739,30 +4829,18 @@ export function Music() {
                     transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
                   }}
                 >
-                  <img
-                    key={`blur-${currBgImage}`}
-                    src={currBgImage}
-                    alt=""
-                    aria-hidden="true"
-                    className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-45 brightness-75 select-none pointer-events-none"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                  />
-                  <img
-                    key={currBgImage}
-                    src={currBgImage}
+                  <TrackSlideshowLayer
+                    baseImageUrl={currBgImage}
                     alt={currentTrack?.title || 'Current track'}
-                    className="relative z-10 w-full h-full object-contain object-center select-none pointer-events-none"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      const fallback = effectiveOrientation === 'landscape'
+                    fallbackImageUrl={
+                      effectiveOrientation === 'landscape'
                         ? (startupLandscape || startupPortrait)
-                        : (startupPortrait || startupLandscape);
-                      if (fallback && target.src !== fallback) {
-                        target.src = fallback;
-                      }
-                    }}
+                        : (startupPortrait || startupLandscape)
+                    }
+                    slides={activeOrientationSlides}
+                    currentTime={currentTime}
+                    isPlaying={isPlaying}
+                    trackKey={String(currentTrack?.id || currentTrackFolder || currBgImage)}
                   />
                 </div>
               )}

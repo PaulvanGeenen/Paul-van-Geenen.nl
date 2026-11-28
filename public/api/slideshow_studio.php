@@ -463,6 +463,54 @@ if ($action === 'list_tracks') {
     exit;
 }
 
+// 1b. LIGHTWEIGHT SLIDESHOW LIST FOR MUSIC PLAYER (portrait & landscape sorted by seconds)
+if ($action === 'get_slideshow') {
+    $folder = $_GET['folder'] ?? '';
+    $resolved = resolveTrackFolder($musicBaseDir, $folder);
+    if (!$resolved) {
+        echo json_encode([
+            'success' => true,
+            'hasSlideshow' => false,
+            'folder' => $folder,
+            'portrait' => [],
+            'landscape' => [],
+        ]);
+        exit;
+    }
+
+    $trackPath = $resolved['path'];
+    $folderName = $resolved['folder'];
+
+    $buildList = function (array $map): array {
+        $list = [];
+        foreach ($map as $mmSs => $item) {
+            $parts = explode('_', $mmSs);
+            $secs = ((int)($parts[0] ?? 0) * 60) + (int)($parts[1] ?? 0);
+            $list[] = [
+                'seconds' => $secs,
+                'mmSs' => $mmSs,
+                'url' => $item['url'],
+                'type' => $item['type'],
+                'filename' => $item['filename'],
+            ];
+        }
+        usort($list, fn($a, $b) => $a['seconds'] <=> $b['seconds']);
+        return $list;
+    };
+
+    $portraitList = $buildList(scanSlideshowDir($trackPath, $folderName, 'portrait'));
+    $landscapeList = $buildList(scanSlideshowDir($trackPath, $folderName, 'landscape'));
+
+    echo json_encode([
+        'success' => true,
+        'hasSlideshow' => (count($portraitList) > 0 || count($landscapeList) > 0),
+        'folder' => $folderName,
+        'portrait' => $portraitList,
+        'landscape' => $landscapeList,
+    ]);
+    exit;
+}
+
 // 2. GET TRACK DETAILS (SRT CUES + TXT SECTIONS + EXISTING SLIDESHOW MEDIA)
 if ($action === 'get_track') {
     $folder = $_GET['folder'] ?? '';
