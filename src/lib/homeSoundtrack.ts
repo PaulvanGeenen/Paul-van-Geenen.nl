@@ -92,6 +92,7 @@ class HomeSoundtrackController {
   private isOnHome = false;
   private heroInView = true;
   private introActive = false;
+  private suppressedByExternal = false;
   private muted = readStoredMuted();
   private targetVolume = readStoredVolume();
   private fadeTimer: number | null = null;
@@ -315,7 +316,7 @@ class HomeSoundtrackController {
     this.isOnHome = true;
     this.heroInView = true;
     this.badgedTrackIndex = null;
-    if (!this.introActive && !this.muted && this.targetVolume > 0.001 && !document.hidden) {
+    if (!this.introActive && !this.suppressedByExternal && !this.muted && this.targetVolume > 0.001 && !document.hidden) {
       this.startOrResume(true);
     } else {
       this.emit();
@@ -341,8 +342,36 @@ class HomeSoundtrackController {
       } else if (a) {
         this.savedTime = a.currentTime || this.savedTime;
       }
-    } else if (!this.muted && !document.hidden) {
+    } else if (!this.suppressedByExternal && !this.muted && !document.hidden) {
       this.startOrResume(false);
+    }
+  }
+
+  public pauseForExternalAudio() {
+    this.suppressedByExternal = true;
+    this.clearGestureFallback();
+    this.clearTitleBadgeTimer();
+    this.showTitleBadge = false;
+    this.emit();
+    const a = this.audio;
+    if (a && !a.paused) {
+      const startVol = a.volume;
+      this.fadeVolume(startVol, 0, 450, () => {
+        if (this.suppressedByExternal && this.audio) {
+          this.savedTime = this.audio.currentTime || this.savedTime;
+          this.audio.pause();
+        }
+      });
+    } else if (a) {
+      this.savedTime = a.currentTime || this.savedTime;
+    }
+  }
+
+  public resumeAfterExternalAudio() {
+    if (!this.suppressedByExternal) return;
+    this.suppressedByExternal = false;
+    if (this.isOnHome && this.heroInView && !this.introActive && !this.muted && this.targetVolume > 0.001 && !document.hidden) {
+      this.startOrResume(false, 950);
     }
   }
 

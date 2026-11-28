@@ -326,9 +326,9 @@ class ChristmasAlbumPlayerController {
     const audio = this.ensureAudio();
     if (!audio) return;
 
-    // Pause homepage soundtrack so there is never overlapping audio
+    // Pause homepage soundtrack cleanly (without marking home as left) so it can resume when closed
     try {
-      homeSoundtrack.stopImmediately();
+      homeSoundtrack.pauseForExternalAudio();
     } catch {
       // ignore
     }
@@ -391,14 +391,28 @@ class ChristmasAlbumPlayerController {
     });
   }
 
-  stop() {
+  stop(restoreHomeSoundtrack = true) {
     const audio = this.audio;
     this.pausedByExternalMusic = false;
     this.isPlaying = false;
     this.isVisible = false;
     this.stopDuckMonitor();
     this.emit();
-    if (!audio) return;
+
+    const maybeRestoreHome = () => {
+      if (restoreHomeSoundtrack) {
+        try {
+          homeSoundtrack.resumeAfterExternalAudio();
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    if (!audio) {
+      maybeRestoreHome();
+      return;
+    }
     this.fadeVolume(audio.volume, 0, 450, () => {
       audio.pause();
       try {
@@ -406,6 +420,7 @@ class ChristmasAlbumPlayerController {
       } catch {
         // ignore
       }
+      maybeRestoreHome();
     });
   }
 

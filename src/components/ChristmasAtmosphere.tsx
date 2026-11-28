@@ -49,7 +49,7 @@ export function ChristmasAtmosphere() {
   // Stop background Christmas album automatically when entering full music player or video routes
   useEffect(() => {
     if (isMinimalOverlay && (playerSnap.isPlaying || playerSnap.isVisible)) {
-      christmasAlbumPlayer.stop();
+      christmasAlbumPlayer.stop(false);
     }
   }, [isMinimalOverlay, playerSnap.isPlaying, playerSnap.isVisible]);
 
