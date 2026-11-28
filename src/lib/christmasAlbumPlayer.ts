@@ -57,15 +57,39 @@ export interface ChristmasPlayerSnapshot {
   track: ChristmasTrack;
   isPlaying: boolean;
   isVisible: boolean;
+  volume: number;
+  muted: boolean;
 }
 
 type Listener = (snapshot: ChristmasPlayerSnapshot) => void;
 
-const TARGET_VOLUME = 0.72;
-const DUCKED_VOLUME = 0.13;
+const VOL_STORAGE_KEY = 'pvg_christmas_volume';
+const MUTE_STORAGE_KEY = 'pvg_christmas_muted';
+const DEFAULT_VOLUME = 0.72;
+const DUCKED_RATIO = 0.2;
 const FADE_MS = 650;
 const DUCK_DOWN_MS = 450;
 const DUCK_UP_MS = 900;
+
+function readSavedVolume(): number {
+  if (typeof window === 'undefined') return DEFAULT_VOLUME;
+  try {
+    const raw = window.localStorage.getItem(VOL_STORAGE_KEY);
+    if (raw !== null) {
+      const n = parseFloat(raw);
+      if (!isNaN(n) && isFinite(n)) return Math.max(0, Math.min(1, n));
+    }
+  } catch {}
+  return DEFAULT_VOLUME;
+}
+
+function readSavedMuted(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(MUTE_STORAGE_KEY) === '1';
+  } catch {}
+  return false;
+}
 
 class ChristmasAlbumPlayerController {
   private audio: HTMLAudioElement | null = null;
@@ -73,10 +97,17 @@ class ChristmasAlbumPlayerController {
   private isPlaying = false;
   private isVisible = false;
   private isDucked = false;
+  private volume = readSavedVolume();
+  private muted = readSavedMuted();
   private fadeRaf: number | null = null;
   private duckPollInterval: number | null = null;
   private duckListenersAttached = false;
   private listeners = new Set<Listener>();
+
+  private getEffectiveTargetVolume(ducked: boolean = this.isDucked): number {
+    if (this.muted || this.volume <= 0) return 0;
+    return ducked ? Math.min(0.16, this.volume * DUCKED_RATIO) : this.volume;
+  }
 
   private checkOtherAudibleMedia = () => {
     if (!this.isPlaying || !this.audio || typeof document === 'undefined') return;
@@ -95,7 +126,7 @@ class ChristmasAlbumPlayerController {
 
     if (hasAudibleForegroundMedia !== this.isDucked) {
       this.isDucked = hasAudibleForegroundMedia;
-      const target = this.isDucked ? DUCKED_VOLUME : TARGET_VOLUME;
+      const target = this.getEffectiveTargetVolume(this.isDucked);
       const duration = this.isDucked ? DUCK_DOWN_MS : DUCK_UP_MS;
       this.fadeVolume(this.audio.volume, target, duration);
     }
@@ -135,7 +166,7 @@ class ChristmasAlbumPlayerController {
     if (!this.audio) {
       const a = new Audio();
       a.preload = 'metadata';
-      a.volume = TARGET_VOLUME;
+      a.volume = this.getEffectiveTargetVolume(false);
       a.addEventListener('ended', () => {
         this.next();
       });
@@ -186,7 +217,40 @@ class ChristmasAlbumPlayerController {
       track: CHRISTMAS_ALBUM_TRACKS[this.trackIndex] || CHRISTMAS_ALBUM_TRACKS[0],
       isPlaying: this.isPlaying,
       isVisible: this.isVisible,
+      volume: this.volume,
+      muted: this.muted,
     };
+  }
+
+  setVolume(val: number) {
+    const clamped = Math.max(0, Math.min(1, Number(val) || 0));
+    this.volume = clamped;
+    if (clamped > 0 && this.muted) {
+      this.muted = false;
+      try {
+        window.localStorage.setItem(MUTE_STORAGE_KEY, '0');
+      } catch {}
+    }
+    try {
+      window.localStorage.setItem(VOL_STORAGE_KEY, String(clamped));
+    } catch {}
+    if (this.audio && this.isPlaying) {
+      this.cancelFade();
+      this.audio.volume = this.getEffectiveTargetVolume(this.isDucked);
+    }
+    this.emit();
+  }
+
+  toggleMute() {
+    this.muted = !this.muted;
+    try {
+      window.localStorage.setItem(MUTE_STORAGE_KEY, this.muted ? '1' : '0');
+    } catch {}
+    if (this.audio && this.isPlaying) {
+      this.cancelFade();
+      this.audio.volume = this.getEffectiveTargetVolume(this.isDucked);
+    }
+    this.emit();
   }
 
   subscribe(listener: Listener): () => void {
@@ -224,18 +288,18 @@ class ChristmasAlbumPlayerController {
     this.startDuckMonitor();
 
     // Check immediately if an unmuted video/audio is already playing
-    let initialTarget = TARGET_VOLUME;
+    this.isDucked = false;
     if (typeof document !== 'undefined') {
       const mediaEls = document.querySelectorAll<HTMLMediaElement>('video, audio');
       for (let i = 0; i < mediaEls.length; i++) {
         const el = mediaEls[i];
         if (el !== audio && !el.paused && !el.ended && !el.muted && el.volume > 0.05) {
           this.isDucked = true;
-          initialTarget = DUCKED_VOLUME;
           break;
         }
       }
     }
+    const initialTarget = this.getEffectiveTargetVolume(this.isDucked);
 
     audio.volume = 0;
     audio
