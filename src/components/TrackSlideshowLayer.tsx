@@ -80,25 +80,20 @@ function SlideSlotView({
   isPlaying: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const bgVideoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (!visual || visual.type !== 'video') return;
     const fg = videoRef.current;
-    const bg = bgVideoRef.current;
     if (isActive && isPlaying) {
       if (fg) fg.play().catch(() => {});
-      if (bg) bg.play().catch(() => {});
     } else if (!isActive) {
       // Pause after fade-out completes so the outgoing video doesn't freeze mid-fade
       const timer = window.setTimeout(() => {
         if (fg) fg.pause();
-        if (bg) bg.pause();
       }, CROSSFADE_MS + 100);
       return () => window.clearTimeout(timer);
     } else if (!isPlaying) {
       if (fg) fg.pause();
-      if (bg) bg.pause();
     }
   }, [visual, isActive, isPlaying]);
 
@@ -115,58 +110,31 @@ function SlideSlotView({
       }}
     >
       {visual.type === 'video' ? (
-        <>
-          <video
-            ref={bgVideoRef}
-            key={`bg-vid-${visual.key}`}
-            src={visual.url}
-            muted
-            loop
-            playsInline
-            autoPlay={isActive && isPlaying}
-            preload="auto"
-            aria-hidden="true"
-            className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-45 brightness-75 select-none pointer-events-none"
-          />
-          <video
-            ref={videoRef}
-            key={`fg-vid-${visual.key}`}
-            src={visual.url}
-            muted
-            loop
-            playsInline
-            autoPlay={isActive && isPlaying}
-            preload="auto"
-            className="relative z-10 w-full h-full object-contain object-center select-none pointer-events-none"
-          />
-        </>
+        <video
+          ref={videoRef}
+          key={`fg-vid-${visual.key}`}
+          src={visual.url}
+          muted
+          loop
+          playsInline
+          autoPlay={isActive && isPlaying}
+          preload="auto"
+          className="w-full h-full object-cover object-center select-none pointer-events-none"
+        />
       ) : (
-        <>
-          <img
-            key={`bg-img-${visual.key}`}
-            src={visual.url}
-            alt=""
-            aria-hidden="true"
-            className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-45 brightness-75 select-none pointer-events-none"
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-            }}
-          />
-          <img
-            key={`fg-img-${visual.key}`}
-            src={visual.url}
-            alt={alt}
-            className="relative z-10 w-full h-full object-contain object-center select-none pointer-events-none"
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              const target = e.currentTarget;
-              if (fallbackImageUrl && target.src !== fallbackImageUrl) {
-                target.src = fallbackImageUrl;
-              }
-            }}
-          />
-        </>
+        <img
+          key={`fg-img-${visual.key}`}
+          src={visual.url}
+          alt={alt}
+          className="w-full h-full object-cover object-center select-none pointer-events-none"
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            const target = e.currentTarget;
+            if (fallbackImageUrl && target.src !== fallbackImageUrl) {
+              target.src = fallbackImageUrl;
+            }
+          }}
+        />
       )}
     </div>
   );

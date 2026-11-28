@@ -4762,16 +4762,8 @@ export function Music() {
                 >
                   <img
                     src={prevBgImage}
-                    alt=""
-                    aria-hidden="true"
-                    className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-45 brightness-75 select-none pointer-events-none"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                  />
-                  <img
-                    src={prevBgImage}
                     alt={prevTrack?.title || 'Previous track'}
-                    className="relative z-10 w-full h-full object-contain object-center select-none pointer-events-none"
+                    className="w-full h-full object-cover object-center select-none pointer-events-none"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = 'none';
@@ -4856,16 +4848,8 @@ export function Music() {
                 >
                   <img
                     src={nextBgImage}
-                    alt=""
-                    aria-hidden="true"
-                    className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-45 brightness-75 select-none pointer-events-none"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                  />
-                  <img
-                    src={nextBgImage}
                     alt={nextTrack?.title || 'Next track'}
-                    className="relative z-10 w-full h-full object-contain object-center select-none pointer-events-none"
+                    className="w-full h-full object-cover object-center select-none pointer-events-none"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = 'none';
