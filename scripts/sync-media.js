@@ -92,14 +92,63 @@ export async function syncMedia(autoCommitAndPush = true) {
       total += await syncDir(sftp, f.remote, f.local);
     }
 
+    // Synchroniseer ook alle slideshow-mappen binnen /@music/<track>/slideshow naar lokaal + Git
+    const syncedSlideshowDirs = [];
+    try {
+      const remoteMusicRoot = `${REMOTE_ROOT}/@music`;
+      const localMusicRoot = path.join(process.cwd(), 'public', '@music');
+      const trackEntries = await sftp.list(remoteMusicRoot);
+      const trackDirs = trackEntries.filter(
+        (item) => item.type === 'd' && item.name !== '.' && item.name !== '..' && !item.name.startsWith('_') && !item.name.startsWith('.')
+      );
+
+      // Controleer in batches van 10 welke tracks een slideshow-map hebben
+      const batchSize = 10;
+      for (let i = 0; i < trackDirs.length; i += batchSize) {
+        const batch = trackDirs.slice(i, i + batchSize);
+        const checks = await Promise.all(
+          batch.map(async (entry) => {
+            const remoteSlideDir = `${remoteMusicRoot}/${entry.name}/slideshow`;
+            try {
+              const exists = await sftp.exists(remoteSlideDir);
+              return exists === 'd' ? { name: entry.name, remoteSlideDir } : null;
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        for (const found of checks) {
+          if (!found) continue;
+          const localSlideDir = path.join(localMusicRoot, found.name, 'slideshow');
+          const count = await syncDir(sftp, found.remoteSlideDir, localSlideDir);
+          if (count > 0) {
+            total += count;
+            syncedSlideshowDirs.push(`public/@music/${found.name}/slideshow`);
+          }
+        }
+      }
+    } catch (slideErr) {
+      console.warn('⚠️ Waarschuwing bij synchroniseren van slideshow-mappen:', slideErr.message);
+    }
+
     if (total > 0) {
       console.log(`✅ ${total} nieuw(e) geüpload(e) bestand(en)/map(pen) binnengehaald vanaf TransIP!`);
       if (autoCommitAndPush) {
         try {
-          execSync('git add "public/storage" "public/uploads" "public/images/logboek" "public/audio/logboek" "public/videos/logboek"', { stdio: 'ignore' });
-          const status = execSync('git status --porcelain "public/storage" "public/uploads" "public/images/logboek" "public/audio/logboek" "public/videos/logboek"').toString().trim();
+          const pathsToAdd = [
+            'public/storage',
+            'public/uploads',
+            'public/images/logboek',
+            'public/audio/logboek',
+            'public/videos/logboek',
+            ...syncedSlideshowDirs,
+          ];
+          const quotedPaths = pathsToAdd.map((p) => `"${p}"`).join(' ');
+          execSync(`git add ${quotedPaths}`, { stdio: 'ignore' });
+          const status = execSync(`git status --porcelain ${quotedPaths}`).toString().trim();
           if (status) {
-            execSync('git commit -m "chore(media): sync uploaded storage and logboek media from TransIP"', { stdio: 'inherit' });
+            execSync('git commit -m "chore(media): sync uploaded storage, logboek and slideshow media from TransIP"', { stdio: 'inherit' });
             execSync('git push', { stdio: 'inherit' });
             console.log('✅ Nieuwe media direct gecommit en gepusht naar Git!');
           }

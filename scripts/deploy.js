@@ -78,7 +78,11 @@ async function deploy() {
             results = results.concat(getFilesRecursive(filePath));
           } else {
             const ext = path.extname(file).toLowerCase();
-            if (['.srt', '.txt', '.json', '.mp3', '.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+            const isSlideshowPath = filePath.replace(/\\/g, '/').includes('/slideshow/');
+            if (
+              ['.srt', '.txt', '.json', '.mp3', '.jpg', '.jpeg', '.png', '.webp'].includes(ext) ||
+              (isSlideshowPath && ['.gif', '.mp4', '.mov', '.webm', '.m4v'].includes(ext))
+            ) {
               results.push(filePath);
             }
           }
