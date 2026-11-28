@@ -1522,6 +1522,51 @@ export function Admin() {
                 <span>Socials (Schrijver)</span>
               </button>
 
+              <button
+                type="button"
+                onClick={() => setActiveTab('video_studio')}
+                className={cn(
+                  "flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer",
+                  activeTab === 'video_studio'
+                    ? "bg-amber-500 text-black border-amber-300 font-bold shadow-lg shadow-amber-900/30"
+                    : "bg-white/5 border-amber-400/30 text-white/90 hover:border-amber-400 hover:bg-amber-500/10"
+                )}
+                title="Open Audio → Video Studio"
+              >
+                <Film className={cn("w-3.5 h-3.5", activeTab === 'video_studio' ? "text-black" : "text-amber-400")} />
+                <span>Audio → Video Studio</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('home_videos')}
+                className={cn(
+                  "flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer",
+                  activeTab === 'home_videos'
+                    ? "bg-emerald-500 text-black border-emerald-300 font-bold shadow-lg shadow-emerald-900/30"
+                    : "bg-white/5 border-emerald-400/30 text-white/90 hover:border-emerald-400 hover:bg-emerald-500/10"
+                )}
+                title="Beheer Homepage Achtergrondvideo's"
+              >
+                <Film className={cn("w-3.5 h-3.5", activeTab === 'home_videos' ? "text-black" : "text-emerald-400")} />
+                <span>Home Video&apos;s</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('slideshow_studio')}
+                className={cn(
+                  "flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer",
+                  activeTab === 'slideshow_studio'
+                    ? "bg-earth-gold text-black border-earth-gold font-bold shadow-lg shadow-earth-gold/25"
+                    : "bg-white/5 border-earth-gold/30 text-white/90 hover:border-earth-gold hover:bg-earth-gold/10"
+                )}
+                title="Open Slideshow Studio (Portrait & Landscape per songtekstregel)"
+              >
+                <Images className={cn("w-3.5 h-3.5", activeTab === 'slideshow_studio' ? "text-black" : "text-earth-gold")} />
+                <span>Slideshow Studio</span>
+              </button>
+
               {/* KERSTSFEER ADMIN-TEST SCHAKELAAR (ALLEEN ZICHTBAAR VOOR DEZE ADMIN-BROWSER; AUTOMATISCH 6 DEC T/M 6 JAN) */}
               <button
                 type="button"
@@ -1725,58 +1770,6 @@ export function Admin() {
           </button>
 
           <button
-            onClick={() => setActiveTab('track_locks')}
-            className={cn(
-              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
-              activeTab === 'track_locks' 
-                ? "border-earth-gold text-white" 
-                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
-            )}
-          >
-            <Lock className="w-4 h-4 text-earth-gold" />
-            Sloten & SoundTracks
-          </button>
-
-          <button
-            onClick={() => setActiveTab('logboek')}
-            className={cn(
-              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
-              activeTab === 'logboek'
-                ? "border-earth-gold text-white"
-                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
-            )}
-          >
-            <BookOpen className="w-4 h-4 text-rose-400" />
-            Logboek
-          </button>
-
-          <button
-            onClick={() => setActiveTab('files')}
-            className={cn(
-              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
-              activeTab === 'files'
-                ? "border-earth-gold text-white"
-                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
-            )}
-          >
-            <HardDrive className="w-4 h-4 text-amber-400" />
-            Bestandsbeheer
-          </button>
-
-          <button
-            onClick={() => setActiveTab('social')}
-            className={cn(
-              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
-              activeTab === 'social'
-                ? "border-earth-gold text-white"
-                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
-            )}
-          >
-            <Share2 className="w-4 h-4 text-blue-400" />
-            Social Media (Schrijver)
-          </button>
-
-          <button
             onClick={() => setActiveTab('inkijk')}
             className={cn(
               "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
@@ -1787,45 +1780,6 @@ export function Admin() {
           >
             <BookOpen className="w-4 h-4 text-emerald-400" />
             Inkijkexemplaar
-          </button>
-
-          <button
-            onClick={() => setActiveTab('video_studio')}
-            className={cn(
-              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
-              activeTab === 'video_studio'
-                ? "border-earth-gold text-white"
-                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
-            )}
-          >
-            <Film className="w-4 h-4 text-amber-400" />
-            Audio → Video Studio
-          </button>
-
-          <button
-            onClick={() => setActiveTab('home_videos')}
-            className={cn(
-              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
-              activeTab === 'home_videos'
-                ? "border-earth-gold text-white"
-                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
-            )}
-          >
-            <Film className="w-4 h-4 text-emerald-400" />
-            Home Video&apos;s
-          </button>
-
-          <button
-            onClick={() => setActiveTab('slideshow_studio')}
-            className={cn(
-              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
-              activeTab === 'slideshow_studio'
-                ? "border-earth-gold text-white"
-                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
-            )}
-          >
-            <Images className="w-4 h-4 text-earth-gold" />
-            Slideshow Studio
           </button>
         </div>
 
