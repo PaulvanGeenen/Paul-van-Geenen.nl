@@ -82,6 +82,91 @@ const MEDIA_ORIGIN = IS_LOCAL ? 'https://paulvangeenen.nl' : '';
 
 const ACCEPT_MEDIA = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,.jpg,.jpeg,.png,.webp,.gif,.mp4,.mov,.webm';
 
+const TARGET_DIMENSIONS = {
+  portrait: { width: 1080, height: 1920 }, // Exact 9:16
+  landscape: { width: 1920, height: 1080 }, // Exact 16:9
+} as const;
+
+/**
+ * Renders any static image (JPG/PNG/WebP) to exact 9:16 (1080x1920) for Portrait
+ * or exact 16:9 (1920x1080) for Landscape using high-quality cover-crop framing.
+ * Slightly upper-weighted vertical framing protects faces/heads from being clipped.
+ */
+async function renderImageToExactAspect(
+  source: File | Blob,
+  orientation: 'portrait' | 'landscape'
+): Promise<File> {
+  const { width: targetW, height: targetH } = TARGET_DIMENSIONS[orientation];
+  const targetRatio = targetW / targetH;
+
+  const objectUrl = URL.createObjectURL(source);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Kon afbeelding niet inlezen voor bijsnijden.'));
+      el.src = objectUrl;
+    });
+
+    const srcW = img.naturalWidth || img.width;
+    const srcH = img.naturalHeight || img.height;
+    if (!srcW || !srcH) {
+      throw new Error('Ongeldige afbeeldingsafmetingen.');
+    }
+
+    const srcRatio = srcW / srcH;
+    let sx = 0;
+    let sy = 0;
+    let sw = srcW;
+    let sh = srcH;
+
+    if (srcRatio > targetRatio) {
+      // Source is wider than target -> crop left & right evenly
+      sw = srcH * targetRatio;
+      sx = (srcW - sw) / 2;
+    } else if (srcRatio < targetRatio) {
+      // Source is taller than target -> crop top & bottom (slightly upper-weighted to preserve faces)
+      sh = srcW / targetRatio;
+      const verticalBias = orientation === 'landscape' ? 0.38 : 0.42;
+      sy = (srcH - sh) * verticalBias;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas context niet beschikbaar.');
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, targetW, targetH);
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetW, targetH);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error('Kon gerenderde afbeelding niet exporteren.'))),
+        'image/jpeg',
+        0.92
+      );
+    });
+
+    return new File([blob], `slide_${orientation}.jpg`, { type: 'image/jpeg' });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function isStaticImageFile(file: File): boolean {
+  const type = (file.type || '').toLowerCase();
+  const name = (file.name || '').toLowerCase();
+  if (type === 'image/gif' || name.endsWith('.gif')) return false;
+  return (
+    type.startsWith('image/') ||
+    /\.(jpe?g|png|webp)$/i.test(name)
+  );
+}
+
 function toFullMediaUrl(url: string | null | undefined): string {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
@@ -268,6 +353,7 @@ export function SlideshowStudio() {
   const [selectedCueIndex, setSelectedCueIndex] = useState<number | null>(null);
   const [cueFilter, setCueFilter] = useState<'all' | 'filled' | 'empty'>('all');
   const [busySlots, setBusySlots] = useState<Record<string, boolean>>({});
+  const [batchResizing, setBatchResizing] = useState(false);
 
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [previewModal, setPreviewModal] = useState<{
@@ -390,13 +476,21 @@ export function SlideshowStudio() {
     setBusySlots((prev) => ({ ...prev, [slotKey]: true }));
 
     try {
+      // Automatisch bijsnijden & renderen naar exact 9:16 (Portrait) of 16:9 (Landscape) voor foto's
+      let fileToUpload: File = file;
+      let wasRendered = false;
+      if (isStaticImageFile(file)) {
+        fileToUpload = await renderImageToExactAspect(file, orientation);
+        wasRendered = true;
+      }
+
       const formData = new FormData();
       formData.append('action', 'upload');
       formData.append('folder', trackDetail.folder);
       formData.append('orientation', orientation);
       formData.append('mmSs', cue.mmSs);
       formData.append('lyricText', cue.text);
-      formData.append('file', file);
+      formData.append('file', fileToUpload);
 
       const res = await fetch(API_BASE, {
         method: 'POST',
@@ -445,7 +539,9 @@ export function SlideshowStudio() {
 
       showToast(
         'ok',
-        `${orientation === 'portrait' ? 'Portrait' : 'Landscape'} opgeslagen in slideshow/${orientation}/`
+        wasRendered
+          ? `${orientation === 'portrait' ? 'Portrait (9:16)' : 'Landscape (16:9)'} gerenderd & opgeslagen!`
+          : `${orientation === 'portrait' ? 'Portrait' : 'Landscape'} opgeslagen in slideshow/${orientation}/`
       );
     } catch (err: any) {
       showToast('err', err.message || 'Kon bestand niet opslaan.');
@@ -455,6 +551,72 @@ export function SlideshowStudio() {
         delete copy[slotKey];
         return copy;
       });
+    }
+  };
+
+  const handleBatchRenderExisting = async () => {
+    if (!trackDetail || batchResizing) return;
+    const jobs: Array<{ cue: LyricCue; orientation: 'portrait' | 'landscape'; media: SlideMedia }> = [];
+    for (const cue of trackDetail.cues) {
+      if (cue.portrait && cue.portrait.type === 'image' && cue.portrait.ext !== 'gif') {
+        jobs.push({ cue, orientation: 'portrait', media: cue.portrait });
+      }
+      if (cue.landscape && cue.landscape.type === 'image' && cue.landscape.ext !== 'gif') {
+        jobs.push({ cue, orientation: 'landscape', media: cue.landscape });
+      }
+    }
+    if (jobs.length === 0) {
+      showToast('err', 'Geen bestaande afbeeldingen gevonden om te renderen.');
+      return;
+    }
+
+    setBatchResizing(true);
+    let okCount = 0;
+    try {
+      for (const job of jobs) {
+        const slotKey = `${job.cue.mmSs}:${job.orientation}`;
+        setBusySlots((prev) => ({ ...prev, [slotKey]: true }));
+        try {
+          const resp = await fetch(toFullMediaUrl(job.media.url));
+          if (!resp.ok) throw new Error('Kon bronafbeelding niet ophalen.');
+          const srcBlob = await resp.blob();
+          const renderedFile = await renderImageToExactAspect(srcBlob, job.orientation);
+
+          const formData = new FormData();
+          formData.append('action', 'upload');
+          formData.append('folder', trackDetail.folder);
+          formData.append('orientation', job.orientation);
+          formData.append('mmSs', job.cue.mmSs);
+          formData.append('lyricText', job.cue.text);
+          formData.append('file', renderedFile);
+
+          const upRes = await fetch(API_BASE, { method: 'POST', body: formData });
+          const upData = await upRes.json();
+          if (upData.success && upData.item) {
+            okCount++;
+            setTrackDetail((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                cues: prev.cues.map((c) =>
+                  c.mmSs === job.cue.mmSs ? { ...c, [job.orientation]: upData.item } : c
+                ),
+              };
+            });
+          }
+        } catch {
+          // continue with next image
+        } finally {
+          setBusySlots((prev) => {
+            const copy = { ...prev };
+            delete copy[slotKey];
+            return copy;
+          });
+        }
+      }
+      showToast('ok', `${okCount} bestaande foto('s) exact gerenderd naar 9:16 & 16:9!`);
+    } finally {
+      setBatchResizing(false);
     }
   };
 
@@ -793,41 +955,60 @@ export function SlideshowStudio() {
                   </div>
                 </div>
 
-                {/* Filter buttons */}
-                <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/10 self-start sm:self-auto shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setCueFilter('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      cueFilter === 'all'
-                        ? 'bg-earth-gold text-black font-bold'
-                        : 'text-white/65 hover:text-white'
-                    }`}
-                  >
-                    Alles ({totalCues})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCueFilter('filled')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      cueFilter === 'filled'
-                        ? 'bg-earth-gold text-black font-bold'
-                        : 'text-white/65 hover:text-white'
-                    }`}
-                  >
-                    Met beeld ({linesWithAnyMedia})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCueFilter('empty')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      cueFilter === 'empty'
-                        ? 'bg-earth-gold text-black font-bold'
-                        : 'text-white/65 hover:text-white'
-                    }`}
-                  >
-                    Nog leeg ({totalCues - linesWithAnyMedia})
-                  </button>
+                {/* Filter & Batch Render buttons */}
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
+                  {linesWithAnyMedia > 0 && (
+                    <button
+                      type="button"
+                      disabled={batchResizing}
+                      onClick={handleBatchRenderExisting}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-earth-gold/15 hover:bg-earth-gold/25 border border-earth-gold/40 text-earth-gold text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+                      title="Snijd alle al geüploade foto's van dit nummer automatisch bij naar exact 9:16 (Portrait) en 16:9 (Landscape)"
+                    >
+                      {batchResizing ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
+                      <span>{batchResizing ? 'Renderen…' : 'Bestaande → 9:16 / 16:9'}</span>
+                    </button>
+                  )}
+
+                  <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => setCueFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                        cueFilter === 'all'
+                          ? 'bg-earth-gold text-black font-bold'
+                          : 'text-white/65 hover:text-white'
+                      }`}
+                    >
+                      Alles ({totalCues})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCueFilter('filled')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                        cueFilter === 'filled'
+                          ? 'bg-earth-gold text-black font-bold'
+                          : 'text-white/65 hover:text-white'
+                      }`}
+                    >
+                      Met beeld ({linesWithAnyMedia})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCueFilter('empty')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                        cueFilter === 'empty'
+                          ? 'bg-earth-gold text-black font-bold'
+                          : 'text-white/65 hover:text-white'
+                      }`}
+                    >
+                      Nog leeg ({totalCues - linesWithAnyMedia})
+                    </button>
+                  </div>
                 </div>
               </div>
 
