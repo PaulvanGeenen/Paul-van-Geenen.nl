@@ -62,15 +62,73 @@ export interface ChristmasPlayerSnapshot {
 type Listener = (snapshot: ChristmasPlayerSnapshot) => void;
 
 const TARGET_VOLUME = 0.72;
+const DUCKED_VOLUME = 0.13;
 const FADE_MS = 650;
+const DUCK_DOWN_MS = 450;
+const DUCK_UP_MS = 900;
 
 class ChristmasAlbumPlayerController {
   private audio: HTMLAudioElement | null = null;
   private trackIndex = 0;
   private isPlaying = false;
   private isVisible = false;
+  private isDucked = false;
   private fadeRaf: number | null = null;
+  private duckPollInterval: number | null = null;
+  private duckListenersAttached = false;
   private listeners = new Set<Listener>();
+
+  private checkOtherAudibleMedia = () => {
+    if (!this.isPlaying || !this.audio || typeof document === 'undefined') return;
+
+    const mediaEls = document.querySelectorAll<HTMLMediaElement>('video, audio');
+    let hasAudibleForegroundMedia = false;
+
+    for (let i = 0; i < mediaEls.length; i++) {
+      const el = mediaEls[i];
+      if (el === this.audio) continue;
+      if (!el.paused && !el.ended && !el.muted && el.volume > 0.05) {
+        hasAudibleForegroundMedia = true;
+        break;
+      }
+    }
+
+    if (hasAudibleForegroundMedia !== this.isDucked) {
+      this.isDucked = hasAudibleForegroundMedia;
+      const target = this.isDucked ? DUCKED_VOLUME : TARGET_VOLUME;
+      const duration = this.isDucked ? DUCK_DOWN_MS : DUCK_UP_MS;
+      this.fadeVolume(this.audio.volume, target, duration);
+    }
+  };
+
+  private startDuckMonitor() {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    if (!this.duckListenersAttached) {
+      document.addEventListener('play', this.checkOtherAudibleMedia, true);
+      document.addEventListener('pause', this.checkOtherAudibleMedia, true);
+      document.addEventListener('ended', this.checkOtherAudibleMedia, true);
+      document.addEventListener('volumechange', this.checkOtherAudibleMedia, true);
+      this.duckListenersAttached = true;
+    }
+    if (this.duckPollInterval === null) {
+      this.duckPollInterval = window.setInterval(this.checkOtherAudibleMedia, 350);
+    }
+  }
+
+  private stopDuckMonitor() {
+    if (this.duckListenersAttached && typeof document !== 'undefined') {
+      document.removeEventListener('play', this.checkOtherAudibleMedia, true);
+      document.removeEventListener('pause', this.checkOtherAudibleMedia, true);
+      document.removeEventListener('ended', this.checkOtherAudibleMedia, true);
+      document.removeEventListener('volumechange', this.checkOtherAudibleMedia, true);
+      this.duckListenersAttached = false;
+    }
+    if (this.duckPollInterval !== null) {
+      window.clearInterval(this.duckPollInterval);
+      this.duckPollInterval = null;
+    }
+    this.isDucked = false;
+  }
 
   private ensureAudio(): HTMLAudioElement | null {
     if (typeof window === 'undefined') return null;
@@ -163,15 +221,31 @@ class ChristmasAlbumPlayerController {
     this.isVisible = true;
     this.isPlaying = true;
     this.emit();
+    this.startDuckMonitor();
+
+    // Check immediately if an unmuted video/audio is already playing
+    let initialTarget = TARGET_VOLUME;
+    if (typeof document !== 'undefined') {
+      const mediaEls = document.querySelectorAll<HTMLMediaElement>('video, audio');
+      for (let i = 0; i < mediaEls.length; i++) {
+        const el = mediaEls[i];
+        if (el !== audio && !el.paused && !el.ended && !el.muted && el.volume > 0.05) {
+          this.isDucked = true;
+          initialTarget = DUCKED_VOLUME;
+          break;
+        }
+      }
+    }
 
     audio.volume = 0;
     audio
       .play()
       .then(() => {
-        this.fadeVolume(0, TARGET_VOLUME, FADE_MS);
+        this.fadeVolume(0, initialTarget, FADE_MS);
       })
       .catch(() => {
         this.isPlaying = false;
+        this.stopDuckMonitor();
         this.emit();
       });
   }
@@ -180,6 +254,7 @@ class ChristmasAlbumPlayerController {
     const audio = this.audio;
     if (!audio || !this.isPlaying) return;
     this.isPlaying = false;
+    this.stopDuckMonitor();
     this.emit();
     this.fadeVolume(audio.volume, 0, FADE_MS, () => {
       audio.pause();
@@ -190,6 +265,7 @@ class ChristmasAlbumPlayerController {
     const audio = this.audio;
     this.isPlaying = false;
     this.isVisible = false;
+    this.stopDuckMonitor();
     this.emit();
     if (!audio) return;
     this.fadeVolume(audio.volume, 0, 450, () => {
