@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, ChevronUp, ChevronDown, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText, ClipboardPaste, HardDrive, Share2, Film } from 'lucide-react';
+import { Shield, Plus, Trash2, ExternalLink, X, Music, BookOpen, User, Book, ClipboardList, Download, Mail, Database, Sparkles, Clock, CheckCircle, Compass, MapPin, Smartphone, Eye, ArrowUpRight, BarChart3, ChevronRight, ChevronUp, ChevronDown, MousePointerClick, RefreshCw, Globe, Headphones, Radio, Activity, ThumbsUp, ThumbsDown, Disc3, Calendar, Filter, Lock, LockOpen, RotateCcw, QrCode, Upload, FileText, ClipboardPaste, HardDrive, Share2, Film, Images } from 'lucide-react';
 import { convertImageFileToNotebookLmPdf } from '../utils/notebookLmPdf';
 import {
   BOOK_DEFAULT_QR_STYLE,
@@ -42,6 +42,7 @@ import { LogboekManager } from '../components/LogboekManager';
 import { InkijkStatsManager } from '../components/InkijkStatsManager';
 import { AudioVideoStudio } from '../components/AudioVideoStudio';
 import { HomeVideosManager } from '../components/HomeVideosManager';
+import { SlideshowStudio } from '../components/SlideshowStudio';
 import { FileManager } from '../components/FileManager';
 import { SocialComposer } from '../components/SocialComposer';
 
@@ -264,7 +265,7 @@ const isListenInAlbumOrBook = (
 export function Admin() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social' | 'inkijk' | 'video_studio' | 'home_videos'>('qrcodes');
+  const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social' | 'inkijk' | 'video_studio' | 'home_videos' | 'slideshow_studio'>('qrcodes');
   
   // Data lists
   const [qrcodes, setQrcodes] = useState<QRCodeData[]>([]);
@@ -1788,6 +1789,19 @@ export function Admin() {
           >
             <Film className="w-4 h-4 text-emerald-400" />
             Home Video&apos;s
+          </button>
+
+          <button
+            onClick={() => setActiveTab('slideshow_studio')}
+            className={cn(
+              "pb-4 px-4 font-serif text-lg font-medium border-b-2 transition-colors duration-300 flex items-center gap-2 whitespace-nowrap",
+              activeTab === 'slideshow_studio'
+                ? "border-earth-gold text-white"
+                : "border-transparent text-earth-light/40 hover:text-earth-light/80"
+            )}
+          >
+            <Images className="w-4 h-4 text-earth-gold" />
+            Slideshow Studio
           </button>
         </div>
 
@@ -4136,6 +4150,11 @@ export function Admin() {
         {/* TAB 14: HOMEPAGE ACHTERGRONDVIDEO'S */}
         {activeTab === 'home_videos' && !loading && (
           <HomeVideosManager />
+        )}
+
+        {/* TAB 15: SLIDESHOW STUDIO */}
+        {activeTab === 'slideshow_studio' && !loading && (
+          <SlideshowStudio />
         )}
 
         <p className="mt-8 text-center text-earth-light/20 text-xs">
