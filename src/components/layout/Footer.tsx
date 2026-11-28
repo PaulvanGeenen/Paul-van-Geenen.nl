@@ -1,12 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Mail, Github, Linkedin, Instagram, Sparkles, Music } from 'lucide-react';
+import { Mail, Github, Linkedin, Instagram, Sparkles, Play, Pause, ExternalLink } from 'lucide-react';
 import { NewsletterSignup } from '../ui/NewsletterSignup';
 import { useChristmasTheme } from '../../lib/christmasTheme';
+import { christmasAlbumPlayer, useChristmasAlbumPlayer } from '../../lib/christmasAlbumPlayer';
 
 export function Footer() {
   const location = useLocation();
   const isAdminPage = location.pathname.startsWith('/beheer');
   const { isActive: isChristmasActive } = useChristmasTheme();
+  const christmasPlayer = useChristmasAlbumPlayer();
 
   return (
     <footer className="bg-[#2D2926] text-earth-light py-16 px-6 md:px-12 lg:px-24 border-t border-earth-clay">
@@ -22,16 +24,36 @@ export function Footer() {
               Sta stil, kijk om je heen en zoek elkaar op deze kerst.
             </p>
             <p className="text-xs md:text-sm text-earth-light/70 max-w-xl">
-              Beluister het speciale kerstalbum <span className="text-earth-gold italic">Echoes of Christmas</span> in de muziekspeler — gemaakt om te raken en te delen.
+              Luister naar het kerstalbum <span className="text-earth-gold italic">Echoes of Christmas</span> terwijl je rustig verder kijkt op de site — of open hem in de volledige muziekspeler.
             </p>
           </div>
-          <Link
-            to="/music?album=Echoes%20of%20Christmas"
-            className="inline-flex items-center gap-2.5 px-5 py-3 rounded-full bg-earth-gold hover:bg-amber-300 text-black font-semibold text-xs uppercase tracking-wider shadow-lg shadow-earth-gold/20 transition-all shrink-0"
-          >
-            <Music className="w-4 h-4" />
-            <span>Luister Echoes of Christmas</span>
-          </Link>
+          <div className="flex flex-col items-center md:items-end gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => christmasAlbumPlayer.toggle()}
+              className="inline-flex items-center gap-2.5 px-5 py-3 rounded-full bg-earth-gold hover:bg-amber-300 text-black font-semibold text-xs uppercase tracking-wider shadow-lg shadow-earth-gold/20 transition-all cursor-pointer"
+            >
+              {christmasPlayer.isPlaying ? (
+                <>
+                  <Pause className="w-4 h-4" />
+                  <span>Pauzeer achtergrondmuziek</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 ml-0.5" />
+                  <span>Luister op de achtergrond</span>
+                </>
+              )}
+            </button>
+            <Link
+              to="/music?album=Echoes%20of%20Christmas"
+              onClick={() => christmasAlbumPlayer.stop()}
+              className="inline-flex items-center gap-1.5 text-[11px] text-earth-gold/80 hover:text-earth-gold transition-colors"
+            >
+              <span>Of open in de muziekspeler</span>
+              <ExternalLink className="w-3 h-3" />
+            </Link>
+          </div>
         </div>
       )}
       {!isAdminPage && (

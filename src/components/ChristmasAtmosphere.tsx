@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { Play, Pause, SkipBack, SkipForward, X, ExternalLink, Sparkles } from 'lucide-react';
 import { useChristmasTheme } from '../lib/christmasTheme';
+import { christmasAlbumPlayer, useChristmasAlbumPlayer } from '../lib/christmasAlbumPlayer';
 
 interface Flake {
   x: number;
@@ -33,6 +35,7 @@ export function ChristmasAtmosphere() {
   const { isActive } = useChristmasTheme();
   const { pathname } = useLocation();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const playerSnap = useChristmasAlbumPlayer();
 
   const lowerPath = pathname.toLowerCase();
   const isAdmin = lowerPath.startsWith('/beheer');
@@ -42,6 +45,13 @@ export function ChristmasAtmosphere() {
     isMusic ||
     lowerPath.startsWith('/video-play') ||
     lowerPath.startsWith('/inkijkexemplaar');
+
+  // Stop background Christmas album automatically when entering full music player or video routes
+  useEffect(() => {
+    if (isMinimalOverlay && (playerSnap.isPlaying || playerSnap.isVisible)) {
+      christmasAlbumPlayer.stop();
+    }
+  }, [isMinimalOverlay, playerSnap.isPlaying, playerSnap.isVisible]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -206,6 +216,76 @@ export function ChristmasAtmosphere() {
           isAdmin ? 'opacity-35' : isMusic ? 'opacity-60' : 'opacity-90'
         }`}
       />
+
+      {/* Persistent unobtrusive floating mini-player while browsing the site */}
+      {!isMinimalOverlay && playerSnap.isVisible && (
+        <div className="fixed bottom-4 right-4 left-4 sm:left-auto z-[60] max-w-sm sm:w-[340px] rounded-2xl border border-earth-gold/40 bg-[#1e150e]/95 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.65)] px-3.5 py-2.5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-earth-gold/40 shrink-0 bg-black relative">
+            <img
+              src={playerSnap.track.cover}
+              alt={playerSnap.track.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-earth-gold font-semibold">
+              <Sparkles className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">Echoes of Christmas</span>
+            </div>
+            <p className="text-xs font-serif text-white truncate leading-tight mt-0.5">
+              {playerSnap.track.title}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => christmasAlbumPlayer.prev()}
+              className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Vorig nummer"
+            >
+              <SkipBack className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => christmasAlbumPlayer.toggle()}
+              className="w-8 h-8 rounded-full bg-earth-gold hover:bg-amber-300 text-black flex items-center justify-center shadow-md shadow-earth-gold/25 transition-colors cursor-pointer"
+              title={playerSnap.isPlaying ? 'Pauzeer' : 'Speel af'}
+            >
+              {playerSnap.isPlaying ? (
+                <Pause className="w-3.5 h-3.5" />
+              ) : (
+                <Play className="w-3.5 h-3.5 ml-0.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => christmasAlbumPlayer.next()}
+              className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Volgend nummer"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+            </button>
+            <Link
+              to="/music?album=Echoes%20of%20Christmas"
+              onClick={() => christmasAlbumPlayer.stop()}
+              className="p-1.5 rounded-lg text-earth-gold/80 hover:text-earth-gold hover:bg-white/10 transition-colors"
+              title="Open volledig album in muziekspeler"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => christmasAlbumPlayer.stop()}
+              className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Sluit achtergrondspeler"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
