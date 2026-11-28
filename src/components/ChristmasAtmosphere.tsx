@@ -80,7 +80,7 @@ export function ChristmasAtmosphere() {
     };
     resize();
 
-    const flakeCount = isMusic ? 26 : width < 640 ? 36 : 58;
+    const flakeCount = isMusic ? 40 : width < 640 ? 36 : 58;
     const flakes: Flake[] = Array.from({ length: flakeCount }, () => {
       const depth = Math.random(); // 0 = far/tiny, 1 = closer/softer
       return {
@@ -208,12 +208,12 @@ export function ChristmasAtmosphere() {
         </div>
       )}
 
-      {/* Lightweight gentle snowfall canvas */}
+      {/* Lightweight gentle snowfall canvas (z-[80] so it also gently snows over the z-50 fullscreen Music player) */}
       <canvas
         ref={canvasRef}
         aria-hidden="true"
-        className={`fixed inset-0 w-full h-full pointer-events-none select-none z-[45] ${
-          isAdmin ? 'opacity-35' : isMusic ? 'opacity-60' : 'opacity-90'
+        className={`fixed inset-0 w-full h-full pointer-events-none select-none z-[80] ${
+          isAdmin ? 'opacity-35' : isMusic ? 'opacity-80' : 'opacity-90'
         }`}
       />
 
