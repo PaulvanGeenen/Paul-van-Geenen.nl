@@ -97,6 +97,7 @@ class ChristmasAlbumPlayerController {
   private isPlaying = false;
   private isVisible = false;
   private isDucked = false;
+  private pausedByExternalMusic = false;
   private volume = readSavedVolume();
   private muted = readSavedMuted();
   private fadeRaf: number | null = null;
@@ -109,23 +110,83 @@ class ChristmasAlbumPlayerController {
     return ducked ? Math.min(0.16, this.volume * DUCKED_RATIO) : this.volume;
   }
 
-  private checkOtherAudibleMedia = () => {
-    if (!this.isPlaying || !this.audio || typeof document === 'undefined') return;
-
+  private inspectExternalMedia(): { shouldPause: boolean; shouldDuck: boolean } {
+    if (!this.audio || typeof document === 'undefined') {
+      return { shouldPause: false, shouldDuck: false };
+    }
     const mediaEls = document.querySelectorAll<HTMLMediaElement>('video, audio');
-    let hasAudibleForegroundMedia = false;
+    let shouldPause = false;
+    let shouldDuck = false;
 
     for (let i = 0; i < mediaEls.length; i++) {
       const el = mediaEls[i];
       if (el === this.audio) continue;
       if (!el.paused && !el.ended && !el.muted && el.volume > 0.05) {
-        hasAudibleForegroundMedia = true;
-        break;
+        const src = (el.currentSrc || el.getAttribute('src') || '').toLowerCase();
+        const isMusicBanner =
+          el.tagName === 'AUDIO' ||
+          el.dataset.pauseChristmas === 'true' ||
+          src.includes('luna-story');
+        if (isMusicBanner) {
+          shouldPause = true;
+          break;
+        }
+        shouldDuck = true;
       }
     }
+    return { shouldPause, shouldDuck };
+  }
 
-    if (hasAudibleForegroundMedia !== this.isDucked) {
-      this.isDucked = hasAudibleForegroundMedia;
+  private checkOtherAudibleMedia = () => {
+    if ((!this.isPlaying && !this.pausedByExternalMusic) || !this.audio || typeof document === 'undefined') {
+      return;
+    }
+
+    const { shouldPause, shouldDuck } = this.inspectExternalMedia();
+
+    // 1. Full pause when another music track (e.g. "Luna als eigen personage" or ChapterAudio) is audible
+    if (shouldPause) {
+      if (this.isPlaying) {
+        this.pausedByExternalMusic = true;
+        this.isPlaying = false;
+        this.isDucked = false;
+        this.emit();
+        const audio = this.audio;
+        this.fadeVolume(audio.volume, 0, 400, () => {
+          if (this.pausedByExternalMusic) {
+            audio.pause();
+          }
+        });
+      }
+      return;
+    }
+
+    // 2. Auto-resume smoothly when the external music stops / is muted / scrolls away
+    if (this.pausedByExternalMusic) {
+      this.pausedByExternalMusic = false;
+      this.isDucked = shouldDuck;
+      this.isPlaying = true;
+      this.emit();
+      const audio = this.audio;
+      const target = this.getEffectiveTargetVolume(this.isDucked);
+      audio.volume = 0;
+      audio
+        .play()
+        .then(() => {
+          if (this.isPlaying) {
+            this.fadeVolume(0, target, DUCK_UP_MS);
+          }
+        })
+        .catch(() => {
+          this.isPlaying = false;
+          this.emit();
+        });
+      return;
+    }
+
+    // 3. Gentle ducking for spoken-word / ambient banners (e.g. fortune teller)
+    if (shouldDuck !== this.isDucked) {
+      this.isDucked = shouldDuck;
       const target = this.getEffectiveTargetVolume(this.isDucked);
       const duration = this.isDucked ? DUCK_DOWN_MS : DUCK_UP_MS;
       this.fadeVolume(this.audio.volume, target, duration);
@@ -283,22 +344,22 @@ class ChristmasAlbumPlayerController {
     }
 
     this.isVisible = true;
+    this.pausedByExternalMusic = false;
     this.isPlaying = true;
     this.emit();
     this.startDuckMonitor();
 
     // Check immediately if an unmuted video/audio is already playing
-    this.isDucked = false;
-    if (typeof document !== 'undefined') {
-      const mediaEls = document.querySelectorAll<HTMLMediaElement>('video, audio');
-      for (let i = 0; i < mediaEls.length; i++) {
-        const el = mediaEls[i];
-        if (el !== audio && !el.paused && !el.ended && !el.muted && el.volume > 0.05) {
-          this.isDucked = true;
-          break;
-        }
-      }
+    const { shouldPause, shouldDuck } = this.inspectExternalMedia();
+    if (shouldPause) {
+      this.pausedByExternalMusic = true;
+      this.isPlaying = false;
+      this.isDucked = false;
+      this.emit();
+      return;
     }
+
+    this.isDucked = shouldDuck;
     const initialTarget = this.getEffectiveTargetVolume(this.isDucked);
 
     audio.volume = 0;
@@ -316,7 +377,12 @@ class ChristmasAlbumPlayerController {
 
   pause() {
     const audio = this.audio;
-    if (!audio || !this.isPlaying) return;
+    this.pausedByExternalMusic = false;
+    if (!audio || !this.isPlaying) {
+      this.stopDuckMonitor();
+      this.emit();
+      return;
+    }
     this.isPlaying = false;
     this.stopDuckMonitor();
     this.emit();
@@ -327,6 +393,7 @@ class ChristmasAlbumPlayerController {
 
   stop() {
     const audio = this.audio;
+    this.pausedByExternalMusic = false;
     this.isPlaying = false;
     this.isVisible = false;
     this.stopDuckMonitor();
