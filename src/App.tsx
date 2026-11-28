@@ -58,6 +58,7 @@ function ScrollToTop() {
 import { AudioProvider, useAudio } from './context/AudioContext';
 import { LionBooksIntro } from './components/ui/LionBooksIntro';
 import { LogboekOverlay } from './components/LogboekOverlay';
+import { ChristmasAtmosphere } from './components/ChristmasAtmosphere';
 import { decodeLogboekShareCode, openLogboekOverlay } from './lib/logboek';
 
 function LogboekDirectRoute() {
@@ -179,6 +180,7 @@ export default function App() {
   return (
     <AudioProvider>
       <Router>
+        <ChristmasAtmosphere />
         <LionBooksIntro />
         <GlobalLogboekOverlay />
         <ScrollToTop />

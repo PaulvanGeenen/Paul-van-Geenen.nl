@@ -1,13 +1,39 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Mail, Github, Linkedin, Instagram } from 'lucide-react';
+import { Mail, Github, Linkedin, Instagram, Sparkles, Music } from 'lucide-react';
 import { NewsletterSignup } from '../ui/NewsletterSignup';
+import { useChristmasTheme } from '../../lib/christmasTheme';
 
 export function Footer() {
   const location = useLocation();
   const isAdminPage = location.pathname.startsWith('/beheer');
+  const { isActive: isChristmasActive } = useChristmasTheme();
 
   return (
     <footer className="bg-[#2D2926] text-earth-light py-16 px-6 md:px-12 lg:px-24 border-t border-earth-clay">
+      {!isAdminPage && isChristmasActive && (
+        <div className="max-w-7xl mx-auto mb-12 rounded-2xl border border-earth-gold/35 bg-gradient-to-r from-[#261b12] via-[#342416] to-[#261b12] p-6 md:p-8 shadow-[0_12px_40px_rgba(212,175,106,0.12)] flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="text-center md:text-left space-y-1.5">
+            <div className="inline-flex items-center gap-2 text-earth-gold text-xs uppercase tracking-[0.22em] font-semibold">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Warme Kerstdagen &amp; een Gezond 2027</span>
+              <Sparkles className="w-3.5 h-3.5" />
+            </div>
+            <p className="font-serif text-lg md:text-xl text-white">
+              Sta stil, kijk om je heen en zoek elkaar op deze kerst.
+            </p>
+            <p className="text-xs md:text-sm text-earth-light/70 max-w-xl">
+              Beluister het speciale kerstalbum <span className="text-earth-gold italic">Echoes of Christmas</span> in de muziekspeler — gemaakt om te raken en te delen.
+            </p>
+          </div>
+          <Link
+            to="/music?album=Echoes%20of%20Christmas"
+            className="inline-flex items-center gap-2.5 px-5 py-3 rounded-full bg-earth-gold hover:bg-amber-300 text-black font-semibold text-xs uppercase tracking-wider shadow-lg shadow-earth-gold/20 transition-all shrink-0"
+          >
+            <Music className="w-4 h-4" />
+            <span>Luister Echoes of Christmas</span>
+          </Link>
+        </div>
+      )}
       {!isAdminPage && (
         <div className="max-w-7xl mx-auto mb-16 pb-16 border-b border-earth-clay/10">
           <NewsletterSignup />

@@ -45,6 +45,7 @@ import { HomeVideosManager } from '../components/HomeVideosManager';
 import { SlideshowStudio } from '../components/SlideshowStudio';
 import { FileManager } from '../components/FileManager';
 import { SocialComposer } from '../components/SocialComposer';
+import { useChristmasTheme, setChristmasAdminPreview } from '../lib/christmasTheme';
 
 interface QRCodeData {
   id: string;
@@ -265,6 +266,7 @@ const isListenInAlbumOrBook = (
 export function Admin() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const { isAdminPreview: christmasAdminPreview, isSeason: christmasInSeason } = useChristmasTheme();
   const [activeTab, setActiveTab] = useState<'qrcodes' | 'boeken' | 'hoofdstukken' | 'subscribers' | 'analytics' | 'music' | 'music_db' | 'track_locks' | 'logboek' | 'files' | 'social' | 'inkijk' | 'video_studio' | 'home_videos' | 'slideshow_studio'>('qrcodes');
   
   // Data lists
@@ -1518,6 +1520,28 @@ export function Admin() {
               >
                 <Share2 className={cn("w-3.5 h-3.5", activeTab === 'social' ? "text-white" : "text-blue-400")} />
                 <span>Socials (Schrijver)</span>
+              </button>
+
+              {/* KERSTSFEER ADMIN-TEST SCHAKELAAR (ALLEEN ZICHTBAAR VOOR DEZE ADMIN-BROWSER; AUTOMATISCH 6 DEC T/M 6 JAN) */}
+              <button
+                type="button"
+                onClick={() => setChristmasAdminPreview(!christmasAdminPreview)}
+                className={cn(
+                  "flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer",
+                  christmasAdminPreview || christmasInSeason
+                    ? "bg-gradient-to-r from-amber-500/90 to-earth-gold text-black border-amber-300 font-bold shadow-lg shadow-earth-gold/25"
+                    : "bg-white/5 border-earth-gold/30 text-white/90 hover:border-earth-gold hover:bg-earth-gold/10"
+                )}
+                title="Test de kerstversiering (sneeuwvlokjes, gouden lichtjes, ster & kerstgroet) alleen voor jou als admin. Voor bezoekers gaat dit automatisch aan van 6 dec t/m 6 jan."
+              >
+                <Sparkles className={cn("w-3.5 h-3.5", christmasAdminPreview || christmasInSeason ? "text-black" : "text-earth-gold")} />
+                <span>
+                  {christmasInSeason
+                    ? 'Kerstsfeer: Seizoen AAN'
+                    : christmasAdminPreview
+                      ? 'Kerstsfeer (Admin Test): AAN'
+                      : 'Kerstsfeer (Admin Test): UIT'}
+                </span>
               </button>
 
               {/* AFBEELDING / KLEMBOARD -> NOTEBOOKLM PDF CONVERTER */}

@@ -21,12 +21,14 @@ import { VolumeControl } from './VolumeControl';
 import { IvoryHeartPendant } from '../ui/IvoryHeartPendant';
 import { isLionBooksDomain } from '../../utils/domain';
 import { openLogboekOverlay } from '../../lib/logboek';
+import { useChristmasTheme } from '../../lib/christmasTheme';
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLionBooks, setIsLionBooks] = useState(false);
   const [isHomeImmersive, setIsHomeImmersive] = useState(false);
+  const { isActive: isChristmasActive } = useChristmasTheme();
   const location = useLocation();
 
   useEffect(() => {
@@ -67,7 +69,10 @@ export function Navbar() {
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 bg-[#2D1E16] border-b border-white/5 h-16 md:h-20 transition-all duration-700 ease-in-out",
+        "fixed top-0 left-0 right-0 z-50 bg-[#2D1E16] border-b h-16 md:h-20 transition-all duration-700 ease-in-out",
+        isChristmasActive
+          ? "border-earth-gold/30 shadow-[0_4px_24px_rgba(212,175,106,0.12)]"
+          : "border-white/5",
         isHomeImmersive && location.pathname === '/' && !isOpen
           ? "-translate-y-full opacity-0 pointer-events-none"
           : "translate-y-0 opacity-100 pointer-events-auto"
@@ -97,8 +102,18 @@ export function Navbar() {
             ) : (
               <>
                 <IvoryHeartPendant size="sm" className="shrink-0 -mt-1" />
-                <span className="text-lg md:text-2xl font-serif tracking-tight text-white leading-none">
-                  <span className="font-bold">Paul</span> <span className="font-light opacity-80">van Geenen</span>
+                <span className="text-lg md:text-2xl font-serif tracking-tight text-white leading-none flex items-center gap-1.5">
+                  <span><span className="font-bold">Paul</span> <span className="font-light opacity-80">van Geenen</span></span>
+                  {isChristmasActive && (
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      className="w-4 h-4 md:w-5 md:h-5 text-earth-gold drop-shadow-[0_0_8px_rgba(212,175,106,0.75)] animate-pulse shrink-0"
+                      fill="currentColor"
+                    >
+                      <path d="M12 1.5l2.2 6.8L21 10.5l-6.8 2.2L12 19.5l-2.2-6.8L3 10.5l6.8-2.2L12 1.5z" />
+                    </svg>
+                  )}
                 </span>
               </>
             )}
