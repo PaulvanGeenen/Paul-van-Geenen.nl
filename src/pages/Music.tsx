@@ -4664,7 +4664,7 @@ export function Music() {
               {/* Left Panel: Previous Track Image */}
               {prevBgImage && (
                 <div
-                  className="absolute inset-0 w-full h-full overflow-hidden"
+                  className="absolute inset-0 w-full h-full overflow-hidden bg-black"
                   style={{
                     transform: `translateX(calc(-100% + ${dragX}px))`,
                     transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
@@ -4672,8 +4672,16 @@ export function Music() {
                 >
                   <img
                     src={prevBgImage}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-45 brightness-75 select-none pointer-events-none"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                  />
+                  <img
+                    src={prevBgImage}
                     alt={prevTrack?.title || 'Previous track'}
-                    className="w-full h-full object-cover select-none pointer-events-none"
+                    className="relative z-10 w-full h-full object-contain object-center select-none pointer-events-none"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = 'none';
@@ -4695,11 +4703,19 @@ export function Music() {
 
               {/* Soundtrack cover shown after single-track playback finishes (fade-in and stay, full screen without distortion or text) */}
               {showEndedSoundtrackCover && currentTrack && (
-                <div className="absolute inset-0 w-full h-full bg-black z-[15] flex items-center justify-center pointer-events-none">
+                <div className="absolute inset-0 w-full h-full bg-black z-[15] flex items-center justify-center overflow-hidden pointer-events-none">
+                  <img
+                    src={getTrackCoverCandidates(currentTrack, effectiveOrientation)[0]}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-45 brightness-75 select-none pointer-events-none"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                  />
                   <img
                     src={getTrackCoverCandidates(currentTrack, effectiveOrientation)[0]}
                     alt={currentTrack.title || 'SoundTrack'}
-                    className="w-full h-full object-contain select-none"
+                    className="relative z-10 w-full h-full object-contain object-center select-none"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       const img = e.currentTarget;
@@ -4714,20 +4730,29 @@ export function Music() {
                 </div>
               )}
 
-              {/* Center Panel: Current Track Image (Always rendered solid at z-10 for seamless cross-dissolve) */}
+              {/* Center Panel: Current Track Image (Full image always visible via object-contain over full-bleed ambient blur) */}
               {currBgImage && (
                 <div
-                  className="absolute inset-0 w-full h-full overflow-hidden z-10"
+                  className="absolute inset-0 w-full h-full overflow-hidden z-10 bg-black"
                   style={{
                     transform: `translateX(${dragX}px)`,
                     transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
                   }}
                 >
                   <img
+                    key={`blur-${currBgImage}`}
+                    src={currBgImage}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-45 brightness-75 select-none pointer-events-none"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                  />
+                  <img
                     key={currBgImage}
                     src={currBgImage}
                     alt={currentTrack?.title || 'Current track'}
-                    className="w-full h-full object-cover select-none pointer-events-none"
+                    className="relative z-10 w-full h-full object-contain object-center select-none pointer-events-none"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       const target = e.currentTarget;
@@ -4745,7 +4770,7 @@ export function Music() {
               {/* Right Panel: Next Track Image */}
               {nextBgImage && (
                 <div
-                  className="absolute inset-0 w-full h-full overflow-hidden"
+                  className="absolute inset-0 w-full h-full overflow-hidden bg-black"
                   style={{
                     transform: `translateX(calc(100% + ${dragX}px))`,
                     transition: isSwipingRelease ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
@@ -4753,8 +4778,16 @@ export function Music() {
                 >
                   <img
                     src={nextBgImage}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-45 brightness-75 select-none pointer-events-none"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                  />
+                  <img
+                    src={nextBgImage}
                     alt={nextTrack?.title || 'Next track'}
-                    className="w-full h-full object-cover select-none pointer-events-none"
+                    className="relative z-10 w-full h-full object-contain object-center select-none pointer-events-none"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = 'none';
