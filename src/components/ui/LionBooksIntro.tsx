@@ -8,6 +8,27 @@ interface LionBooksIntroProps {
   onComplete?: () => void;
 }
 
+export function requestAutoFullscreenOnce() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  try {
+    const path = window.location.pathname.toLowerCase();
+    if (path.startsWith('/beheer')) return;
+    if (sessionStorage.getItem('pvg_auto_fullscreen_done') === '1') return;
+    sessionStorage.setItem('pvg_auto_fullscreen_done', '1');
+
+    if (document.fullscreenElement || (document as any).webkitFullscreenElement) return;
+    const el = document.documentElement as any;
+    if (typeof el.requestFullscreen === 'function') {
+      const p = el.requestFullscreen();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } else if (typeof el.webkitRequestFullscreen === 'function') {
+      el.webkitRequestFullscreen();
+    }
+  } catch {
+    // Ignore browser fullscreen restrictions (e.g. iOS Safari)
+  }
+}
+
 export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntroProps) {
   // Synchronous initialization prevents ANY flash/FOUC of the underlying site
   const [isVisible, setIsVisible] = useState<boolean>(() => {
@@ -47,6 +68,8 @@ export function LionBooksIntro({ forceShow = false, onComplete }: LionBooksIntro
   }, [isVisible]);
 
   const handleDismiss = () => {
+    // Request fullscreen synchronously inside the user's first click gesture
+    requestAutoFullscreenOnce();
     setIsVisible(false);
     sessionStorage.setItem('lion_books_intro_seen_v6', 'true');
     // Synchronously unlock & start homepage soundtrack inside the user's click gesture

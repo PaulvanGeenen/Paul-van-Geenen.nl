@@ -56,7 +56,7 @@ function ScrollToTop() {
 }
 
 import { AudioProvider, useAudio } from './context/AudioContext';
-import { LionBooksIntro } from './components/ui/LionBooksIntro';
+import { LionBooksIntro, requestAutoFullscreenOnce } from './components/ui/LionBooksIntro';
 import { LogboekOverlay } from './components/LogboekOverlay';
 import { ChristmasAtmosphere } from './components/ChristmasAtmosphere';
 import { decodeLogboekShareCode, openLogboekOverlay } from './lib/logboek';
@@ -129,6 +129,27 @@ function AdminAmbientSuppressor() {
   return null;
 }
 
+function AutoFullscreenOnFirstClick() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (pathname.toLowerCase().startsWith('/beheer')) return;
+    try {
+      if (sessionStorage.getItem('pvg_auto_fullscreen_done') === '1') return;
+    } catch {
+      return;
+    }
+    const onFirstClick = () => {
+      requestAutoFullscreenOnce();
+      window.removeEventListener('click', onFirstClick, true);
+    };
+    window.addEventListener('click', onFirstClick, true);
+    return () => {
+      window.removeEventListener('click', onFirstClick, true);
+    };
+  }, [pathname]);
+  return null;
+}
+
 function LoadingScreen() {
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -184,6 +205,7 @@ export default function App() {
         <LionBooksIntro />
         <GlobalLogboekOverlay />
         <ScrollToTop />
+        <AutoFullscreenOnFirstClick />
         <AdminAmbientSuppressor />
         <AnalyticsTracker />
         <LayoutWrapper>
